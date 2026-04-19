@@ -14,7 +14,7 @@ import { useApp } from '../../lib/AppContext';
 import { cn } from '../../lib/utils';
 
 export default function StudentDirectory() {
-  const { students, schoolClasses, grades, refreshDirectory } = useApp();
+  const { students, schoolClasses, grades, refreshDirectory, isDirectoryLoading, isAcademicLoading } = useApp();
   
   // Selection State
   const [selectedGradeId, setSelectedGradeId] = useState<number | null>(null);
@@ -215,12 +215,32 @@ export default function StudentDirectory() {
             initial={{ opacity: 0 }} animate={{ opacity: 1 }}
             className="space-y-8"
           >
-            <div className={cn(
+             <div className={cn(
               "grid gap-8 transition-all duration-500",
               viewMode === 'grid' ? "grid-cols-1 md:grid-cols-2 xl:grid-cols-3" : "grid-cols-1"
             )}>
-              <AnimatePresence mode="popLayout">
-                {filteredStudents.map((s: any) => (
+              {isDirectoryLoading && students.length === 0 ? (
+                Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="obsidian-card p-8 space-y-8 animate-pulse border-glass-border">
+                    <div className="flex items-center gap-5">
+                      <div className="w-16 h-16 rounded-[2rem] bg-white/5" />
+                      <div className="space-y-2 flex-1">
+                        <div className="h-6 w-3/4 bg-white/5 rounded-lg" />
+                        <div className="h-3 w-1/3 bg-white/5 rounded-lg" />
+                      </div>
+                    </div>
+                    <div className="space-y-4">
+                      <div className="h-20 w-full bg-white/5 rounded-2xl" />
+                      <div className="flex justify-between items-center px-2">
+                        <div className="h-4 w-20 bg-white/5 rounded-lg" />
+                        <div className="h-4 w-20 bg-white/5 rounded-lg" />
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <AnimatePresence mode="popLayout">
+                  {filteredStudents.map((s: any) => (
                   <motion.div
                     layout
                     key={s.id}
@@ -301,7 +321,8 @@ export default function StudentDirectory() {
                   </motion.div>
                 ))}
               </AnimatePresence>
-            </div>
+            )}
+          </div>
 
             {filteredStudents.length === 0 && (
               <div className="py-40 obsidian-card border-dashed flex flex-col items-center justify-center gap-6 opacity-20 grayscale transition-all hover:opacity-40">

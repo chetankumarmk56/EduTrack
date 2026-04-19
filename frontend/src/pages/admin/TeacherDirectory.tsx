@@ -6,10 +6,10 @@ import {
 } from 'lucide-react';
 import { directoryApi } from '../../api/directoryApi';
 import { useApp } from '../../lib/AppContext';
+import { cn } from '../../lib/utils';
 
 export default function TeacherDirectory() {
-  const { schoolClasses, subjects } = useApp();
-  const [teachers, setTeachers] = useState<any[]>([]);
+  const { schoolClasses, subjects, teachers, isDirectoryLoading, refreshDirectory } = useApp();
   
   const [isAdding, setIsAdding] = useState(false);
   const [editingTeacher, setEditingTeacher] = useState<any | null>(null);
@@ -18,24 +18,13 @@ export default function TeacherDirectory() {
   const [form, setForm] = useState({ name: '', email: '', phone: '', password: '' });
   const [assignmentForm, setAssignmentForm] = useState({ school_class_id: 0, subject_id: 0 });
 
-  useEffect(() => {
-    fetchTeachers();
-  }, []);
-
-  const fetchTeachers = async () => {
-    try {
-      const data = await directoryApi.getTeachers();
-      setTeachers(data);
-    } catch (err) { console.error(err); }
-  };
-
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       await directoryApi.createTeacher(form);
       setIsAdding(false);
       setForm({ name: '', email: '', phone: '', password: '' });
-      fetchTeachers();
+      refreshDirectory(true);
     } catch (err) { console.error(err); }
   };
 
@@ -49,7 +38,7 @@ export default function TeacherDirectory() {
         phone: editingTeacher.phone
       });
       setEditingTeacher(null);
-      fetchTeachers();
+      refreshDirectory(true);
     } catch (err) { console.error(err); }
   };
 
@@ -57,7 +46,7 @@ export default function TeacherDirectory() {
     if (!confirm('Permanent removal of faculty member? This action is irreversible.')) return;
     try {
       await directoryApi.deleteTeacher(id);
-      fetchTeachers();
+      refreshDirectory(true);
     } catch (err) { console.error(err); }
   };
 
@@ -71,14 +60,14 @@ export default function TeacherDirectory() {
       });
       setAssignmentForm({ school_class_id: 0, subject_id: 0 });
       setIsAssigning(null);
-      fetchTeachers(); // Refresh assignments
+      refreshDirectory(true); 
     } catch (err) { console.error(err); }
   };
 
   const handleDeleteAssignment = async (id: number) => {
     try {
       await directoryApi.deleteAssignment(id);
-      fetchTeachers();
+      refreshDirectory(true);
     } catch (err) { console.error(err); }
   };
 
@@ -110,8 +99,30 @@ export default function TeacherDirectory() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-8">
-        <AnimatePresence mode="popLayout">
-          {filteredTeachers.map((t: any) => (
+        {isDirectoryLoading && teachers.length === 0 ? (
+          // Skeleton Loader
+          Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="obsidian-card p-8 space-y-8 animate-pulse border-glass-border">
+              <div className="flex items-center gap-5">
+                <div className="w-16 h-16 rounded-2xl bg-white/5" />
+                <div className="space-y-2 flex-1">
+                  <div className="h-6 w-3/4 bg-white/5 rounded-lg" />
+                  <div className="h-3 w-1/3 bg-white/5 rounded-lg" />
+                </div>
+              </div>
+              <div className="space-y-4">
+                <div className="h-10 w-full bg-white/5 rounded-xl" />
+                <div className="h-10 w-full bg-white/5 rounded-xl" />
+              </div>
+              <div className="flex gap-2">
+                <div className="h-6 w-16 bg-white/5 rounded-lg" />
+                <div className="h-6 w-24 bg-white/5 rounded-lg" />
+              </div>
+            </div>
+          ))
+        ) : (
+          <AnimatePresence mode="popLayout">
+            {filteredTeachers.map((t: any) => (
             <motion.div
               layout
               key={t.id}
@@ -188,7 +199,8 @@ export default function TeacherDirectory() {
             </motion.div>
           ))}
         </AnimatePresence>
-      </div>
+      )}
+    </div>
 
       {/* Register Modal */}
       <AnimatePresence>

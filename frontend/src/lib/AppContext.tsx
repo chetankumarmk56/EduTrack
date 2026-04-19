@@ -18,6 +18,11 @@ interface AppContextType {
   schoolClasses: any[];
   refreshDirectory: (force?: boolean) => Promise<void>;
   
+  // Loading States
+  isDirectoryLoading: boolean;
+  isAcademicLoading: boolean;
+  isEventsLoading: boolean;
+  
   // Student Portal Data
   studentProfile: any | null;
   studentMarks: any[];
@@ -57,6 +62,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [schoolClasses, setSchoolClasses] = useState<any[]>([]);
   const [events, setEvents] = useState<any[]>([]);
   const [lastFetched, setLastFetched] = useState<number>(0);
+
+  // Granular Loading
+  const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
+  const [isAcademicLoading, setIsAcademicLoading] = useState(false);
+  const [isEventsLoading, setIsEventsLoading] = useState(false);
   
   // Marks state for teachers
   const [classMarks, setClassMarks] = useState<Record<string, any[]>>({});
@@ -105,38 +115,73 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const refreshDirectory = async (force: boolean = false) => {
     const now = Date.now();
-    if (!force && lastFetched && (now - lastFetched < 60000) && students.length > 0) {
+    if (!force && lastFetched && (now - lastFetched < 60000) && (students.length > 0 || teachers.length > 0)) {
       return;
     }
 
+    setLastFetched(now);
+
+    // Parallel but decoupled fetches
+    await Promise.all([
+      refreshDirectoryData(),
+      refreshAcademicCore(),
+      refreshEvents()
+    ]);
+  };
+
+  const refreshDirectoryData = async () => {
+    setIsDirectoryLoading(true);
     try {
-      // Role-based student fetching
       const studentsFetchPromise = user?.role === 'teacher' 
         ? directoryApi.getMyStudents() 
         : (user?.role === 'admin' || user?.role === 'super_admin' 
             ? directoryApi.getStudents(0, 1000)
-            : Promise.resolve([]) // Students/Parents shouldn't load the full directory
+            : Promise.resolve([])
           );
-
-      const [studentsData, teachersData, gradesData, sectionsData, subjectsData, schoolClassesData, eventsData] = await Promise.all([
-         studentsFetchPromise,
-         directoryApi.getTeachers(),
-         academicApi.getClasses(),
-         academicApi.getSections(),
-         academicApi.getSubjects(),
-         academicApi.getSchoolClasses(),
-         eventsApi.getEvents()
+      
+      const [studentsData, teachersData] = await Promise.all([
+        studentsFetchPromise,
+        directoryApi.getTeachers()
       ]);
+      
       setStudents(studentsData);
       setTeachers(teachersData);
+    } catch (err) {
+      console.error("Directory Data Fetch Error:", err);
+    } finally {
+      setIsDirectoryLoading(false);
+    }
+  };
+
+  const refreshAcademicCore = async () => {
+    setIsAcademicLoading(true);
+    try {
+      const [gradesData, sectionsData, subjectsData, schoolClassesData] = await Promise.all([
+        academicApi.getClasses(),
+        academicApi.getSections(),
+        academicApi.getSubjects(),
+        academicApi.getSchoolClasses(),
+      ]);
       setGrades(gradesData);
       setSections(sectionsData);
       setSubjects(subjectsData);
       setSchoolClasses(schoolClassesData);
+    } catch (err) {
+      console.error("Academic Core Fetch Error:", err);
+    } finally {
+      setIsAcademicLoading(false);
+    }
+  };
+
+  const refreshEvents = async () => {
+    setIsEventsLoading(true);
+    try {
+      const eventsData = await eventsApi.getEvents();
       setEvents(eventsData);
-      setLastFetched(now);
-    } catch(err) {
-      console.error("Directory Fetch Error:", err);
+    } catch (err) {
+      console.error("Events Fetch Error:", err);
+    } finally {
+      setIsEventsLoading(false);
     }
   };
 
@@ -198,6 +243,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       subjects,
       schoolClasses, 
       refreshDirectory,
+      isDirectoryLoading,
+      isAcademicLoading,
+      isEventsLoading,
       studentProfile, 
       studentMarks, 
       studentAttendance, 
