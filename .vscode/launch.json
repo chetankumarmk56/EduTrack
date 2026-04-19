@@ -1,0 +1,33 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    
+
+    {
+      "name": "Full App (Backend + Frontend)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "Run Backend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "cwdSuffix": "parent-portal"
+    },
+    {
+      "name": "Run Backend",
+      "type": "python",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": [
+        "main:app",
+        "--reload"
+      ],
+      "cwd": "${workspaceFolder}/backend",
+      "jinja": true,
+      "python": "${workspaceFolder}/backend/.venv/bin/python"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+services:
+  # FastAPI Backend
+  - type: web
+    name: edutrack-backend
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port 10000
+    envVars:
+      - key: ENVIRONMENT
+        value: prod
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        sync: false # User will provide this from Neon
+      - key: SECRET_KEY
+        generateValue: true # Render will generate a random secret
+      - key: FRONTEND_URL
+        sync: false # User will provide the Vercel URL

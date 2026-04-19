@@ -1,0 +1,27 @@
+# Ignore Virtual Environment
+.venv/
+venv/
+env/
+
+# Ignore Python Cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore Local Database
+*.db
+*.sqlite3
+
+# Ignore Logs
+*.log
+
+# Ignore OS files
+.DS_Store
+
+# Ignore Git
+.git/
+.gitignore
+
+# Ignore sensitive secrets
+.env
