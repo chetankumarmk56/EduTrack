@@ -2,8 +2,8 @@ import client from './client';
 
 export interface BusStop {
   name: string;
-  latitude: float;
-  longitude: float;
+  latitude: number;
+  longitude: number;
   stop_order: number;
 }
 

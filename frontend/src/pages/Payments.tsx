@@ -1,4 +1,3 @@
-import { motion } from 'framer-motion';
 import { CreditCard, Zap, Receipt, History, ArrowRight, ShieldCheck, Wallet } from 'lucide-react';
 import { StaggerContainer, StaggerItem } from '../components/ui/PageWrapper';
 import { cn } from '../lib/utils';

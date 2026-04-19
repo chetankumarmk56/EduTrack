@@ -2,15 +2,12 @@ import { useState, useEffect, useRef } from 'react';
 import 'leaflet/dist/leaflet.css';
 import { MapContainer, TileLayer, Marker, Polyline, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
-import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Bus, MapPin, Navigation, Loader2, 
-  Map as MapIcon, Info, Phone, ShieldCheck
+  Bus, MapPin, Loader2, 
+  Info, Phone, ShieldCheck
 } from 'lucide-react';
 import { transportApi } from '../../api/transportApi';
-import { cn } from '../../lib/utils';
 
-const defaultCenter: [number, number] = [12.9716, 77.5946];
 
 // --- Custom Leaflet Icons ---
 const busIcon = new L.DivIcon({

@@ -4,8 +4,8 @@ import { MapContainer, TileLayer, Marker, Polyline } from 'react-leaflet';
 import L from 'leaflet';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Bus, MapPin, Loader2, Navigation, 
-  ChevronDown, User, ShieldCheck, Phone
+  MapPin, Loader2, Navigation, 
+  ChevronDown, User, ShieldCheck
 } from 'lucide-react';
 import { transportApi } from '../../api/transportApi';
 import { useAuth } from '../../lib/AuthContext';

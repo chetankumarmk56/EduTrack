@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import 'leaflet/dist/leaflet.css';
 import { MapContainer, TileLayer, Marker, Polyline, Circle, useMapEvents, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
@@ -60,7 +60,7 @@ export default function AdminTransport() {
   const [editMode, setEditMode] = useState<EditMode>('STOPS');
   
   const [isSaving, setIsSaving] = useState(false);
-  const [isLoadingRoutes, setIsLoadingRoutes] = useState(true);
+  const [, setIsLoadingRoutes] = useState(true);
 
   // Assignment Console specific state
   const [searchQuery, setSearchQuery] = useState('');

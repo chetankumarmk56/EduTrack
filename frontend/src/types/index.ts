@@ -152,3 +152,12 @@ export interface AuthResponse {
     email?: string;
   };
 }
+
+export interface DocumentResponse {
+  id: number;
+  filename: string;
+  type: string;
+  size?: number;
+  created_at?: string;
+  url?: string;
+}
