@@ -1,7 +1,8 @@
 from fastapi import Request, HTTPException, Depends, status
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from typing import List, Optional
 import jwt
 
@@ -21,7 +22,7 @@ class UserContext(BaseModel):
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme), 
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ) -> UserContext:
     """
     Extracts user and institution context from the JWT Bearer token.
@@ -50,8 +51,8 @@ async def get_current_user(
         institution_id = int(inst_val) if inst_val else 1
         
         # Unified Identity Fetch
-        # All users (Admin, Teacher, Parent, Student) are now stored in the central 'users' table
-        user_obj = db.query(User).filter(User.id == user_id).first()
+        result = await db.execute(select(User).where(User.id == user_id))
+        user_obj = result.scalars().first()
             
         if not user_obj:
             raise HTTPException(
@@ -68,14 +69,6 @@ async def get_current_user(
                 detail="User account is deactivated."
             )
             
-        # Status Check: Institution Activation (Skip for super_admin)
-        if role_val != "super_admin" and hasattr(user_obj, "institution") and user_obj.institution:
-            if not getattr(user_obj.institution, "is_active", True):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN, 
-                    detail="Institution account is deactivated."
-                )
-            
         return UserContext(id=user_id, role=role_val, institution_id=institution_id, name=user_name)
         
     except jwt.ExpiredSignatureError:
@@ -86,20 +79,13 @@ async def get_current_user(
 async def get_current_active_user(
     current_user: UserContext = Depends(get_current_user)
 ) -> UserContext:
-    """
-    Simple wrapper ensuring the user is active (already checked in get_current_user, 
-    but provided for standard FastAPI pattern compliance).
-    """
     return current_user
 
 class RoleChecker:
-    """
-    Dependency to enforce Role-Based Access Control on routes.
-    """
     def __init__(self, allowed_roles: List[str]):
         self.allowed_roles = allowed_roles
 
-    def __call__(self, user: UserContext = Depends(get_current_active_user)) -> UserContext:
+    async def __call__(self, user: UserContext = Depends(get_current_active_user)) -> UserContext:
         if user.role not in self.allowed_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -110,10 +96,20 @@ class RoleChecker:
 # Pre-defined role guards
 require_super_admin = RoleChecker(["super_admin"])
 require_admin = RoleChecker(["super_admin", "admin"])
-require_institution_admin = require_admin # Alias for older code compatibility
+require_institution_admin = require_admin
 require_teacher = RoleChecker(["super_admin", "admin", "teacher"])
 require_parent = RoleChecker(["super_admin", "admin", "parent"])
 require_student = RoleChecker(["super_admin", "admin", "student"])
+
+async def require_teacher_strict(user: UserContext = Depends(get_current_active_user)) -> UserContext:
+    if user.role != "teacher":
+        raise HTTPException(status_code=403, detail="Only teachers can perform this action")
+    return user
+
+async def require_parent_strict(user: UserContext = Depends(get_current_active_user)) -> UserContext:
+    if user.role != "parent":
+        raise HTTPException(status_code=403, detail="Only parents can perform this action")
+    return user
 
 async def require_faculty(user: UserContext = Depends(get_current_active_user)) -> UserContext:
     if user.role not in ["super_admin", "admin", "teacher"]:
@@ -126,30 +122,27 @@ async def require_faculty(user: UserContext = Depends(get_current_active_user)) 
 async def validate_teacher_assignment(
     school_class_id: int,
     subject_id: Optional[int] = None,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(get_current_user)
 ) -> bool:
-    """
-    Verify if the current teacher is assigned to the specified class and subject.
-    Admins and Super Admins bypass this check.
-    """
     if user.role in ["super_admin", "admin"]:
         return True
         
-    # Get teacher record
-    teacher = db.query(Teacher).filter(Teacher.user_id == user.id).first()
+    result = await db.execute(select(Teacher).where(Teacher.user_id == user.id))
+    teacher = result.scalars().first()
     if not teacher:
         raise HTTPException(status_code=403, detail="Faculty profile not found.")
         
-    query = db.query(TeacherAssignment).filter(
+    stmt = select(TeacherAssignment).where(
         TeacherAssignment.teacher_id == teacher.id,
         TeacherAssignment.school_class_id == school_class_id
     )
     
     if subject_id:
-        query = query.filter(TeacherAssignment.subject_id == subject_id)
+        stmt = stmt.where(TeacherAssignment.subject_id == subject_id)
         
-    assignment = query.first()
+    result = await db.execute(stmt)
+    assignment = result.scalars().first()
     if not assignment:
         raise HTTPException(
             status_code=403, 
@@ -159,41 +152,40 @@ async def validate_teacher_assignment(
 
 async def ensure_teacher_assigned_to_student(
     student_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(get_current_user)
 ) -> int:
-    """
-    Verifies that the teacher is assigned to the student's classroom.
-    Returns the school_class_id on success.
-    """
     if user.role in ["super_admin", "admin"]:
-        student = db.query(Student).filter(Student.id == student_id).first()
+        result = await db.execute(select(Student).where(Student.id == student_id))
+        student = result.scalars().first()
         return student.school_class_id if student else None
 
-    teacher = db.query(Teacher).filter(Teacher.user_id == user.id).first()
-    student = db.query(Student).filter(Student.id == student_id).first()
+    teacher_result = await db.execute(select(Teacher).where(Teacher.user_id == user.id))
+    teacher = teacher_result.scalars().first()
+    
+    student_result = await db.execute(select(Student).where(Student.id == student_id))
+    student = student_result.scalars().first()
     
     if not teacher or not student:
         raise HTTPException(status_code=403, detail="Access denied.")
         
-    assignment = db.query(TeacherAssignment).filter(
+    assign_result = await db.execute(select(TeacherAssignment).where(
         TeacherAssignment.teacher_id == teacher.id,
         TeacherAssignment.school_class_id == student.school_class_id
-    ).first()
+    ))
+    assignment = assign_result.scalars().first()
     
     if not assignment:
         raise HTTPException(status_code=403, detail="Student is not in your assigned records.")
         
     return student.school_class_id
 
-def get_record_or_404(db: Session, model, record_id: int, institution_id: int):
-    """
-    Securely fetch a record, ensuring it belongs to the active institution context.
-    """
-    record = db.query(model).filter(
+async def get_record_or_404(db: AsyncSession, model, record_id: int, institution_id: int):
+    result = await db.execute(select(model).where(
         model.id == record_id, 
         model.institution_id == institution_id
-    ).first()
+    ))
+    record = result.scalars().first()
     
     if not record:
         raise HTTPException(

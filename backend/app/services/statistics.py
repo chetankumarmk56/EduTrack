@@ -1,5 +1,5 @@
-from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
 from datetime import date
 from typing import Dict, Any
 
@@ -10,15 +10,16 @@ from app.models.attendance import Attendance
 
 class StatisticsService:
     @staticmethod
-    def get_teacher_stats(db: Session, institution_id: int, user_id: int) -> Dict[str, Any]:
+    async def get_teacher_stats(db: AsyncSession, institution_id: int, user_id: int) -> Dict[str, Any]:
         """
-        Calculates real-time metrics for a specific teacher's dashboard.
+        Calculates real-time metrics for a specific teacher's dashboard (Async).
         """
         # Resolve Teacher
-        teacher = db.query(Teacher).filter(
+        result = await db.execute(select(Teacher).where(
             Teacher.user_id == user_id,
             Teacher.institution_id == institution_id
-        ).first()
+        ))
+        teacher = result.scalars().first()
         
         if not teacher:
             return {
@@ -29,56 +30,68 @@ class StatisticsService:
             }
 
         # Get Assignments
-        assignments = db.query(TeacherAssignment).filter(
+        assign_result = await db.execute(select(TeacherAssignment).where(
             TeacherAssignment.teacher_id == teacher.id
-        ).all()
+        ))
+        assignments = assign_result.scalars().all()
         
         class_ids = list(set([a.school_class_id for a in assignments]))
-        subject_names = list(set([a.subject_ref.name for a in assignments]))
 
         # 1. Total Unique Students
-        total_students = db.query(Student).filter(
-            Student.school_class_id.in_(class_ids) if class_ids else False,
-            Student.institution_id == institution_id
-        ).count()
+        if class_ids:
+            student_count_stmt = select(func.count(Student.id)).where(
+                Student.school_class_id.in_(class_ids),
+                Student.institution_id == institution_id
+            )
+            count_res = await db.execute(student_count_stmt)
+            total_students = count_res.scalar_one()
+        else:
+            total_students = 0
 
         # 2. Active Classes
         active_classes = len(class_ids)
 
         # 3. Today's Attendance Rate
         today_str = date.today().isoformat()
-        attendance_records = db.query(Attendance).filter(
-            Attendance.school_class_id.in_(class_ids) if class_ids else False,
-            Attendance.date == today_str
-        ).all()
-        
-        present_count = sum(1 for r in attendance_records if r.status == 'Present')
-        attendance_rate = (present_count / len(attendance_records) * 100) if attendance_records else 0
+        if class_ids:
+            att_stmt = select(Attendance).where(
+                Attendance.school_class_id.in_(class_ids),
+                Attendance.date == today_str
+            )
+            att_res = await db.execute(att_stmt)
+            attendance_records = att_res.scalars().all()
+            
+            present_count = sum(1 for r in attendance_records if r.status == 'Present')
+            attendance_rate = (present_count / len(attendance_records) * 100) if attendance_records else 0
+        else:
+            attendance_rate = 0
 
         # 4. Pending Evaluations
-        # We define "pending" as student-subject pairs that have an active Exam record but no Mark record yet.
-        # For simplicity, we'll look at the latest exam for each assignment.
+        # For simplicity, we keep original logic but async.
         pending_marks = 0
         for assignment in assignments:
-            # Find the most recent exam for this class/subject
-            latest_exam = db.query(Exam).filter(
+            latest_exam_stmt = select(Exam).where(
                 Exam.school_class_id == assignment.school_class_id,
                 Exam.subject_id == assignment.subject_id
-            ).order_by(Exam.id.desc()).first()
+            ).order_by(Exam.id.desc()).limit(1)
+            e_res = await db.execute(latest_exam_stmt)
+            latest_exam = e_res.scalars().first()
             
             if latest_exam:
-                # Count students in this class who DON'T have a mark for this exam
-                class_students_ids = db.query(Student.id).filter(
+                s_stmt = select(Student.id).where(
                     Student.school_class_id == assignment.school_class_id
-                ).all()
-                student_ids = [s[0] for s in class_students_ids]
+                )
+                s_res = await db.execute(s_stmt)
+                student_ids = s_res.scalars().all()
                 
-                marked_students_count = db.query(Mark).filter(
-                    Mark.exam_id == latest_exam.id,
-                    Mark.student_id.in_(student_ids) if student_ids else False
-                ).count()
-                
-                pending_marks += max(0, len(student_ids) - marked_students_count)
+                if student_ids:
+                    m_stmt = select(func.count(Mark.id)).where(
+                        Mark.exam_id == latest_exam.id,
+                        Mark.student_id.in_(student_ids)
+                    )
+                    m_res = await db.execute(m_stmt)
+                    marked_students_count = m_res.scalar_one()
+                    pending_marks += max(0, len(student_ids) - marked_students_count)
 
         return {
             "total_students": total_students,

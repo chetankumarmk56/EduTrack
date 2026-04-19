@@ -8,10 +8,14 @@ google-generativeai
 pypdf
 python-pptx
 psycopg2-binary
-passlib[bcrypt]
-PyJWT
+asyncpg
+greenlet
+python-jose[cryptography]
+bcrypt
 email-validator
 alembic
 pydantic-settings
 python-dotenv
 python-multipart
+azure-storage-blob
+httpx==0.27.0
