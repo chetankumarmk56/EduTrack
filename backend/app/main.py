@@ -9,7 +9,11 @@ import logging
 from app.core.config import settings
 from app.core.database import engine, get_db
 from app.core.logger import setup_logging
-from app.models import Base
+from app import models
+from app.core.database import Base
+
+# Automatic Database Initialization
+Base.metadata.create_all(bind=engine)
 
 # Modular Routers
 from app.modules.auth.routes import router as auth_router

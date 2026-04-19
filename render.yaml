@@ -18,3 +18,5 @@ services:
         generateValue: true # Render will generate a random secret
       - key: FRONTEND_URL
         sync: false # User will provide the Vercel URL
+      - key: PYTHON_VERSION
+        value: 3.11
