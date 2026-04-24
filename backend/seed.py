@@ -13,7 +13,7 @@ from app.core.security import get_password_hash
 from app.models import (
     Institution, User, Student, Teacher, TeacherAssignment, 
     Mark, Attendance, Event, Subject, Grade, Section, SchoolClass as Classroom,
-    Parent, Exam, Announcement
+    Parent, Exam, Announcement, FeeStructure, Payment, PaymentAllocation
 )
 
 def get_or_create_user(db, email, name, password, role, institution_id=None):
@@ -35,6 +35,12 @@ def get_or_create_user(db, email, name, password, role, institution_id=None):
 
 def seed_db():
     print("🚀 Initializing Relational Database Seeding Upgrade...")
+    # Ensure tables exist
+    from app.core.database import sync_engine, Base
+    # During dev: drop all to reflect schema changes
+    Base.metadata.drop_all(bind=sync_engine)
+    Base.metadata.create_all(bind=sync_engine)
+    
     db = SessionLocal()
     
     try:
@@ -285,11 +291,76 @@ def seed_db():
         db.commit()
         print("📅 Events seeded.")
 
+        # 9. Finance Data
+        print("💰 Seeding Finance Data...")
+        # Create Finance User
+        finance_u = get_or_create_user(db, "finance@stmarys.edu", "Finance Officer", "finance123", "finance", institution_id=inst.id)
+        
+        # We'll seed fees for ALL students to make the 'dues' check meaningful
+        all_students = db.query(Student).all()
+        fee_types = ["TUITION", "SPORTS", "TRANSPORT"]
+        
+        for student in all_students:
+            # Check if student already has fee structure
+            existing_fees = db.query(FeeStructure).filter(FeeStructure.student_id == student.id).first()
+            if not existing_fees:
+                for f_type in fee_types:
+                    total = 20000.0 if f_type == "TUITION" else 5000.0
+                    fs = FeeStructure(
+                        student_id=student.id,
+                        fee_type=f_type,
+                        total_amount=total,
+                        paid_amount=0.0,
+                        priority=1 if f_type == "TUITION" else 2,
+                        institution_id=inst.id
+                    )
+                    db.add(fs)
+        db.commit()
+
+        # Seed some payments
+        some_students = db.query(Student).limit(5).all()
+        for student in some_students:
+            existing_payment = db.query(Payment).filter(Payment.student_id == student.id).first()
+            if not existing_payment:
+                # Pay half of tuition
+                amt = 10000.0
+                pay = Payment(
+                    student_id=student.id,
+                    amount=amt,
+                    payment_mode="MANUAL_UPI",
+                    status="SUCCESS",
+                    created_by_id=finance_u.id,
+                    institution_id=inst.id
+                )
+                db.add(pay)
+                db.flush()
+                
+                # Allocate to Tuition
+                alloc = PaymentAllocation(
+                    payment_id=pay.id,
+                    fee_type="TUITION",
+                    allocated_amount=amt,
+                    institution_id=inst.id
+                )
+                db.add(alloc)
+                
+                # Update FeeStructure paid_amount
+                fs = db.query(FeeStructure).filter(
+                    FeeStructure.student_id == student.id,
+                    FeeStructure.fee_type == "TUITION"
+                ).first()
+                if fs:
+                    fs.paid_amount += amt
+                    
+        db.commit()
+        print("💸 Finance data seeded successfully.")
+
         print("\n🏆 --- COMPREHENSIVE SEEDING COMPLETE ---")
         print("Login with:")
         print("  Admin: admin@stmarys.edu | admin123")
         print("  Teacher: teacher.math@school.edu | teacher123")
         print("  Parent: parent.8a0.lower@school.edu | parent123")
+        print("  Finance: finance@stmarys.edu | finance123")
 
     except Exception as e:
         db.rollback()
