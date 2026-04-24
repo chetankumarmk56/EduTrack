@@ -46,7 +46,9 @@ export default function Dashboard() {
       studentMarks: rawMarks,
       studentAttendance: rawAttendance,
       studentEvents: rawEvents,
-      fetchStudentData
+      fetchStudentData,
+      parentFees,
+      refreshParentFees
    } = useApp();
 
    useEffect(() => {
@@ -175,9 +177,65 @@ export default function Dashboard() {
                   </div>
                </div>
             </div>
-            {/* Strategic Tier: Performance Matrix */}
-            <div className="grid grid-cols-1 gap-8">
-               <StaggerItem className="premium-glass p-10 md:p-14 rounded-[4.5rem] shadow-2xl relative overflow-hidden group">
+            {/* Strategic Tier: Performance & Finance */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+               {/* Fee Dashboard (Parent Only) */}
+               {user?.role === 'parent' && (
+                  <StaggerItem className="premium-glass p-10 rounded-[4.5rem] shadow-2xl relative overflow-hidden group border border-white/50">
+                     <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-3xl -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-700" />
+                     <div className="flex items-center justify-between mb-8">
+                        <div>
+                           <h2 className="text-3xl font-black text-gradient-crystal tracking-tight">Fee Nexus</h2>
+                           <p className="text-[10px] font-black uppercase text-muted-foreground/40 tracking-widest mt-1">Financial Obligation Status</p>
+                        </div>
+                        <div className="p-4 rounded-2xl bg-primary/10 text-primary border border-primary/20">
+                           <Activity className="w-6 h-6" />
+                        </div>
+                     </div>
+
+                     <div className="space-y-6">
+                        {parentFees.length === 0 ? (
+                           <div className="text-center py-10">
+                              <p className="text-muted-foreground font-bold italic">No active fee records found.</p>
+                           </div>
+                        ) : (
+                           parentFees.map((fee, i) => {
+                              const isOverdue = fee.overdue_days > 0;
+                              const statusColor = isOverdue ? "text-rose-500" : "text-amber-500";
+                              const bgColor = isOverdue ? "bg-rose-50" : "bg-amber-50";
+                              const borderColor = isOverdue ? "border-rose-100" : "border-amber-100";
+
+                              return (
+                                 <div key={i} className={cn("p-6 rounded-[2.5rem] border transition-all hover:scale-[1.02]", bgColor, borderColor)}>
+                                    <div className="flex justify-between items-start mb-4">
+                                       <div>
+                                          <p className="text-xs font-black uppercase text-muted-foreground/60 tracking-wider">{fee.student_name}</p>
+                                          <p className="text-2xl font-black text-foreground">₹{fee.due_amount.toLocaleString()}</p>
+                                       </div>
+                                       <div className={cn("px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border bg-white shadow-sm", statusColor, borderColor)}>
+                                          {isOverdue ? `Overdue by ${fee.overdue_days}d` : `Due in ${Math.abs(fee.overdue_days)}d`}
+                                       </div>
+                                    </div>
+                                    <div className="flex items-center gap-3 text-[11px] font-bold text-muted-foreground/60">
+                                       <Calendar className="w-4 h-4" />
+                                       Deadline: {new Date(fee.due_date).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
+                                    </div>
+                                 </div>
+                              );
+                           })
+                        )}
+                     </div>
+
+                     <button 
+                        onClick={() => window.location.href = '/parent/payments'}
+                        className="mt-8 w-full py-5 rounded-[2rem] bg-indigo-600 text-white text-[11px] font-black uppercase tracking-[0.3em] hover:bg-indigo-700 shadow-xl shadow-indigo-500/20 transition-all flex items-center justify-center gap-3"
+                     >
+                        Initialize Settlement <ArrowRight className="w-4 h-4" />
+                     </button>
+                  </StaggerItem>
+               )}
+
+               <StaggerItem className={cn("premium-glass p-10 rounded-[4.5rem] shadow-2xl relative overflow-hidden group", user?.role === 'parent' ? "lg:col-span-2" : "col-span-1")}>
                   <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-primary/5 rounded-full blur-[100px] -mr-40 -mt-40 group-hover:scale-110 transition-transform duration-1000" />
                   
                   <div className="flex items-center justify-between mb-12">

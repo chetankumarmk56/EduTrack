@@ -60,6 +60,11 @@ export const academicApi = {
     return response.data;
   },
 
+  deploySegment: async (data: SectionCreate) => {
+    const response = await client.post<Section>('academic/sections/deploy', data);
+    return response.data;
+  },
+
   deleteSection: async (id: number) => {
     await client.delete(`academic/sections/${id}`);
   },

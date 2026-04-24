@@ -15,6 +15,7 @@ import Profile from './pages/Profile';
 import Login from './pages/Login';
 import Payments from './pages/Payments';
 import BusTracking from './pages/parent/BusTracking';
+import ParentAnnouncements from './pages/ParentAnnouncements';
 
 // Teacher Imports
 import TeacherLayout from './components/layout/TeacherLayout';
@@ -27,6 +28,7 @@ import TeacherProfile from './pages/teacher/TeacherProfile';
 import TeacherEvents from './pages/teacher/TeacherEvents';
 import ContactList from './pages/teacher/ContactList';
 import TeacherTransport from './pages/teacher/TeacherTransport';
+import TeacherAnnouncements from './pages/teacher/TeacherAnnouncements';
 
 // Admin Imports
 import AdminLayout from './components/layout/AdminLayout';
@@ -36,7 +38,8 @@ import TeacherDirectory from './pages/admin/TeacherDirectory';
 import AdminEvents from './pages/admin/AdminEvents';
 import AdminClasses from './pages/admin/AdminClasses';
 import AdminTransport from './pages/admin/AdminTransport';
-// Admin Announcement import removed
+import FinanceDashboard from './pages/admin/FinanceDashboard.tsx';
+// Admin Announcement import removed (stale).
 
 // Super Admin Imports
 import SuperAdminLayout from './components/layout/SuperAdminLayout';
@@ -54,7 +57,7 @@ function App() {
             <Route path="/parent-login" element={<GuestRoute><Login /></GuestRoute>} />
             
             <Route path="/parent" element={
-              <ProtectedRoute allowedRoles={['parent', 'student', 'teacher', 'admin', 'super_admin']}>
+              <ProtectedRoute allowedRoles={['parent', 'student', 'super_admin']}>
                 <DashboardLayout />
               </ProtectedRoute>
             }>
@@ -66,12 +69,13 @@ function App() {
               <Route path="teachers" element={<Teachers />} />
               <Route path="payments" element={<Payments />} />
               <Route path="bus-tracking" element={<BusTracking />} />
+              <Route path="announcements" element={<ParentAnnouncements />} />
               <Route path="profile" element={<Profile />} />
             </Route>
 
             <Route path="/teacher-login" element={<GuestRoute><TeacherLogin /></GuestRoute>} />
             <Route path="/teacher" element={
-              <ProtectedRoute allowedRoles={['teacher', 'admin', 'super_admin']}>
+              <ProtectedRoute allowedRoles={['teacher', 'super_admin']}>
                 <TeacherLayout />
               </ProtectedRoute>
             }>
@@ -84,11 +88,12 @@ function App() {
               <Route path="events" element={<TeacherEvents />} />
               <Route path="contacts" element={<ContactList />} />
               <Route path="transport" element={<TeacherTransport />} />
+              <Route path="announcements" element={<TeacherAnnouncements />} />
             </Route>
             
             <Route path="/admin-login" element={<GuestRoute><AdminLogin /></GuestRoute>} />
             <Route path="/admin" element={
-              <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+              <ProtectedRoute allowedRoles={['admin', 'finance', 'super_admin']}>
                 <AdminLayout />
               </ProtectedRoute>
             }>
@@ -98,6 +103,7 @@ function App() {
               <Route path="teachers" element={<TeacherDirectory />} />
               <Route path="events" element={<AdminEvents />} />
               <Route path="transport" element={<AdminTransport />} />
+              <Route path="finance" element={<FinanceDashboard />} />
             </Route>
 
             {/* Super Admin Routes */}

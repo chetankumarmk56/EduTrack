@@ -1,5 +1,6 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy.orm import declarative_base
+from sqlalchemy import create_engine
+from sqlalchemy.orm import declarative_base, sessionmaker
 from app.core.config import settings
 
 # Database connection URL from settings
@@ -28,6 +29,13 @@ AsyncSessionLocal = async_sessionmaker(
     autoflush=False,
 )
 
+# Standard Sync Engine & Session (for seeding/scripts)
+sync_engine = create_engine(
+    settings.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://", 1) if "asyncpg" in settings.DATABASE_URL else settings.DATABASE_URL,
+    pool_pre_ping=True
+)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
+
 Base = declarative_base()
 
 async def get_db():
@@ -38,7 +46,6 @@ async def get_db():
     async with AsyncSessionLocal() as db:
         try:
             yield db
-            await db.commit()
         except Exception:
             await db.rollback()
             raise

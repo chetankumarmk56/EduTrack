@@ -74,6 +74,18 @@ async def create_section(
          raise HTTPException(status_code=404, detail="Associated Class not found")
     return db_section
 
+@router.post("/sections/deploy", response_model=SectionResponse, status_code=status.HTTP_201_CREATED)
+async def deploy_section(
+    section_in: SectionCreate,
+    db: AsyncSession = Depends(get_db),
+    admin: UserContext = Depends(require_admin)
+):
+    """Atomic endpoint to deploy a section and its scholastic mapping."""
+    db_section = await academic_service.deploy_segment(db, admin.institution_id, section_in)
+    if not db_section:
+         raise HTTPException(status_code=404, detail="Associated Class not found")
+    return db_section
+
 @router.put("/sections/{section_id}", response_model=SectionResponse)
 async def update_section(
     section_id: int,
@@ -154,6 +166,18 @@ async def create_school_class(
         return await academic_service.create_school_class(db, admin.institution_id, class_in)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@router.put("/school-classes/{class_id}", response_model=SchoolClassResponse)
+async def update_school_class(
+    class_id: int,
+    class_in: SchoolClassUpdate,
+    db: AsyncSession = Depends(get_db),
+    admin: UserContext = Depends(require_admin)
+):
+    updated = await academic_service.update_school_class(db, admin.institution_id, class_id, class_in)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Class not found")
+    return updated
 
 @router.delete("/school-classes/{class_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_school_class(

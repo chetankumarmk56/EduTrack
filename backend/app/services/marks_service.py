@@ -96,10 +96,9 @@ class MarksService:
             if mark.exam_id:
                 e_result = await db.execute(select(Exam).where(Exam.id == mark.exam_id))
                 exam = e_result.scalars().first()
-                if exam:
-                    if not mark.subject and exam.subject_id: # join logic is cleaner
-                         # mark.subject is currently a string in schema, but we should match
-                         pass
+                if exam and not mark.subject:
+                    # Auto-populate subject from exam name if not provided
+                    mark.subject = exam.name
                 filter_conditions.append(Mark.exam_id == mark.exam_id)
             else:
                 filter_conditions.append(Mark.test_name == mark.test_name)
@@ -183,12 +182,32 @@ class MarksService:
         return db_exam
 
     @staticmethod
-    async def delete_test(db: AsyncSession, institution_id: int, subject: str, test_name: str, student_ids: List[int] = None):
-        stmt = select(Mark).where(
-            Mark.subject == subject,
-            Mark.test_name == test_name,
-            Mark.institution_id == institution_id
-        )
+    async def delete_test(
+        db: AsyncSession, 
+        institution_id: int, 
+        subject: str = None, 
+        test_name: str = None, 
+        exam_id: int = None,
+        student_ids: List[int] = None
+    ):
+        """
+        Delete marks by either:
+        1. exam_id (for exam-based marks)
+        2. subject + test_name (for legacy marks)
+        """
+        # Build flexible query for both legacy and exam-based marks
+        stmt = select(Mark).where(Mark.institution_id == institution_id)
+        
+        if exam_id is not None:
+            stmt = stmt.where(Mark.exam_id == exam_id)
+        elif subject is not None and test_name is not None:
+            stmt = stmt.where(
+                Mark.subject == subject,
+                Mark.test_name == test_name
+            )
+        else:
+            return {"status": "error", "detail": "Either exam_id OR (subject + test_name) required"}
+        
         if student_ids:
             stmt = stmt.where(Mark.student_id.in_(student_ids))
         
@@ -199,5 +218,30 @@ class MarksService:
             await db.delete(mark)
         await db.commit()
         return {"status": "success", "deleted_records": count}
+
+    @staticmethod
+    async def get_subject_summary(db: AsyncSession, institution_id: int, subject: str, school_class_id: int):
+        from sqlalchemy import func
+        stmt = select(
+            func.avg(Mark.score).label("average"),
+            func.max(Mark.score).label("max"),
+            func.min(Mark.score).label("min"),
+            func.count(Mark.id).label("count")
+        ).join(Student).where(
+            Mark.institution_id == institution_id,
+            Mark.subject == subject,
+            Student.school_class_id == school_class_id
+        )
+        result = await db.execute(stmt)
+        summary = result.fetchone()
+        
+        return {
+            "subject": subject,
+            "school_class_id": school_class_id,
+            "average": round(float(summary.average or 0), 2),
+            "max": summary.max or 0,
+            "min": summary.min or 0,
+            "count": summary.count
+        }
 
 marks_service = MarksService()

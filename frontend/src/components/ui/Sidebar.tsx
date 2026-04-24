@@ -18,6 +18,7 @@ const parentNavItems = [
   { name: 'Teachers', path: '/parent/teachers', icon: Users },
   { name: 'Bus Tracking', path: '/parent/bus-tracking', icon: MapPin },
   { name: 'Payments', path: '/parent/payments', icon: CreditCard },
+  { name: 'Announcements', path: '/parent/announcements', icon: Bell },
 ];
 
 const teacherNavItems = [
@@ -28,6 +29,7 @@ const teacherNavItems = [
   { name: 'Lesson Plan', path: '/teacher/lesson-plan', icon: Book },
   { name: 'Transport Roster', path: '/teacher/transport', icon: MapPin },
   { name: 'Question Bank', path: '/teacher/question-bank', icon: PenTool },
+  { name: 'Announcements', path: '/teacher/announcements', icon: Bell },
 ];
 
 const adminNavItems = [
@@ -36,6 +38,7 @@ const adminNavItems = [
   { name: 'Academic Setup', path: '/admin/classes', icon: Building2 },
   { name: 'Event Directory', path: '/admin/events', icon: Bell },
   { name: 'Bus Logistics', path: '/admin/transport', icon: MapPin },
+  { name: 'Finance Terminal', path: '/admin/finance', icon: CreditCard },
 ];
 
 const superAdminNavItems = [
@@ -53,7 +56,7 @@ export default function Sidebar() {
   const { institutionName } = useApp();
   
   const navItems = isTeacher ? teacherNavItems : isAdmin ? adminNavItems : isSuperAdmin ? superAdminNavItems : parentNavItems;
-  const portalName = user?.role === 'teacher' ? 'Faculty' : user?.role === 'super_admin' ? 'Platform' : user?.role === 'admin' ? 'Admin' : 'Family';
+  const portalName = user?.role === 'teacher' ? 'Faculty' : user?.role === 'super_admin' ? 'Platform' : user?.role === 'admin' ? 'Admin' : user?.role === 'finance' ? 'Finance' : 'Family';
 
   const handleSignOut = () => {
     logout();

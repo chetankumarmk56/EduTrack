@@ -8,7 +8,7 @@ def setup_logging():
     Uses standard Python logging with structured formatting.
     """
     log_format = "[%(asctime)s] [%(levelname)s] [%(name)s] - %(message)s"
-    log_level = logging.INFO if settings.ENVIRONMENT == "prod" else logging.DEBUG
+    log_level = logging.INFO
     
     # Configure root logger
     logging.basicConfig(

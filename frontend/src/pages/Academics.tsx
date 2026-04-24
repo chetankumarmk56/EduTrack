@@ -42,8 +42,8 @@ export default function Academics() {
     classDirectory, 
     studentProfile,
     studentMarks: marks,
-    classMarks,
-    fetchClassMarks
+    subjectSummaries,
+    fetchSubjectSummary
   } = useApp();
 
   const [selectedSubjectName, setSelectedSubjectName] = useState<string | null>(null);
@@ -56,7 +56,7 @@ export default function Academics() {
     if (activeStudent?.id && classId && (marks || []).length > 0) {
       const subjects = Array.from(new Set(marks.map((m: any) => m.subject_ref?.name || m.subject).filter(Boolean)));
       subjects.forEach((subj: any) => {
-        fetchClassMarks(subj, classId);
+        fetchSubjectSummary(subj, classId);
       });
     }
   }, [activeStudent?.id, studentClass?.id, activeStudent?.class_level, (marks || []).length]);
@@ -69,12 +69,10 @@ export default function Academics() {
       const totalMax = subjMarks.reduce((a: number, b: any) => a + (b.max_score || 0), 0);
       const avg = totalMax > 0 ? Math.round((totalScore / totalMax) * 100) : 0;
       
-      // Calculate Class Average
-      const key = `${subj}_${activeStudent?.class_level}`;
-      const cMarks = classMarks[key] || [];
-      const cTotalScore = cMarks.reduce((a: number, b: any) => a + (b.score || 0), 0);
-      const cTotalMax = cMarks.reduce((a: number, b: any) => a + (b.max_score || 100), 0);
-      const cAvg = cTotalMax > 0 ? Math.round((cTotalScore / cTotalMax) * 100) : 0;
+      // Calculate Class Average via Summary
+      const key = `${subj}_${activeStudent?.class_level || studentClass?.id}`;
+      const summary = subjectSummaries[key];
+      const cAvg = summary?.average || 0;
 
       const teacher = teacherDirectory.find((t: any) => 
         t.assignments?.some((a: any) => {
@@ -102,7 +100,7 @@ export default function Academics() {
         allMarks: subjMarks
       };
     }).sort((a: any, b: any) => b.average - a.average);
-  }, [marks, classMarks, teacherDirectory, activeStudent, studentClass]);
+  }, [marks, subjectSummaries, teacherDirectory, activeStudent, studentClass]);
 
   const selectedSubjectData = useMemo(() => {
     if (!selectedSubjectName) return null;

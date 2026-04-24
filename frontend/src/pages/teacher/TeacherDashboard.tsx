@@ -110,17 +110,23 @@ export default function TeacherDashboard() {
     fetchTeacherStats();
   }, []);
 
+  const filteredDB = useMemo(() => {
+    if (!activeAssignment) return [];
+    return classDirectory.filter(
+      (s: any) => s.school_class?.id === activeAssignment.school_class?.id
+    );
+  }, [classDirectory, activeAssignment]);
+
+  // 1. Initial/Global Stats Fetch
+  useEffect(() => {
+    fetchTeacherStats();
+  }, []);
+
   // 2. Classroom-Specific Data Fetch
   useEffect(() => {
     if (!activeAssignment) return;
-    
-    const filteredDB = classDirectory.filter(
-      (s: any) => s.school_class?.id === activeAssignment.school_class?.id
-    );
-    
-    // Always fetch exams and marks metadata even if class is empty
     fetchExamsAndMarks(filteredDB);
-  }, [classDirectory, activeAssignment]);
+  }, [activeAssignment?.id, filteredDB.length]);
 
   const handleScoreChange = (roll: number, newScore: number) => {
     if (!activeExamId) return;

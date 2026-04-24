@@ -6,10 +6,23 @@ from app.schemas import directory as schemas
 from app.core.security import get_password_hash, verify_password, create_access_token
 from app.models.directory import Teacher, TeacherAssignment
 from typing import List, Optional
+from app.core.cache import get_cache, set_cache, delete_cache_pattern
 
 class TeacherService:
     @staticmethod
     async def get_teachers(db: AsyncSession, institution_id: int, skip: int = 0, limit: int = 1000):
+        """
+        Fetch all teachers for an institution.
+        Uses Redis caching to reduce database load for this high-traffic read operation.
+        TTL: 300s - Balanced to maintain performance and data freshness.
+        """
+        # 1. Cache hit check
+        cache_key = f"teachers_list:{institution_id}:skip{skip}:limit{limit}"
+        cached_teachers = await get_cache(cache_key)
+        if cached_teachers:
+            return cached_teachers
+
+        # 2. Database query on cache miss
         from app.models.academic import SchoolClass
         result = await db.execute(
             select(Teacher)
@@ -22,7 +35,15 @@ class TeacherService:
             .offset(skip)
             .limit(limit)
         )
-        return result.scalars().all()
+        teachers = result.scalars().all()
+        
+        # 3. Serialize for Redis (JSON standard)
+        serialized_teachers = [schemas.TeacherResponse.model_validate(t).model_dump(mode='json') for t in teachers]
+        
+        # 4. Save to Redis
+        await set_cache(cache_key, serialized_teachers, ttl=300)
+        
+        return teachers
 
     @staticmethod
     async def get_teacher(db: AsyncSession, institution_id: int, teacher_id: int):
@@ -35,6 +56,20 @@ class TeacherService:
                 selectinload(Teacher.assignments).selectinload(TeacherAssignment.subject_ref)
             )
             .where(Teacher.id == teacher_id, Teacher.institution_id == institution_id)
+        )
+        return result.scalars().first()
+
+    @staticmethod
+    async def get_teacher_by_user_id(db: AsyncSession, institution_id: int, user_id: int):
+        from app.models.academic import SchoolClass
+        result = await db.execute(
+            select(Teacher)
+            .options(
+                selectinload(Teacher.assignments).selectinload(TeacherAssignment.school_class).selectinload(SchoolClass.grade),
+                selectinload(Teacher.assignments).selectinload(TeacherAssignment.school_class).selectinload(SchoolClass.section),
+                selectinload(Teacher.assignments).selectinload(TeacherAssignment.subject_ref)
+            )
+            .where(Teacher.user_id == user_id, Teacher.institution_id == institution_id)
         )
         return result.scalars().first()
 
@@ -73,6 +108,8 @@ class TeacherService:
         )
         db.add(db_teacher)
         await db.commit()
+        # Invalidate teacher list cache
+        await delete_cache_pattern(f"teachers_list:{institution_id}:*")
         return await TeacherService.get_teacher(db, institution_id, db_teacher.id)
 
     @staticmethod
@@ -91,6 +128,8 @@ class TeacherService:
                 setattr(db_teacher, key, value)
 
         await db.commit()
+        # Invalidate teacher list cache
+        await delete_cache_pattern(f"teachers_list:{institution_id}:*")
         return await TeacherService.get_teacher(db, institution_id, db_teacher.id)
 
     @staticmethod
@@ -121,6 +160,8 @@ class TeacherService:
         if teacher:
             await db.delete(teacher)
             await db.commit()
+            # Invalidate cache
+            await delete_cache_pattern(f"teachers_list:{institution_id}:*")
             return True
         return False
 
@@ -148,11 +189,20 @@ class TeacherService:
         if not teacher:
             return None
 
-        access_token = create_access_token(
-            data={"sub": str(db_user.id), "role": "teacher", "institution_id": institution_id}
-        )
+        token_payload = {
+            "sub": str(db_user.id), 
+            "role": "teacher", 
+            "institution_id": institution_id,
+            "name": db_user.name
+        }
+        
+        from app.core.security import create_refresh_token
+        access_token = create_access_token(data=token_payload)
+        refresh_token = create_refresh_token(data=token_payload)
+
         return {
             "access_token": access_token,
+            "refresh_token": refresh_token,
             "token_type": "bearer",
             "role": "teacher",
             "institution_id": institution_id,

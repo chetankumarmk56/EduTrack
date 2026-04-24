@@ -56,18 +56,12 @@ export default function AdminClasses() {
     e.preventDefault();
     if (!selectedGradeId || !sectionName) return;
     try {
-      const newSection = await academicApi.createSection({ 
+      // Senior Fix: Use atomic deployment endpoint to prevent relational drift and sequential 401s
+      await academicApi.deploySegment({ 
         name: sectionName.toUpperCase(), 
         grade_id: selectedGradeId 
       });
-      // Automatically create a SchoolClass mapping for this Grade+Section
-      // We use the level from the currently selected class for the display name
-      const currentLevel = classes.find(c => c.id === selectedGradeId)?.level;
-      await academicApi.createSchoolClass({
-        grade_id: selectedGradeId,
-        section_id: newSection.id,
-        display_name: `${currentLevel}-${sectionName.toUpperCase()}`
-      });
+      
       setIsAddingSection(false);
       setSectionName('');
       await refreshDirectory(true);
@@ -156,12 +150,12 @@ export default function AdminClasses() {
           <div className="flex flex-col gap-3">
             <AnimatePresence mode="popLayout">
               {classes.sort((a,b) => a.level - b.level).map((c: any) => (
-                <motion.button
+                <motion.div
                   layout
                   key={c.id}
                   onClick={() => setSelectedGradeId(c.id)}
                   className={cn(
-                    "group w-full p-4 rounded-2xl flex items-center justify-between transition-all border text-left relative overflow-hidden",
+                    "group w-full p-4 rounded-2xl flex items-center justify-between transition-all border text-left relative overflow-hidden cursor-pointer",
                     selectedGradeId === c.id 
                       ? "bg-brand-indigo/10 border-brand-indigo/30 shadow-lg" 
                       : "bg-white/[0.02] border-glass-border hover:border-glass-border-bright"
@@ -202,7 +196,7 @@ export default function AdminClasses() {
                   {selectedGradeId === c.id && (
                     <motion.div layoutId="active-indicator" className="absolute left-0 top-0 bottom-0 w-1 bg-brand-indigo" />
                   )}
-                </motion.button>
+                </motion.div>
               ))}
             </AnimatePresence>
           </div>

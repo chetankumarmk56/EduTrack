@@ -20,7 +20,8 @@ class Settings(BaseSettings):
     # Security (using standard field names with env aliases)
     SECRET_KEY: str = "edutrack-secret-key-32-bytes-placeholder"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080  # 1 week in minutes
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     
     # Auth Aliases for compatibility
     JWT_SECRET: Optional[str] = None
@@ -29,11 +30,27 @@ class Settings(BaseSettings):
     # AI (Optional)
     GOOGLE_API_KEY: Optional[str] = None
     
+    # Razorpay
+    RAZORPAY_KEY_ID: Optional[str] = "rzp_test_placeholder"
+    RAZORPAY_KEY_SECRET: Optional[str] = "placeholder_secret"
+    RAZORPAY_WEBHOOK_SECRET: Optional[str] = "placeholder_webhook_secret"
+    
     # Frontend
-    FRONTEND_URL: str = "http://localhost:3000"
+    FRONTEND_URL: str = "http://localhost:5173"
     
     # Infrastructure
     PORT: int = 8000
+    REDIS_URL: str = "redis://localhost:6379/0"
+
+    # Exotel Configuration
+    EXOTEL_SID: Optional[str] = None
+    EXOTEL_API_KEY: Optional[str] = None
+    EXOTEL_API_TOKEN: Optional[str] = None
+    EXOTEL_FROM_NUMBER: Optional[str] = None
+
+    # Azure Storage
+    AZURE_STORAGE_CONNECTION_STRING: Optional[str] = None
+    AZURE_CONTAINER_NAME: str = "announcements"
     
     model_config = SettingsConfigDict(
         case_sensitive=True,

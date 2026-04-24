@@ -98,7 +98,7 @@ async def assign_student(
         raise HTTPException(status_code=404, detail="Bus or Stop not found")
     return result
 
-@router.get("/my-transport")
+@router.get("/my-assignment")
 async def get_my_transport(
     db: AsyncSession = Depends(get_db), 
     user: UserContext = Depends(get_current_user)

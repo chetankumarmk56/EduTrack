@@ -91,7 +91,18 @@ export default function TeacherLogin() {
               <BookOpen className="h-6 w-6 text-emerald-600" />
             </div>
             <h2 className="text-3xl font-bold tracking-tight text-foreground">Teacher Access</h2>
-            <p className="text-muted-foreground mt-2">Enter your designated classroom credentials.</p>
+            {window.location.search.includes('reason=expired') && (
+              <motion.p 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="text-amber-500 text-sm font-bold mt-2 bg-amber-500/10 py-2 rounded-lg"
+              >
+                Session expired. Please login again.
+              </motion.p>
+            )}
+            {!window.location.search.includes('reason=expired') && (
+              <p className="text-muted-foreground mt-2">Enter your designated classroom credentials.</p>
+            )}
           </div>
 
           <form onSubmit={handleLogin} className="space-y-6">

@@ -1,53 +1,79 @@
 version: '3.8'
 
 services:
+  # --- Database Layer ---
   db:
     image: postgres:15-alpine
     container_name: edutrack_db
     restart: always
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-edutrack}
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER:-luffy}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+      POSTGRES_DB: ${POSTGRES_DB:-school}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
 
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: edutrack_backend
+  # --- Caching & Messaging Layer ---
+  redis:
+    image: redis:alpine
+    container_name: edutrack_redis
+    restart: always
+    ports:
+      - "6379:6379"
+
+  # --- API Layer (Replicas for High Availability) ---
+  backend1:
+    build: ./backend
+    container_name: edutrack_api_1
     restart: always
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-edutrack}
-      - SECRET_KEY=${SECRET_KEY:-your-secure-secret-key}
-      - ENVIRONMENT=dev
-    ports:
-      - "8000:8000"
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-luffy}:${POSTGRES_PASSWORD:-secret}@db:5432/${POSTGRES_DB:-school}
+      - REDIS_URL=redis://redis:6379/0
+      - ENVIRONMENT=prod
     depends_on:
       - db
-    # Command to run migrations then start the server
-    entrypoint: >
-      bash -c "
-      echo 'Waiting for database...' &&
-      sleep 5 &&
-      alembic upgrade head &&
-      uvicorn app.main:app --host 0.0.0.0 --port 8000"
+      - redis
 
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: edutrack_frontend
+  backend2:
+    build: ./backend
+    container_name: edutrack_api_2
     restart: always
     environment:
-      - VITE_API_URL=http://localhost:8000/api
-    ports:
-      - "3000:80"
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-luffy}:${POSTGRES_PASSWORD:-secret}@db:5432/${POSTGRES_DB:-school}
+      - REDIS_URL=redis://redis:6379/0
+      - ENVIRONMENT=prod
     depends_on:
-      - backend
+      - db
+      - redis
+
+  # --- Background Task Layer ---
+  worker:
+    build: ./backend
+    container_name: edutrack_worker
+    restart: always
+    command: celery -A app.core.celery_app worker --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-luffy}:${POSTGRES_PASSWORD:-secret}@db:5432/${POSTGRES_DB:-school}
+      - REDIS_URL=redis://redis:6379/0
+      - ENVIRONMENT=prod
+    depends_on:
+      - redis
+      - db
+
+  # --- Load Balancer Layer ---
+  nginx:
+    image: nginx:alpine
+    container_name: edutrack_nginx
+    restart: always
+    ports:
+      - "80:80"
+    volumes:
+      - ./deployment/nginx/nginx-docker.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend1
+      - backend2
 
 volumes:
   postgres_data:

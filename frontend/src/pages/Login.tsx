@@ -116,7 +116,18 @@ export default function Login() {
               <GraduationCap className="h-6 w-6 text-primary" />
             </div>
             <h2 className="text-3xl font-bold tracking-tight text-foreground">Welcome Back</h2>
-            <p className="text-muted-foreground mt-2">Enter your student's credentials to access the portal.</p>
+            {window.location.search.includes('reason=expired') && (
+              <motion.p 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="text-primary text-sm font-bold mt-2 bg-primary/10 py-2 rounded-lg"
+              >
+                Session expired. Please login again.
+              </motion.p>
+            )}
+            {!window.location.search.includes('reason=expired') && (
+              <p className="text-muted-foreground mt-2">Enter your student's credentials to access the portal.</p>
+            )}
           </div>
 
           <form onSubmit={handleLogin} className="space-y-6">

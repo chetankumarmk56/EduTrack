@@ -71,6 +71,45 @@ class AcademicService:
         return db_section
 
     @staticmethod
+    async def deploy_segment(db: AsyncSession, institution_id: int, section_in: schemas.SectionCreate):
+        """
+        Atomic deployment: Creates a Section AND its corresponding SchoolClass mapping.
+        This is preferred over multiple frontend calls to ensure relational integrity.
+        """
+        grade_result = await db.execute(
+            select(Grade).where(Grade.id == section_in.grade_id, Grade.institution_id == institution_id)
+        )
+        db_grade = grade_result.scalars().first()
+        if not db_grade:
+            return None
+
+        # 1. Create Section
+        db_section = Section(
+            name=section_in.name, 
+            grade_id=section_in.grade_id, 
+            institution_id=institution_id
+        )
+        db.add(db_section)
+        await db.flush() # Get ID without committing
+
+        # 2. Create SchoolClass Mapping
+        db_school_class = SchoolClass(
+            grade_id=db_grade.id,
+            section_id=db_section.id,
+            institution_id=institution_id,
+            display_name=f"{db_grade.level}-{db_section.name}",
+            tuition_fee=0.0,
+            transport_fee=0.0,
+            other_fee=0.0,
+            total_fee=0.0
+        )
+        db.add(db_school_class)
+        
+        await db.commit()
+        await db.refresh(db_section)
+        return db_section
+
+    @staticmethod
     async def update_section(db: AsyncSession, institution_id: int, section_id: int, section_in: schemas.SectionUpdate):
         result = await db.execute(select(Section).where(Section.id == section_id))
         db_section = result.scalars().first()
@@ -158,8 +197,35 @@ class AcademicService:
         if existing_result.scalars().first():
             raise Exception("Class with this Grade and Section already exists")
 
-        db_class = SchoolClass(**class_in.model_dump(), institution_id=institution_id)
+        # Auto-calculate total_fee
+        total_fee = (class_in.tuition_fee or 0.0) + (class_in.transport_fee or 0.0) + (class_in.other_fee or 0.0)
+        
+        db_class = SchoolClass(
+            **class_in.model_dump(exclude={"total_fee"}), 
+            total_fee=total_fee,
+            institution_id=institution_id
+        )
         db.add(db_class)
+        await db.commit()
+        await db.refresh(db_class)
+        return db_class
+
+    @staticmethod
+    async def update_school_class(db: AsyncSession, institution_id: int, class_id: int, class_in: schemas.SchoolClassUpdate):
+        result = await db.execute(
+            select(SchoolClass).where(SchoolClass.id == class_id, SchoolClass.institution_id == institution_id)
+        )
+        db_class = result.scalars().first()
+        if not db_class:
+            return None
+
+        update_data = class_in.model_dump(exclude_unset=True)
+        for k, v in update_data.items():
+            setattr(db_class, k, v)
+
+        # Recalculate total_fee
+        db_class.total_fee = (db_class.tuition_fee or 0.0) + (db_class.transport_fee or 0.0) + (db_class.other_fee or 0.0)
+
         await db.commit()
         await db.refresh(db_class)
         return db_class

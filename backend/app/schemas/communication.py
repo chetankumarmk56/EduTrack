@@ -1,24 +1,65 @@
-from pydantic import BaseModel, ConfigDict
-from typing import Optional
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from typing import Optional, List, Any
 from datetime import datetime
+from uuid import UUID
+from enum import Enum
+
+class AnnouncementType(str, Enum):
+    CLASS = "class"
+    STUDENT = "student"
+
+class AnnouncementPriority(str, Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
 
 class AnnouncementBase(BaseModel):
-    title: str
-    message: Optional[str] = ""
-    audience: Optional[str] = "all" # all, teacher, parent, admin, or "class_10"
-    expires_at: Optional[datetime] = None
+    title: str = Field(..., min_length=1, description="Announcement title cannot be empty")
+    message: str = Field(..., min_length=1, description="Announcement message cannot be empty")
+    type: AnnouncementType
+    priority: AnnouncementPriority = AnnouncementPriority.LOW
+    class_id: Optional[int] = None
+    student_id: Optional[int] = None
+    attachment_url: Optional[str] = None
 
 class AnnouncementCreate(AnnouncementBase):
-    institution_id: Optional[int] = 1
+    @model_validator(mode='after')
+    def validate_targets(self) -> 'AnnouncementCreate':
+        if self.type == AnnouncementType.CLASS and not self.class_id:
+            raise ValueError("class_id is required for announcements of type 'class'")
+        if self.type == AnnouncementType.STUDENT and not self.student_id:
+            raise ValueError("student_id is required for announcements of type 'student'")
+        return self
 
 class AnnouncementUpdate(BaseModel):
-    title: Optional[str] = None
-    message: Optional[str] = None
-    audience: Optional[str] = None
-    expires_at: Optional[datetime] = None
+    title: Optional[str] = Field(None, min_length=1)
+    message: Optional[str] = Field(None, min_length=1)
+    type: Optional[AnnouncementType] = None
+    priority: Optional[AnnouncementPriority] = None
+    class_id: Optional[int] = None
+    student_id: Optional[int] = None
+    attachment_url: Optional[str] = None
 
 class AnnouncementResponse(AnnouncementBase):
-    id: int
+    id: UUID
+    teacher_id: int
+    institution_id: int
     created_at: datetime
-    created_by_id: Optional[int]
+    read_count: Optional[int] = 0
+    target_count: Optional[int] = 0
+    is_read: Optional[bool] = False
+    teacher_name: Optional[str] = None
+    
+    model_config = ConfigDict(from_attributes=True)
+
+class AnnouncementReadCreate(BaseModel):
+    announcement_id: UUID
+    parent_id: int
+
+class AnnouncementReadResponse(BaseModel):
+    id: UUID
+    announcement_id: UUID
+    parent_id: int
+    read_at: datetime
+    
     model_config = ConfigDict(from_attributes=True)

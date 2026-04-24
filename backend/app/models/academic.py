@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy import Column, Integer, String, ForeignKey, Float, Date
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 from app.models.core import TimestampMixin
@@ -65,6 +65,13 @@ class SchoolClass(Base, TimestampMixin):
     
     # Optional alias: e.g., "10-A"
     display_name = Column(String, nullable=True)
+
+    # Fee Structure per Class
+    tuition_fee = Column(Float, nullable=False, default=0.0)
+    transport_fee = Column(Float, default=0.0)
+    other_fee = Column(Float, default=0.0)
+    total_fee = Column(Float, default=0.0)
+    fee_due_date = Column(Date, nullable=True)
 
     # Relationships
     grade = relationship("Grade", back_populates="classes")

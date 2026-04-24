@@ -14,10 +14,13 @@ export default function DashboardLayout() {
     document.documentElement.classList.add('crystal-theme');
     document.documentElement.classList.remove('dark', 'teacher-theme');
     
+    // Safety Reset: Ensure any leftover scroll-lock from modals is cleared on navigation
+    document.body.style.overflow = 'unset';
+
     return () => {
       document.documentElement.classList.remove('crystal-theme');
     };
-  }, []);
+  }, [location.pathname]);
 
   return (
     <div className="min-h-screen bg-background text-foreground transition-colors duration-500 font-sans selection:bg-primary/30 selection:text-primary">

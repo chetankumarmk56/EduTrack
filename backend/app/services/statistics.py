@@ -66,32 +66,53 @@ class StatisticsService:
         else:
             attendance_rate = 0
 
-        # 4. Pending Evaluations
-        # For simplicity, we keep original logic but async.
+        # 4. Pending Evaluations (Optimized Batch Calculation)
         pending_marks = 0
-        for assignment in assignments:
-            latest_exam_stmt = select(Exam).where(
-                Exam.school_class_id == assignment.school_class_id,
-                Exam.subject_id == assignment.subject_id
-            ).order_by(Exam.id.desc()).limit(1)
-            e_res = await db.execute(latest_exam_stmt)
-            latest_exam = e_res.scalars().first()
+        if assignments:
+            # Get latest exams for all assignments
+            # Note: This finds the max ID per (class, subject) pair
+            latest_exams_stmt = select(
+                Exam.school_class_id, 
+                Exam.subject_id, 
+                func.max(Exam.id).label('latest_exam_id')
+            ).where(
+                Exam.school_class_id.in_(class_ids)
+            ).group_by(Exam.school_class_id, Exam.subject_id)
             
-            if latest_exam:
-                s_stmt = select(Student.id).where(
-                    Student.school_class_id == assignment.school_class_id
-                )
-                s_res = await db.execute(s_stmt)
-                student_ids = s_res.scalars().all()
+            e_res = await db.execute(latest_exams_stmt)
+            latest_exam_map = {(row[0], row[1]): row[2] for row in e_res.all()}
+            
+            if latest_exam_map:
+                # Count students per class
+                student_counts_stmt = select(
+                    Student.school_class_id, 
+                    func.count(Student.id)
+                ).where(
+                    Student.school_class_id.in_(class_ids)
+                ).group_by(Student.school_class_id)
                 
-                if student_ids:
-                    m_stmt = select(func.count(Mark.id)).where(
-                        Mark.exam_id == latest_exam.id,
-                        Mark.student_id.in_(student_ids)
-                    )
-                    m_res = await db.execute(m_stmt)
-                    marked_students_count = m_res.scalar_one()
-                    pending_marks += max(0, len(student_ids) - marked_students_count)
+                s_res = await db.execute(student_counts_stmt)
+                class_student_counts = {row[0]: row[1] for row in s_res.all()}
+                
+                # Count marks per exam
+                exam_ids = list(latest_exam_map.values())
+                marks_counts_stmt = select(
+                    Mark.exam_id, 
+                    func.count(Mark.id)
+                ).where(
+                    Mark.exam_id.in_(exam_ids)
+                ).group_by(Mark.exam_id)
+                
+                m_res = await db.execute(marks_counts_stmt)
+                exam_marks_counts = {row[0]: row[1] for row in m_res.all()}
+                
+                # Aggregate pending counts
+                for assignment in assignments:
+                    exam_id = latest_exam_map.get((assignment.school_class_id, assignment.subject_id))
+                    if exam_id:
+                        total_s = class_student_counts.get(assignment.school_class_id, 0)
+                        marked_s = exam_marks_counts.get(exam_id, 0)
+                        pending_marks += max(0, total_s - marked_s)
 
         return {
             "total_students": total_students,

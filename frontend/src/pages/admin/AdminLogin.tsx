@@ -132,7 +132,14 @@ export default function AdminLogin() {
             className="text-center mb-8"
           >
             <h1 className="text-2xl font-bold tracking-tighter text-white mb-2">Restricted Access</h1>
-            <p className="text-slate-400 text-sm">System Administration Server. Present credentials to unlock routing table.</p>
+            {window.location.search.includes('reason=expired') && (
+              <p className="text-indigo-400 text-sm font-bold bg-indigo-400/10 py-1.5 rounded-md mb-2">
+                Session expired. Re-authenticate.
+              </p>
+            )}
+            {!window.location.search.includes('reason=expired') && (
+              <p className="text-slate-400 text-sm">System Administration Server. Present credentials to unlock routing table.</p>
+            )}
           </motion.div>
 
           <form onSubmit={handleLogin} className="space-y-4">

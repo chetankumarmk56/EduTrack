@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
@@ -6,11 +6,14 @@ from typing import List
 from app.core.database import get_db
 from app.core.dependencies import (
     get_current_user, UserContext, 
-    require_institution_admin, require_faculty
+    require_institution_admin, require_faculty,
+    require_teacher
 )
 from app.schemas import directory as schemas
 from app.schemas.auth import Token
 from app.services.teacher_service import teacher_service
+from app.services.auth_service import auth_service
+from app.core.config import settings
 
 router = APIRouter(
     prefix="/api/directory",
@@ -52,6 +55,7 @@ async def delete_assignment(
 @router.post("/teachers/login", response_model=Token)
 async def teacher_login(
     login_data: schemas.TeacherLogin,
+    response: Response,
     request: Request,
     db: AsyncSession = Depends(get_db)
 ):
@@ -59,17 +63,33 @@ async def teacher_login(
     institution_id_str = request.headers.get("X-Institution-Id")
     institution_id = int(institution_id_str) if institution_id_str and institution_id_str.isdigit() else 1
     
-    auth_data = await teacher_service.authenticate_portal(db, institution_id, login_data.email, login_data.password)
+    auth_data = await auth_service.authenticate_portal(
+        db, 
+        institution_id, 
+        email=login_data.email, 
+        password=login_data.password,
+        role="teacher"
+    )
     if not auth_data:
         raise HTTPException(status_code=401, detail="Invalid educator credentials.")
         
+    # Set Refresh Token in HttpOnly Cookie
+    response.set_cookie(
+        key="edu_refresh_teacher",
+        value=auth_data.pop("refresh_token"),
+        httponly=True,
+        secure=settings.ENVIRONMENT == "prod",
+        samesite="lax",
+        max_age=7 * 24 * 3600
+    )
+    
     return auth_data
 
 @router.get("/teachers/", response_model=List[schemas.TeacherResponse])
 async def read_teachers(
     skip: int = 0, limit: int = 1000, 
     db: AsyncSession = Depends(get_db),
-    user: UserContext = Depends(get_current_user)
+    user: UserContext = Depends(require_faculty)
 ):
     return await teacher_service.get_teachers(db, user.institution_id, skip=skip, limit=limit)
 
@@ -77,7 +97,7 @@ async def read_teachers(
 async def read_teacher(
     teacher_id: int, 
     db: AsyncSession = Depends(get_db),
-    user: UserContext = Depends(get_current_user)
+    user: UserContext = Depends(require_faculty)
 ):
     teacher = await teacher_service.get_teacher(db, user.institution_id, teacher_id)
     if not teacher:
@@ -136,8 +156,9 @@ async def get_my_teachers(
 @router.get("/teacher/dashboard/stats")
 async def get_teacher_dashboard_stats(
     db: AsyncSession = Depends(get_db),
-    user: UserContext = Depends(get_current_user)
+    user: UserContext = Depends(require_teacher)
 ):
     """Returns analytics and summary metrics for the logged-in teacher."""
     from app.services.statistics import StatisticsService
     return await StatisticsService.get_teacher_stats(db, user.institution_id, user.id)
+

@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from typing import List
 
 from app.core.database import get_db
@@ -11,6 +12,7 @@ from app.core.dependencies import (
 from app.schemas import directory as schemas
 from app.schemas.auth import Token
 from app.services.student_service import student_service
+from app.services.auth_service import auth_service
 
 router = APIRouter(
     prefix="/api/directory",
@@ -28,6 +30,7 @@ async def create_student(
 @router.post("/students/login", response_model=Token)
 async def student_login(
     login_data: schemas.StudentLogin,
+    response: Response,
     request: Request,
     db: AsyncSession = Depends(get_db)
 ):
@@ -59,14 +62,28 @@ async def student_login(
     if not school_class:
         raise HTTPException(status_code=401, detail="Invalid class/section combination.")
 
-    auth_data = await student_service.authenticate_portal(
-        db, institution_id, 
-        login_data.name, school_class.id, login_data.dob,
+    auth_data = await auth_service.authenticate_portal(
+        db, 
+        institution_id, 
+        name=login_data.name, 
+        school_class_id=school_class.id, 
+        dob=login_data.dob,
         role=login_data.role or "student"
     )
     if not auth_data:
         raise HTTPException(status_code=401, detail="Invalid student credentials.")
         
+    # Set Refresh Token in HttpOnly Cookie
+    from app.core.config import settings
+    response.set_cookie(
+        key="edu_refresh_parent", # Using 'parent' namespace for student/parent group
+        value=auth_data.pop("refresh_token"),
+        httponly=True,
+        secure=settings.ENVIRONMENT == "prod",
+        samesite="lax",
+        max_age=7 * 24 * 3600
+    )
+    
     return auth_data
 
 @router.get("/", response_model=List[schemas.StudentResponse], dependencies=[Depends(require_faculty)])
@@ -129,12 +146,36 @@ async def update_student_password(
         raise HTTPException(status_code=404, detail="Student not found or access denied")
     return updated
 
-@router.get("/my-profile", response_model=schemas.StudentResponse)
+@router.get("/my-profile")
 async def get_my_profile(
     db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(get_current_user)
 ):
+    """
+    Polymorphic profile retrieval based on authenticated user role.
+    """
+    if user.role == 'teacher':
+        from app.services.teacher_service import teacher_service
+        profile = await teacher_service.get_teacher_by_user_id(db, user.institution_id, user.id)
+        if not profile:
+            raise HTTPException(status_code=404, detail="Teacher profile not found")
+        return profile
+        
+    if user.role == 'parent':
+        from app.models.directory import Parent
+        result = await db.execute(
+            select(Parent)
+            .options(selectinload(Parent.students))
+            .where(Parent.user_id == user.id, Parent.institution_id == user.institution_id)
+        )
+        profile = result.scalars().first()
+        if not profile:
+            # Fallback to student lookup if parent record missing
+            return await student_service.get_student_by_user_id(db, user.institution_id, user.id)
+        return profile
+
+    # Default to student
     student = await student_service.get_student_by_user_id(db, user.institution_id, user.id)
     if not student:
-        raise HTTPException(status_code=404, detail="Student profile not found for this user")
+        raise HTTPException(status_code=404, detail="Profile not found for this user")
     return student

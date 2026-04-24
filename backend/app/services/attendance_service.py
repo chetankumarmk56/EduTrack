@@ -2,6 +2,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from typing import List
+from datetime import datetime, date
+from fastapi import HTTPException
 from app.models import Attendance, Student
 from app.schemas import attendance as schemas
 from app.models.directory import Teacher, TeacherAssignment
@@ -9,6 +11,20 @@ from app.models.directory import Teacher, TeacherAssignment
 class AttendanceService:
     @staticmethod
     async def mark_attendance(db: AsyncSession, institution_id: int, att: schemas.AttendanceCreate, teacher_user_id: int = None) -> Attendance:
+        # ✓ Validate date is not in future
+        try:
+            att_date = datetime.strptime(att.date, "%Y-%m-%d").date()
+            if att_date > date.today():
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Cannot mark attendance for future date: {att.date}. Attendance can only be marked for today or past dates."
+                )
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid date format: {att.date}. Expected YYYY-MM-DD."
+            )
+        
         result = await db.execute(select(Student).where(
             Student.id == att.student_id, 
             Student.institution_id == institution_id
@@ -51,6 +67,20 @@ class AttendanceService:
 
     @staticmethod
     async def mark_attendance_batch(db: AsyncSession, institution_id: int, batch: schemas.AttendanceBatch, teacher_user_id: int = None):
+        # ✓ Validate batch date is not in future
+        try:
+            att_date = datetime.strptime(batch.date, "%Y-%m-%d").date()
+            if att_date > date.today():
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Cannot mark attendance for future date: {batch.date}. Attendance can only be marked for today or past dates."
+                )
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid date format: {batch.date}. Expected YYYY-MM-DD."
+            )
+        
         if teacher_user_id:
             t_result = await db.execute(select(Teacher).where(Teacher.user_id == teacher_user_id))
             teacher = t_result.scalars().first()

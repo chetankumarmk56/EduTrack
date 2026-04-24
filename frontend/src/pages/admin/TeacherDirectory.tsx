@@ -9,7 +9,18 @@ import { useApp } from '../../lib/AppContext';
 import { cn } from '../../lib/utils';
 
 export default function TeacherDirectory() {
-  const { schoolClasses, subjects, teachers, isDirectoryLoading, refreshDirectory } = useApp();
+  const { 
+    schoolClasses, 
+    subjects, 
+    teachers, 
+    isDirectoryLoading, 
+    refreshDirectory,
+    refreshTeachers
+  } = useApp();
+
+  useEffect(() => {
+    refreshTeachers();
+  }, []);
   
   const [isAdding, setIsAdding] = useState(false);
   const [editingTeacher, setEditingTeacher] = useState<any | null>(null);

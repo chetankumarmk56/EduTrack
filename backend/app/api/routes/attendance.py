@@ -13,7 +13,7 @@ router = APIRouter(prefix="/api/attendance", tags=["Attendance Tracking"])
 async def mark_attendance(
     att: schemas.AttendanceCreate, 
     db: AsyncSession = Depends(get_db),
-    user: UserContext = Depends(get_current_user)
+    user: UserContext = Depends(require_faculty)
 ):
     teacher_id = user.id if user.role == "teacher" else None
     result = await attendance_service.mark_attendance(db, user.institution_id, att, teacher_user_id=teacher_id)
@@ -25,7 +25,7 @@ async def mark_attendance(
 async def mark_attendance_batch(
     batch: schemas.AttendanceBatch, 
     db: AsyncSession = Depends(get_db),
-    user: UserContext = Depends(get_current_user)
+    user: UserContext = Depends(require_faculty)
 ):
     teacher_id = user.id if user.role == "teacher" else None
     return await attendance_service.mark_attendance_batch(db, user.institution_id, batch, teacher_user_id=teacher_id)

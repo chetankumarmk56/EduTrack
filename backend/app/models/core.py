@@ -10,6 +10,7 @@ class UserRole(str, enum.Enum):
     TEACHER = "teacher"
     PARENT = "parent"
     STUDENT = "student"
+    FINANCE = "finance"
 
 class TimestampMixin:
     """Mixin to add creation and update timestamps to all tables."""

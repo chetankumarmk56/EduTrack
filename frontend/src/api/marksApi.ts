@@ -46,6 +46,17 @@ export const marksApi = {
     },
 
     /**
+     * Fetch aggregated statistics for a class/subject (Secure view for Parents/Students).
+     */
+    getSubjectSummary: async (subject: string, schoolClassId: number) => {
+        const response = await client.get<{ average: number, count: number }>(
+            `marks/subject/${subject}/summary`, 
+            { params: { school_class_id: schoolClassId } }
+        );
+        return response.data;
+    },
+
+    /**
      * Create a formal assessment record.
      */
     createExam: async (exam: ExamCreate, classId?: number, subjectId?: number) => {
