@@ -249,25 +249,31 @@ def seed_db():
         print("🎒 Students, Parents, Marks, and Attendance populated.")
 
         # 7. Announcements
-        announcements = [
-            ("School Reopening", "Welcome back! Classes resume from Monday.", "all"),
-            ("New Lab Equipment", "We've upgraded the Physics lab with new sensors.", "teacher"),
-            ("Annual Sports Day", "Join us for the 10th Annual Sports Meet this Saturday.", "all"),
-            ("Fee Payment Reminder", "Q3 tuition fees are due by the end of this week.", "parent"),
-            ("Faculty Briefing", "All staff meeting in the auditorium at 3 PM today.", "teacher")
-        ]
-        for title, msg, target in announcements:
-            if not db.query(Announcement).filter(Announcement.title == title).first():
-                ann = Announcement(
-                    title=title,
-                    message=msg,
-                    audience=target,
-                    institution_id=inst.id,
-                    created_by_id=user.id if (user := db.query(User).filter(User.role == "super_admin").first()) else None
-                )
-                db.add(ann)
-        db.commit()
-        print("📢 Announcements seeded.")
+        # Get a teacher and a class to use as targets
+        demo_teacher = db.query(Teacher).first()
+        demo_class = db.query(Classroom).first()
+        
+        if demo_teacher and demo_class:
+            announcements = [
+                ("School Reopening", "Welcome back! Classes resume from Monday.", "class", demo_class.id),
+                ("New Lab Equipment", "We've upgraded the Physics lab with new sensors.", "class", demo_class.id),
+                ("Annual Sports Day", "Join us for the 10th Annual Sports Meet this Saturday.", "class", demo_class.id),
+                ("Fee Payment Reminder", "Q3 tuition fees are due by the end of this week.", "class", demo_class.id),
+                ("Faculty Briefing", "All staff meeting in the auditorium at 3 PM today.", "class", demo_class.id)
+            ]
+            for title, msg, atype, target_id in announcements:
+                if not db.query(Announcement).filter(Announcement.title == title).first():
+                    ann = Announcement(
+                        title=title,
+                        message=msg,
+                        type=atype,
+                        class_id=target_id,
+                        institution_id=inst.id,
+                        teacher_id=demo_teacher.id
+                    )
+                    db.add(ann)
+            db.commit()
+            print("📢 Announcements seeded.")
 
         # 8. Events
         events = [
