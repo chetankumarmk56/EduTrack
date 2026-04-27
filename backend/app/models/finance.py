@@ -57,7 +57,7 @@ class StudentFee(Base, TimestampMixin):
     due_amount = Column(Float, nullable=False)
     due_date = Column(Date, nullable=False)
     
-    status = Column(Enum(StudentFeeStatus), default=StudentFeeStatus.UNPAID, index=True)
+    status = Column(Enum(StudentFeeStatus, native_enum=False), default=StudentFeeStatus.UNPAID, index=True)
     
     last_notified_at = Column(DateTime(timezone=True), nullable=True, index=True)
     last_called_at = Column(DateTime(timezone=True), nullable=True, index=True)
