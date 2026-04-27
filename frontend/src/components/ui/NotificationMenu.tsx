@@ -72,7 +72,7 @@ export default function NotificationMenu() {
                   <p className="text-sm font-bold text-muted-foreground italic">No transmissions found.</p>
                 </div>
               ) : (
-                notifications.map((n, i) => (
+                notifications.map((n) => (
                   <div 
                     key={n.id}
                     className={cn(

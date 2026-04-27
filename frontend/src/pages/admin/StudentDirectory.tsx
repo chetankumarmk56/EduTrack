@@ -141,8 +141,6 @@ export default function StudentDirectory() {
         parent_name: '', parent_email: '', parent_phone: ''
       });
       setErrors({});
-      setSuccessMessage(`Student "${form.name}" enrolled successfully!`);
-      setTimeout(() => setSuccessMessage(''), 3000);
       refreshStudents();
     } catch (err: any) { 
       const error = getErrorMessage(err);

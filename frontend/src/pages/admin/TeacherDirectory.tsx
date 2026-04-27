@@ -6,7 +6,6 @@ import {
 } from 'lucide-react';
 import { directoryApi } from '../../api/directoryApi';
 import { useApp } from '../../lib/AppContext';
-import { cn } from '../../lib/utils';
 
 export default function TeacherDirectory() {
   const { 
@@ -14,7 +13,6 @@ export default function TeacherDirectory() {
     subjects, 
     teachers, 
     isDirectoryLoading, 
-    refreshDirectory,
     refreshTeachers
   } = useApp();
 

@@ -47,8 +47,7 @@ export default function Dashboard() {
       studentAttendance: rawAttendance,
       studentEvents: rawEvents,
       fetchStudentData,
-      parentFees,
-      refreshParentFees
+      parentFees
    } = useApp();
 
    useEffect(() => {
