@@ -101,10 +101,12 @@ def seed_db():
                 sec = get_or_create_section(db, s_name, g.id, inst.id)
                 clr = get_or_create_classroom(db, g.id, sec.id, inst.id, f"{lvl}-{s_name}")
                 classrooms.append(clr)
+        print(f"🏫 Academic structure ready: {len(classrooms)} classrooms created.")
         
         # 2. Subjects
         subject_data = [("Mathematics", "MATH"), ("Physics", "PHYS"), ("English", "ENG"), ("Computer Science", "COMP")]
         subjects = {s_name: get_or_create_subject(db, s_name, s_code, inst.id) for s_name, s_code in subject_data}
+        print(f"📚 Subjects ready: {len(subjects)} created.")
 
         # 3. Teachers
         for s_name, sub_obj in subjects.items():
@@ -120,11 +122,13 @@ def seed_db():
                 if not db.query(TeacherAssignment).filter(TeacherAssignment.teacher_id == t.id, TeacherAssignment.school_class_id == room.id).first():
                     db.add(TeacherAssignment(teacher_id=t.id, school_class_id=room.id, subject_id=sub_obj.id, institution_id=inst.id))
         db.commit()
+        print(f"👨‍🏫 Teachers and assignments ready: {len(subjects)} created.")
 
         # 4. Exams
         exams = {e: db.query(Exam).filter(Exam.name == e).first() or db.add(Exam(name=e, institution_id=inst.id, term="Term 1")) or db.commit() or db.query(Exam).filter(Exam.name == e).first() 
                  for e in ["Midterm", "Finals"]}
         db.commit()
+        print(f"📝 Exams ready: {len(exams)} created.")
 
         # 5. Students & Parents
         for room in classrooms:
@@ -142,6 +146,7 @@ def seed_db():
                         s = Student(user_id=su.id, name=su.name, parent_id=p.id, school_class_id=room.id, institution_id=inst.id)
                         db.add(s)
         db.commit()
+        print("👥 Students, Parents, Marks, and Attendance populated.")
         print("✅ Database Seeding Complete (Idempotent)")
 
     except Exception as e:
