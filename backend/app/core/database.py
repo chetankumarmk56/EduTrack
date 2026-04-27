@@ -1,25 +1,38 @@
+import ssl as _ssl
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 from app.core.config import settings
 
-# Database connection URL from settings
-DATABASE_URL = settings.DATABASE_URL
+# Raw URL from settings (used as-is for psycopg2 sync engine)
+_RAW_DATABASE_URL = settings.DATABASE_URL
 
-# SQLAlchemy 1.4+ Async expects 'postgresql+asyncpg://'
-if DATABASE_URL.startswith("postgresql://"):
-    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
-elif DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+asyncpg://", 1)
+# Build the asyncpg-compatible URL
+# 1. Swap scheme to postgresql+asyncpg://
+_ASYNC_URL = _RAW_DATABASE_URL
+if _ASYNC_URL.startswith("postgres://"):
+    _ASYNC_URL = _ASYNC_URL.replace("postgres://", "postgresql+asyncpg://", 1)
+elif _ASYNC_URL.startswith("postgresql://"):
+    _ASYNC_URL = _ASYNC_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 
-# SQLAlchemy async engine configuration
+# 2. asyncpg does NOT accept ?sslmode= — strip it and use connect_args instead
+_ssl_required = "sslmode=require" in _ASYNC_URL or "sslmode=prefer" in _ASYNC_URL
+for _param in ("?sslmode=require", "&sslmode=require", "?sslmode=prefer", "&sslmode=prefer",
+               "?sslmode=disable", "&sslmode=disable", "?sslmode=allow", "&sslmode=allow"):
+    _ASYNC_URL = _ASYNC_URL.replace(_param, "")
+
+DATABASE_URL = _ASYNC_URL
+_connect_args = {"ssl": _ssl.create_default_context()} if _ssl_required else {}
+
+# SQLAlchemy async engine
 engine = create_async_engine(
-    DATABASE_URL, 
+    DATABASE_URL,
     pool_pre_ping=True,
-    pool_size=getattr(settings, "DATABASE_POOL_SIZE", 25),  # Default increased from 20 to 25
-    max_overflow=getattr(settings, "DATABASE_MAX_OVERFLOW", 15),  # Default increased from 10 to 15
+    pool_size=getattr(settings, "DATABASE_POOL_SIZE", 25),
+    max_overflow=getattr(settings, "DATABASE_MAX_OVERFLOW", 15),
     pool_recycle=3600,
-    echo=False,  # Set to True for SQL query debugging
+    echo=False,
+    connect_args=_connect_args,
 )
 
 AsyncSessionLocal = async_sessionmaker(
@@ -30,9 +43,9 @@ AsyncSessionLocal = async_sessionmaker(
     autoflush=False,
 )
 
-# Standard Sync Engine & Session (for seeding/scripts)
+# Standard Sync Engine & Session (for seeding/scripts — psycopg2 handles sslmode natively)
 sync_engine = create_engine(
-    settings.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://", 1) if "asyncpg" in settings.DATABASE_URL else settings.DATABASE_URL,
+    _RAW_DATABASE_URL,
     pool_pre_ping=True
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
