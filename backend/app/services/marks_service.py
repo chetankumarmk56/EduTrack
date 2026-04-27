@@ -55,8 +55,14 @@ class MarksService:
             db_mark = Mark(**mark.model_dump(), institution_id=institution_id)
             db.add(db_mark)
             await db.commit()
-            await db.refresh(db_mark)
-            return db_mark
+            
+            # Fetch with relationships after commit
+            res = await db.execute(
+                select(Mark)
+                .options(selectinload(Mark.student), selectinload(Mark.exam), selectinload(Mark.subject_ref))
+                .where(Mark.id == db_mark.id)
+            )
+            return res.scalars().first()
             
     @staticmethod
     async def record_marks_batch(db: AsyncSession, institution_id: int, marks: List[schemas.MarkCreate], teacher_user_id: int = None):
@@ -66,23 +72,46 @@ class MarksService:
             t = t_result.scalars().first()
             teacher_id = t.id if t else None
 
+        # OPTIMIZATION: Bulk-load all students instead of looping (eliminates N+1)
+        student_ids = [m.student_id for m in marks]
+        students_result = await db.execute(select(Student).where(
+            Student.id.in_(student_ids),
+            Student.institution_id == institution_id
+        ))
+        students = {s.id: s for s in students_result.scalars().all()}
+        
+        # OPTIMIZATION: Bulk-load teacher assignments if needed
+        teacher_assignments = {}
+        if teacher_id:
+            class_ids = set(s.school_class_id for s in students.values() if s)
+            if class_ids:
+                ta_result = await db.execute(select(TeacherAssignment).where(
+                    TeacherAssignment.teacher_id == teacher_id,
+                    TeacherAssignment.school_class_id.in_(class_ids)
+                ))
+                teacher_assignments = {ta.school_class_id: ta for ta in ta_result.scalars().all()}
+        
+        # OPTIMIZATION: Bulk-load existing marks
+        existing_marks_result = await db.execute(select(Mark).where(
+            Mark.student_id.in_(student_ids),
+            Mark.institution_id == institution_id
+        ))
+        existing_marks = {m.student_id: m for m in existing_marks_result.scalars().all()}
+
         results = []
+        exam_ids = [m.exam_id for m in marks if m.exam_id]
+        exams = {}
+        if exam_ids:
+            exams_result = await db.execute(select(Exam).where(Exam.id.in_(exam_ids)))
+            exams = {e.id: e for e in exams_result.scalars().all()}
+
         for mark in marks:
-            s_result = await db.execute(select(Student).where(
-                Student.id == mark.student_id, 
-                Student.institution_id == institution_id
-            ))
-            student = s_result.scalars().first()
+            student = students.get(mark.student_id)
             if not student:
                 continue
 
-            if teacher_id:
-                assign_result = await db.execute(select(TeacherAssignment).where(
-                    TeacherAssignment.teacher_id == teacher_id,
-                    TeacherAssignment.school_class_id == student.school_class_id
-                ))
-                if not assign_result.scalars().first():
-                    continue
+            if teacher_id and student.school_class_id not in teacher_assignments:
+                continue
             
             if mark.score < 0: mark.score = 0
             if mark.max_score and mark.score > mark.max_score:
@@ -94,10 +123,8 @@ class MarksService:
             ]
 
             if mark.exam_id:
-                e_result = await db.execute(select(Exam).where(Exam.id == mark.exam_id))
-                exam = e_result.scalars().first()
+                exam = exams.get(mark.exam_id)
                 if exam and not mark.subject:
-                    # Auto-populate subject from exam name if not provided
                     mark.subject = exam.name
                 filter_conditions.append(Mark.exam_id == mark.exam_id)
             else:
@@ -118,9 +145,25 @@ class MarksService:
             results.append(existing)
         
         await db.commit()
-        for r in results:
-            await db.refresh(r)
-        return results
+        
+        # Optimized: Final fetch with all relationships for the batch
+        # We use a map to ensure we return them in the EXACT same order as the input
+        final_ids = [r.id for r in results if r.id]
+        if final_ids:
+            from app.models.academic import SchoolClass
+            res = await db.execute(
+                select(Mark)
+                .options(
+                    selectinload(Mark.student), 
+                    selectinload(Mark.exam), 
+                    selectinload(Mark.subject_ref)
+                )
+                .where(Mark.id.in_(final_ids))
+            )
+            fetched_marks = {m.id: m for m in res.scalars().all()}
+            # Reconstruct list in original order
+            return [fetched_marks[r.id] for r in results if r.id in fetched_marks]
+        return []
         
     @staticmethod
     async def get_marks(db: AsyncSession, institution_id: int, student_id: int):
@@ -180,6 +223,26 @@ class MarksService:
         await db.commit()
         await db.refresh(db_exam)
         return db_exam
+
+    @staticmethod
+    async def update_exam(db: AsyncSession, institution_id: int, exam_id: int, name: str):
+        result = await db.execute(select(Exam).where(Exam.id == exam_id, Exam.institution_id == institution_id))
+        db_exam = result.scalars().first()
+        if not db_exam: return None
+        
+        db_exam.name = name
+        await db.commit()
+        await db.refresh(db_exam)
+        return db_exam
+
+    @staticmethod
+    async def delete_exam_object(db: AsyncSession, institution_id: int, exam_id: int):
+        # 1. Delete associated marks first (due to FK constraints)
+        await db.execute(delete(Mark).where(Mark.exam_id == exam_id, Mark.institution_id == institution_id))
+        # 2. Delete the exam itself
+        await db.execute(delete(Exam).where(Exam.id == exam_id, Exam.institution_id == institution_id))
+        await db.commit()
+        return True
 
     @staticmethod
     async def delete_test(

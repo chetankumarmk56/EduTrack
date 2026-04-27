@@ -53,25 +53,27 @@ class FinanceService:
             return existing
 
         # 2. Try to create new
+        from datetime import date
         try:
-            new_fee = StudentFee(
-                student_id=student_id,
-                class_id=class_id,
-                institution_id=institution_id,
-                total_amount=total_amount,
-                due_amount=total_amount,
-                amount_paid=0.0,
-                due_date=due_date,
-                status=StudentFeeStatus.UNPAID
-            )
-            db.add(new_fee)
-            await db.flush() # Flush to trigger unique constraint check
-            logger.info(f"FEE_IDEMPOTENCY: Created new StudentFee for Student {student_id}, Class {class_id}")
-            return new_fee
-        except IntegrityError:
-            await db.rollback()
-            logger.warning(f"FEE_IDEMPOTENCY: Duplicate StudentFee attempt for Student {student_id}, Class {class_id}. Fetching existing.")
-            # Fetch again after rollback (need to be careful with session state)
+            async with db.begin_nested(): # Create a SAVEPOINT
+                new_fee = StudentFee(
+                    student_id=student_id,
+                    class_id=class_id,
+                    institution_id=institution_id,
+                    total_amount=total_amount,
+                    due_amount=total_amount,
+                    amount_paid=0.0,
+                    due_date=due_date if due_date else date.today(),
+                    status=StudentFeeStatus.UNPAID
+                )
+                db.add(new_fee)
+                await db.flush() # Flush to trigger unique constraint check
+                logger.info(f"FEE_IDEMPOTENCY: Created new StudentFee for Student {student_id}, Class {class_id}")
+                return new_fee
+        except IntegrityError as e:
+            logger.warning(f"FEE_IDEMPOTENCY: Constraint violation for Student {student_id}, Class {class_id}. Details: {str(e)}")
+            # The SAVEPOINT is automatically rolled back by async with db.begin_nested() on exception
+            # Fetch again in case it was a duplicate
             res = await db.execute(stmt)
             return res.scalars().first()
 
@@ -84,8 +86,8 @@ class FinanceService:
         if not student:
             return None
 
-        # Fetch fee structures
-        stmt = select(FeeStructure).where(FeeStructure.student_id == student_id)
+        # Fetch student fee from StudentFee
+        stmt = select(StudentFee).where(StudentFee.student_id == student_id, StudentFee.institution_id == institution_id)
         result = await db.execute(stmt)
         fees = result.scalars().all()
 
@@ -93,14 +95,14 @@ class FinanceService:
         breakdown = []
 
         for fee in fees:
-            due_amount = max(0.0, fee.total_amount - fee.paid_amount)
-            total_due += due_amount
-            breakdown.append(CategoryWiseDue(
-                fee_type=fee.fee_type,
-                total=fee.total_amount,
-                paid=fee.paid_amount,
-                due=due_amount
-            ))
+            total_due += fee.due_amount
+            if fee.total_amount > 0:
+                breakdown.append(CategoryWiseDue(
+                    fee_type="TUITION", # Map to generic tuition
+                    total=fee.total_amount,
+                    paid=fee.amount_paid,
+                    due=fee.due_amount
+                ))
 
         return StudentDuesResponse(
             student_id=student_id,
@@ -636,32 +638,18 @@ class FinanceService:
         collected_res = await db.execute(collected_stmt)
         total_collected = collected_res.scalar() or 0.0
 
-        # 2. Total Pending (from fee structures)
-        pending_stmt = select(func.sum(FeeStructure.total_amount - FeeStructure.paid_amount)).where(
-            FeeStructure.institution_id == institution_id
+        # 2. Total Pending (from StudentFee)
+        pending_stmt = select(func.sum(StudentFee.due_amount)).where(
+            StudentFee.institution_id == institution_id
         )
         pending_res = await db.execute(pending_stmt)
         total_pending = pending_res.scalar() or 0.0
 
-        # 3. Categorical Collected (Allocations)
-        cat_collected_stmt = select(
-            PaymentAllocation.fee_type,
-            func.sum(PaymentAllocation.allocated_amount)
-        ).where(
-            PaymentAllocation.institution_id == institution_id
-        ).group_by(PaymentAllocation.fee_type)
-        cat_collected_res = await db.execute(cat_collected_stmt)
-        cat_collected = [CategoryTotal(category=row[0], amount=row[1]) for row in cat_collected_res.all()]
+        # 3. Categorical Collected (Since we only track total fee now, map to 'TUITION')
+        cat_collected = [CategoryTotal(category="TUITION", amount=total_collected)] if total_collected > 0 else []
 
         # 4. Categorical Pending
-        cat_pending_stmt = select(
-            FeeStructure.fee_type,
-            func.sum(FeeStructure.total_amount - FeeStructure.paid_amount)
-        ).where(
-            FeeStructure.institution_id == institution_id
-        ).group_by(FeeStructure.fee_type)
-        cat_pending_res = await db.execute(cat_pending_stmt)
-        cat_pending = [CategoryTotal(category=row[0], amount=row[1]) for row in cat_pending_res.all()]
+        cat_pending = [CategoryTotal(category="TUITION", amount=total_pending)] if total_pending > 0 else []
 
         return FinanceSummaryResponse(
             total_collected=total_collected,
@@ -677,10 +665,10 @@ class FinanceService:
         stmt = select(
             Student.id,
             Student.name,
-            func.sum(FeeStructure.total_amount - FeeStructure.paid_amount).label("total_due"),
+            func.sum(StudentFee.due_amount).label("total_due"),
             SchoolClass.display_name.label("class_name")
         ).join(
-            FeeStructure, Student.id == FeeStructure.student_id
+            StudentFee, Student.id == StudentFee.student_id
         ).join(
             SchoolClass, Student.school_class_id == SchoolClass.id, isouter=True
         ).where(
@@ -688,9 +676,9 @@ class FinanceService:
         ).group_by(
             Student.id, Student.name, SchoolClass.display_name
         ).having(
-            func.sum(FeeStructure.total_amount - FeeStructure.paid_amount) > 0
+            func.sum(StudentFee.due_amount) > 0
         ).order_by(
-            func.sum(FeeStructure.total_amount - FeeStructure.paid_amount).desc()
+            func.sum(StudentFee.due_amount).desc()
         )
 
         result = await db.execute(stmt)

@@ -76,6 +76,29 @@ async def create_exam(
 ):
     return await marks_service.create_exam(db, user.institution_id, exam, school_class_id, subject_id)
 
+@router.put("/exams/{exam_id}", response_model=schemas.ExamResponse)
+async def update_exam(
+    exam_id: int,
+    name: str,
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_faculty)
+):
+    result = await marks_service.update_exam(db, user.institution_id, exam_id, name)
+    if not result:
+        raise HTTPException(status_code=404, detail="Exam not found")
+    return result
+
+@router.delete("/exams/{exam_id}", status_code=200)
+async def delete_exam_object(
+    exam_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(require_faculty)
+):
+    success = await marks_service.delete_exam_object(db, user.institution_id, exam_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Exam not found")
+    return {"status": "success"}
+
 @router.delete("/test", status_code=200)
 async def delete_test(
     subject: str = None, 

@@ -14,7 +14,7 @@ export default function AdminLogin() {
   const [password, setPassword] = useState('');
   const [instId, setInstId] = useState('1');
   const [error, setError] = useState<string | null>(null);
-  
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username || !password || !instId) {
@@ -25,9 +25,9 @@ export default function AdminLogin() {
     try {
       // Set institution ID immediately to ensure interceptors pick it up
       localStorage.setItem('edu_institution_id', instId);
-      
+
       const data = await authApi.login({ username, password }, instId);
-      
+
       setError(null);
       setInstitutionName(`Institution ${instId}`);
       login(data.access_token, {
@@ -52,25 +52,25 @@ export default function AdminLogin() {
       <div className="absolute inset-0 pointer-events-none">
         {/* Grid pattern */}
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#4f4f4f2e_1px,transparent_1px),linear-gradient(to_bottom,#4f4f4f2e_1px,transparent_1px)] bg-[size:14px_24px] opacity-20" />
-        
+
         {/* Floating orbs */}
-        <motion.div 
-          animate={{ 
+        <motion.div
+          animate={{
             x: [0, 50, -30, 0],
             y: [0, -30, 50, 0],
           }}
           transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
           className="absolute left-1/4 top-1/3 w-[300px] h-[300px] rounded-full bg-indigo-500/10 blur-[80px]"
         />
-        <motion.div 
-          animate={{ 
+        <motion.div
+          animate={{
             x: [0, -40, 30, 0],
             y: [0, 40, -20, 0],
           }}
           transition={{ duration: 20, repeat: Infinity, ease: "easeInOut" }}
           className="absolute right-1/4 bottom-1/3 w-[250px] h-[250px] rounded-full bg-violet-500/10 blur-[80px]"
         />
-        
+
         {/* Floating particles */}
         {particles.map((_, i) => (
           <motion.div
@@ -98,7 +98,7 @@ export default function AdminLogin() {
         ))}
       </div>
 
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 30, scale: 0.95 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.6, type: "spring", stiffness: 100 }}
@@ -109,23 +109,23 @@ export default function AdminLogin() {
 
         <div className="relative z-10">
           <div className="flex justify-center mb-6">
-            <motion.div 
+            <motion.div
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ type: "spring", delay: 0.2 }}
               className="relative h-16 w-16 bg-slate-950 rounded-2xl border border-indigo-500/30 flex items-center justify-center shadow-inner"
             >
-               <ShieldAlert className="h-8 w-8 text-indigo-500" />
-               {/* Orbiting ring */}
-               <motion.div 
-                 animate={{ rotate: 360 }}
-                 transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
-                 className="absolute inset-[-6px] rounded-[20px] border border-dashed border-indigo-500/20"
-               />
+              <ShieldAlert className="h-8 w-8 text-indigo-500" />
+              {/* Orbiting ring */}
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
+                className="absolute inset-[-6px] rounded-[20px] border border-dashed border-indigo-500/20"
+              />
             </motion.div>
           </div>
-          
-          <motion.div 
+
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.3 }}
@@ -144,7 +144,7 @@ export default function AdminLogin() {
 
           <form onSubmit={handleLogin} className="space-y-4">
             {error && (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="bg-red-500/10 border border-red-500/50 rounded-lg p-3 flex items-start gap-3"
@@ -155,7 +155,7 @@ export default function AdminLogin() {
             )}
 
             <div className="space-y-4">
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.35 }}
@@ -176,7 +176,7 @@ export default function AdminLogin() {
                 </div>
               </motion.div>
 
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.4 }}
@@ -197,7 +197,7 @@ export default function AdminLogin() {
                 </div>
               </motion.div>
 
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.5 }}

@@ -8,11 +8,12 @@ import {
   Pencil, Hash,
   Filter, User, Mail, Phone, Calendar,
   ShieldCheck, Search, School, Layers,
-  AlertCircle
+  AlertCircle, CheckCircle, Loader
 } from 'lucide-react';
 import { directoryApi } from '../../api/directoryApi';
 import { useApp } from '../../lib/AppContext';
 import { cn } from '../../lib/utils';
+import { getErrorMessage } from '../../lib/errorHandler';
 
 export default function StudentDirectory() {
   const { 
@@ -29,24 +30,50 @@ export default function StudentDirectory() {
   }, []);
   
   // Selection State
-  const [selectedGradeId, setSelectedGradeId] = useState<number | null>(null);
-  const [selectedSchoolClassId, setSelectedSchoolClassId] = useState<number | null>(null);
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [selectedGradeId, setSelectedGradeId] = useState<number | null>(() => {
+    const saved = localStorage.getItem('student_directory_grade_id');
+    return saved ? Number(saved) : null;
+  });
+  const [selectedSchoolClassId, setSelectedSchoolClassId] = useState<number | null>(() => {
+    const saved = localStorage.getItem('student_directory_class_id');
+    return saved ? Number(saved) : null;
+  });
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
+    const saved = localStorage.getItem('student_directory_view_mode');
+    return (saved as 'grid' | 'list') || 'grid';
+  });
   const [searchTerm, setSearchTerm] = useState('');
   
   const [isAdding, setIsAdding] = useState(false);
   const [editingStudent, setEditingStudent] = useState<any | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
   
   const [form, setForm] = useState({
     name: '', dob: '', whatsapp: '',
     parent_name: '', parent_email: '', parent_phone: ''
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [successMessage, setSuccessMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     refreshDirectory();
   }, [refreshDirectory]);
+
+  // Persistent Filter Persistence
+  useEffect(() => {
+    if (selectedGradeId) localStorage.setItem('student_directory_grade_id', selectedGradeId.toString());
+    else localStorage.removeItem('student_directory_grade_id');
+  }, [selectedGradeId]);
+
+  useEffect(() => {
+    if (selectedSchoolClassId) localStorage.setItem('student_directory_class_id', selectedSchoolClassId.toString());
+    else localStorage.removeItem('student_directory_class_id');
+  }, [selectedSchoolClassId]);
+
+  useEffect(() => {
+    localStorage.setItem('student_directory_view_mode', viewMode);
+  }, [viewMode]);
 
   // Derived Data
   const filteredSchoolClasses = useMemo(() => 
@@ -93,26 +120,35 @@ export default function StudentDirectory() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedSchoolClassId) return;
+    if (!selectedSchoolClassId) {
+      setErrors({ submit: "Please select a class before enrolling a student." });
+      return;
+    }
     if (!validateForm()) return;
     
     setIsSubmitting(true);
+    setErrors({});
     try {
       await directoryApi.createStudent({
         ...form,
         password: form.dob, // Default credential is DOB
         school_class_id: selectedSchoolClassId
       } as any);
+      
       setIsAdding(false);
       setForm({ 
         name: '', dob: '', whatsapp: '',
         parent_name: '', parent_email: '', parent_phone: ''
       });
       setErrors({});
-      refreshDirectory(true);
-    } catch (err) { 
-      console.error(err);
-      setErrors({ submit: "Authorization failed. Please verify connection and permissions." });
+      setSuccessMessage(`Student "${form.name}" enrolled successfully!`);
+      setTimeout(() => setSuccessMessage(''), 3000);
+      refreshStudents();
+    } catch (err: any) { 
+      const error = getErrorMessage(err);
+      setErrors({ 
+        submit: error.message || "Failed to enroll student. Please check your input and try again."
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -121,6 +157,9 @@ export default function StudentDirectory() {
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingStudent) return;
+    
+    setIsSubmitting(true);
+    setErrors({});
     try {
       await directoryApi.updateStudent(editingStudent.id, {
         name: editingStudent.name,
@@ -132,16 +171,37 @@ export default function StudentDirectory() {
         parent_phone: editingStudent.parent_phone
       } as any);
       setEditingStudent(null);
-      refreshDirectory(true);
-    } catch (err) { console.error(err); }
+      setSuccessMessage("Student information updated successfully!");
+      setTimeout(() => setSuccessMessage(''), 3000);
+      refreshStudents();
+    } catch (err: any) { 
+      const error = getErrorMessage(err);
+      setErrors({ 
+        submit: error.message || "Failed to update student information. Please try again."
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Permanent removal of student record? This cannot be undone.')) return;
+  const handleDelete = async (id: number, name: string) => {
+    if (!confirm(`Remove student "${name}" from records? This action cannot be undone.`)) return;
+    
+    setDeletingId(id);
+    setErrors({});
     try {
       await directoryApi.deleteStudent(id);
-      refreshDirectory(true);
-    } catch (err) { console.error(err); }
+      setSuccessMessage(`Student "${name}" has been removed.`);
+      setTimeout(() => setSuccessMessage(''), 3000);
+      refreshStudents();
+    } catch (err: any) { 
+      const error = getErrorMessage(err);
+      setErrors({ 
+        submit: error.message || "Failed to remove student. Please try again."
+      });
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   return (
@@ -347,10 +407,11 @@ export default function StudentDirectory() {
                           <Pencil className="w-4 h-4" />
                         </button>
                         <button 
-                          onClick={() => handleDelete(s.id)}
-                          className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-500 hover:bg-rose-500/20 transition-all shadow-lg"
+                          onClick={() => handleDelete(s.id, s.name)}
+                          disabled={deletingId === s.id}
+                          className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-500 hover:bg-rose-500/20 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          {deletingId === s.id ? <Loader className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                         </button>
                       </div>
                     </div>
@@ -515,22 +576,30 @@ export default function StudentDirectory() {
                 </div>
                 <button onClick={() => setEditingStudent(null)} className="p-3 hover:bg-white/5 rounded-2xl transition-all border border-glass-border"><X className="w-8 h-8 opacity-40" /></button>
               </div>
+
+              {errors.submit && (
+                <div className="mb-8 p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs font-bold flex items-center gap-3 animate-shake">
+                  <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                  {errors.submit}
+                </div>
+              )}
+
               <form onSubmit={handleUpdate} className="space-y-10">
                 <div className="grid grid-cols-2 gap-10">
                   <div className="space-y-6">
                     <div className="space-y-4">
                       <div className="space-y-2">
                         <label className="text-[9px] font-black uppercase tracking-[0.2em] text-text-secondary ml-4 text-brand-indigo">Identity Name</label>
-                        <input className="input-obsidian" value={editingStudent.name} onChange={e => setEditingStudent({...editingStudent, name: e.target.value})} required />
+                        <input className="input-obsidian" value={editingStudent.name} onChange={e => { setEditingStudent({...editingStudent, name: e.target.value}); if(errors.submit) setErrors({}); }} required />
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <label className="text-[9px] font-black uppercase tracking-[0.2em] text-text-secondary ml-4">Date of Birth</label>
-                          <input type="date" className="input-obsidian" value={editingStudent.dob} onChange={e => setEditingStudent({...editingStudent, dob: e.target.value})} required />
+                          <input type="date" className="input-obsidian" value={editingStudent.dob} onChange={e => { setEditingStudent({...editingStudent, dob: e.target.value}); if(errors.submit) setErrors({}); }} required />
                         </div>
                         <div className="space-y-2">
                           <label className="text-[9px] font-black uppercase tracking-[0.2em] text-text-secondary ml-4">WhatsApp Contact</label>
-                          <input className="input-obsidian" value={editingStudent.whatsapp || ''} onChange={e => setEditingStudent({...editingStudent, whatsapp: e.target.value})} />
+                          <input className="input-obsidian" value={editingStudent.whatsapp || ''} onChange={e => { setEditingStudent({...editingStudent, whatsapp: e.target.value}); if(errors.submit) setErrors({}); }} />
                         </div>
                       </div>
                     </div>
@@ -540,23 +609,23 @@ export default function StudentDirectory() {
                     <div className="space-y-4">
                       <div className="space-y-2">
                         <label className="text-[9px] font-black uppercase tracking-[0.2em] text-text-secondary ml-4 text-brand-indigo">Guardian Name</label>
-                        <input className="input-obsidian" value={editingStudent.parent_name || ''} onChange={e => setEditingStudent({...editingStudent, parent_name: e.target.value})} />
+                        <input className="input-obsidian" value={editingStudent.parent_name || ''} onChange={e => { setEditingStudent({...editingStudent, parent_name: e.target.value}); if(errors.submit) setErrors({}); }} />
                       </div>
                       <div className="space-y-2">
                         <label className="text-[9px] font-black uppercase tracking-[0.2em] text-text-secondary ml-4">Guardian Email</label>
-                        <input type="email" className="input-obsidian" value={editingStudent.parent_email || ''} onChange={e => setEditingStudent({...editingStudent, parent_email: e.target.value})} />
+                        <input type="email" className="input-obsidian" value={editingStudent.parent_email || ''} onChange={e => { setEditingStudent({...editingStudent, parent_email: e.target.value}); if(errors.submit) setErrors({}); }} />
                       </div>
                       <div className="space-y-2">
                         <label className="text-[9px] font-black uppercase tracking-[0.2em] text-text-secondary ml-4">Guardian Phone</label>
-                        <input className="input-obsidian" value={editingStudent.parent_phone || ''} onChange={e => setEditingStudent({...editingStudent, parent_phone: e.target.value})} />
+                        <input className="input-obsidian" value={editingStudent.parent_phone || ''} onChange={e => { setEditingStudent({...editingStudent, parent_phone: e.target.value}); if(errors.submit) setErrors({}); }} />
                       </div>
                     </div>
                   </div>
                 </div>
 
                 <div className="pt-6 border-t border-glass-border flex justify-end">
-                   <button type="submit" className="indigo-glow-button h-16 px-12 text-sm font-black uppercase tracking-[0.2em] italic">
-                    Commit Record Sync <ArrowRight className="w-5 h-5 ml-3" />
+                   <button type="submit" disabled={isSubmitting} className={cn("indigo-glow-button h-16 px-12 text-sm font-black uppercase tracking-[0.2em] italic", isSubmitting && "opacity-50 cursor-wait")}>
+                    {isSubmitting ? 'Syncing...' : 'Commit Record Sync'} {!isSubmitting && <ArrowRight className="w-5 h-5 ml-3 inline" />}
                   </button>
                 </div>
               </form>

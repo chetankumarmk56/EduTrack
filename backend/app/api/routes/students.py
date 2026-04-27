@@ -5,6 +5,7 @@ from sqlalchemy.orm import selectinload
 from typing import List
 
 from app.core.database import get_db
+from app.core.limiter import limiter  # ✅ NEW: Rate limiter
 from app.core.dependencies import (
     get_current_user, UserContext, 
     require_institution_admin, require_faculty
@@ -28,10 +29,11 @@ async def create_student(
     return await student_service.create_student(db, user.institution_id, student)
 
 @router.post("/students/login", response_model=Token)
+@limiter.limit("5/minute")  # ✅ NEW: Max 5 student login attempts per minute per IP
 async def student_login(
+    request: Request,  # ✅ NEW: Required for rate limiter
     login_data: schemas.StudentLogin,
     response: Response,
-    request: Request,
     db: AsyncSession = Depends(get_db)
 ):
     """Secure endpoint for student/parent login generating JWT token structure."""
@@ -73,15 +75,17 @@ async def student_login(
     if not auth_data:
         raise HTTPException(status_code=401, detail="Invalid student credentials.")
         
-    # Set Refresh Token in HttpOnly Cookie
+    # ✅ IMPROVED: Secure cookie settings
     from app.core.config import settings
     response.set_cookie(
-        key="edu_refresh_parent", # Using 'parent' namespace for student/parent group
+        key="edu_refresh_parent",  # Using 'parent' namespace for student/parent group
         value=auth_data.pop("refresh_token"),
-        httponly=True,
-        secure=settings.ENVIRONMENT == "prod",
-        samesite="lax",
-        max_age=7 * 24 * 3600
+        path="/api/auth/refresh",
+        httponly=True,           # ✅ Not accessible to JavaScript (prevents XSS token theft)
+        secure=True,             # ✅ HTTPS only (no HTTP transmission)
+        samesite="Strict",       # ✅ CSRF prevention (strict cross-site filtering)
+        domain=settings.COOKIE_DOMAIN if settings.COOKIE_DOMAIN else None,
+        max_age=30 * 60,         # ✅ 30 minutes (was 7 days!)
     )
     
     return auth_data
@@ -133,7 +137,7 @@ async def delete_student(
     success = await student_service.delete_student(db, user.institution_id, student_id)
     if not success:
         raise HTTPException(status_code=404, detail="Student not found or access denied")
-    return {"status": "success", "id": student_id}
+    return {"message": "Student deleted successfully", "id": student_id}
 
 @router.put("/students/{student_id}/password", response_model=schemas.StudentResponse, dependencies=[Depends(require_institution_admin)])
 async def update_student_password(

@@ -67,6 +67,18 @@ export const marksApi = {
         return response.data;
     },
 
+    updateExam: async (examId: number, name: string) => {
+        const response = await client.put<Exam>(`marks/exams/${examId}`, null, {
+            params: { name }
+        });
+        return response.data;
+    },
+
+    deleteExam: async (examId: number) => {
+        const response = await client.delete(`marks/exams/${examId}`);
+        return response.data;
+    },
+
     /**
      * Fetch all marks for a specific student.
      */

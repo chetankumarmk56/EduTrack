@@ -29,12 +29,12 @@ const getCurrentPortalRole = (pathname: string): UserRole | 'parent' => {
   if (pathname.startsWith('/superadmin')) return 'super_admin';
   if (pathname.startsWith('/admin') || pathname.includes('admin-login')) return 'admin';
   if (pathname.startsWith('/teacher') || pathname.includes('teacher-login')) return 'teacher';
-  return 'parent'; 
+  return 'parent';
 };
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const location = useLocation();
-  
+
   // currentRole is now dynamically derived from the URL
   const currentRole = useMemo(() => getCurrentPortalRole(location.pathname), [location.pathname]);
 
@@ -45,7 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const role = getCurrentPortalRole(path);
     const savedToken = localStorage.getItem(`edu_auth_token_${role}`);
     const savedUser = localStorage.getItem(`edu_user_${role}`);
-    
+
     if (savedToken && savedUser) {
       try {
         return {
@@ -70,10 +70,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Triggered on mount AND whenever the currentRole (URL) changes
   useEffect(() => {
     let isMounted = true;
-    
+
     const hydrateAndInit = async () => {
       const savedToken = localStorage.getItem(`edu_auth_token_${currentRole}`);
-      
+
       // 1. Avoid redundant hydration if we already have a valid user matching this role
       if (user?.role === currentRole && authState === 'authenticated') {
         return;
@@ -96,7 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       hydrationRef.current = hydrationKey;
-      
+
       // Only set loading if we don't have a user already (optimistic hydration)
       if (isMounted && !user) {
         setToken(savedToken);
@@ -114,12 +114,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           role: userData.role as UserRole,
           institution_id: userData.institution_id || 1
         };
-        
+
         // Safety check: ensure the token role matches the portal context
         if (authUser.role !== currentRole && authUser.role !== 'super_admin') {
-           console.warn(`[Auth] Role mismatch: Token has ${authUser.role}, Portal needs ${currentRole}`);
-           setAuthState('unauthenticated');
-           return;
+          console.warn(`[Auth] Role mismatch: Token has ${authUser.role}, Portal needs ${currentRole}`);
+          setAuthState('unauthenticated');
+          return;
         }
 
         setUser(authUser);
@@ -139,17 +139,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     hydrateAndInit();
     return () => { isMounted = false; };
-  }, [currentRole]); 
+  }, [currentRole]);
 
   const login = (newToken: string, newUser: AuthUser) => {
     const storageRole = newUser.role;
     console.debug(`[Auth] Manual Login for ${storageRole}. Syncing state.`);
-    
+
     // Clear old token before storing new one (prevents stale tokens if switching users same role)
     localStorage.removeItem(`edu_auth_token_${storageRole}`);
     localStorage.removeItem(`edu_user_${storageRole}`);
     localStorage.removeItem(`edu_institution_id_${storageRole}`);
-    
+
     // Persist to role-specific namespaces BEFORE updating state to avoid race with interceptors
     localStorage.setItem(`edu_auth_token_${storageRole}`, newToken);
     localStorage.setItem(`edu_user_${storageRole}`, JSON.stringify(newUser));

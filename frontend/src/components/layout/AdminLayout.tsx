@@ -29,7 +29,7 @@ export default function AdminLayout() {
         {/* Main Content Area */}
         <div className="md:ml-72 flex min-h-screen flex-col pr-4">
           <TopNav onMenuClick={() => setMobileMenuOpen(!mobileMenuOpen)} />
-          
+
           <main className="flex-1 p-4 md:p-6 overflow-y-auto pb-32 md:pb-8">
             <AnimatePresence mode="wait">
               <PageWrapper key={location.pathname} speed="fast">

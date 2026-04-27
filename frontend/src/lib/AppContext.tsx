@@ -56,6 +56,7 @@ interface AppContextType {
   parentFees: any[];
   notifications: any[];
   refreshParentFees: () => Promise<void>;
+  getParentFees: () => Promise<any[]>; // Lazy-load fees on-demand
   refreshNotifications: () => Promise<void>;
   markNotificationRead: (id: number) => Promise<void>;
 }
@@ -90,7 +91,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const saved = localStorage.getItem('edu_cache_school_classes');
     return saved ? JSON.parse(saved) : [];
   });
-  const [events, setEvents] = useState<any[]>([]);
+  const [events, setEvents] = useState<any[]>(() => {
+    const saved = localStorage.getItem('edu_cache_events');
+    return saved ? JSON.parse(saved) : [];
+  });
   const [lastFetched, setLastFetched] = useState<number>(() => {
     const saved = localStorage.getItem('edu_cache_last_fetch');
     return saved ? Number(saved) : 0;
@@ -163,6 +167,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const now = Date.now();
     // Use a slightly longer cache time for the initialization context (5 mins)
     if (!force && lastFetched && (now - lastFetched < 300000) && (students.length > 0)) {
+      // Ensure events are at least attempted if they are missing from cache
+      if (events.length === 0) refreshEvents();
       return;
     }
 
@@ -223,7 +229,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setTeacherStats(data.stats);
       }
       
-      refreshEvents();
+      await refreshEvents();
       
     } catch (err) {
       console.error("System Initialization Failed:", err);
@@ -262,6 +268,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       const eventsData = await eventsApi.getEvents();
       setEvents(eventsData);
+      localStorage.setItem('edu_cache_events', JSON.stringify(eventsData));
     } catch (err) {
       console.error("Events Fetch Error:", err);
     } finally {
@@ -301,17 +308,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const fetchClassMarks = async (subject: string, schoolClassId?: number, examId?: number) => {
     const cacheKey = `${subject}_${schoolClassId || 'all'}_${examId || 'all'}`;
     
-    // Prevent recursive infinite loop if already fetching the exact same data
-    if (currentlyFetchingMarks === cacheKey) return classMarks[cacheKey] || [];
+    // 1. Instant Cache Return: If we already have this data, return it immediately
+    if (classMarks[cacheKey]) {
+      // Still trigger a background refresh to ensure consistency, but return cache first
+      marksApi.getClassMarks(subject, schoolClassId, examId).then(data => {
+         setClassMarks(prev => ({ ...prev, [cacheKey]: data }));
+      });
+      return classMarks[cacheKey];
+    }
+
+    // Prevent concurrent requests for the same key
+    if (currentlyFetchingMarks === cacheKey) return [];
     
     setCurrentlyFetchingMarks(cacheKey);
     try {
       const data = await marksApi.getClassMarks(subject, schoolClassId, examId);
-      setClassMarks(prev => {
-        // Only trigger state update if data actually changed to prevent render cycles
-        if (JSON.stringify(prev[cacheKey]) === JSON.stringify(data)) return prev;
-        return { ...prev, [cacheKey]: data };
-      });
+      setClassMarks(prev => ({ ...prev, [cacheKey]: data }));
       return data;
     } catch (err) {
       console.error("Error fetching class marks:", err);
@@ -343,23 +355,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (authState === 'authenticated') {
+      // Critical path: Load directory data first
       refreshDirectory();
-      refreshNotifications(); // Load notifications for all users
       
+      // Non-blocking: Load role-specific data
       if (user?.role === 'student' || user?.role === 'parent') {
          directoryApi.getMyProfile().then(profile => {
             setStudentProfile(profile);
             localStorage.setItem('edu_cache_student_profile', JSON.stringify(profile));
             fetchStudentData(profile.id);
-            if (user?.role === 'parent') {
-              refreshParentFees();
-            }
+            // NOTE: Parent fees will load on-demand when accessed, not on mount
          }).catch(() => {
             if (user?.id) fetchStudentData(user.id);
          });
       }
+      
+      // OPTIMIZATION: Defer non-critical notifications to load after UI renders
+      // This prevents blocking the initial page render
+      const notificationTimer = setTimeout(() => {
+        refreshNotifications();
+      }, 500); // Load notifications after 500ms (after initial paint)
+      
+      return () => clearTimeout(notificationTimer);
     }
   }, [authState]);
+
+  // OPTIMIZATION: Lazy-load parent fees only when actually accessed (not on mount)
+  const getParentFees = async () => {
+    if (parentFees.length === 0) {
+      await refreshParentFees();
+    }
+    return parentFees;
+  };
 
   const fetchStudentData = async (sid: number) => {
     try {
@@ -411,7 +438,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       activeAssignmentId, setActiveAssignmentId,
       fetchSubjectSummary, subjectSummaries,
       parentFees, notifications,
-      refreshParentFees, refreshNotifications,
+      refreshParentFees, getParentFees, refreshNotifications,
       markNotificationRead
     }}>
       {children}

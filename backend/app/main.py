@@ -3,12 +3,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 import traceback
 import logging
 
 from app.core.config import settings
 from app.core.database import engine, get_db
 from app.core.logger import setup_logging
+from app.core.limiter import limiter  # ✅ NEW: Rate limiter
+from slowapi.errors import RateLimitExceeded  # ✅ NEW: Rate limit error
 from app import models
 from app.core.database import Base
 
@@ -36,31 +39,113 @@ logger = setup_logging()
 
 app = FastAPI(title=settings.APP_NAME, version=settings.VERSION)
 
+# ✅ NEW: Register rate limiter with app
+app.state.limiter = limiter
+
+# ✅ NEW: Register rate limit error handler
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content={
+            "detail": "Too many requests. Please try again later.",
+            "retry_after": "60"
+        },
+    )
+
+# ✅ NEW: Add security headers middleware
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """Add important security headers to all responses"""
+    response = await call_next(request)
+    
+    # Prevent MIME type sniffing
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    
+    # Prevent clickjacking
+    response.headers["X-Frame-Options"] = "DENY"
+    
+    # Prevent XSS
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    
+    # Enforce HTTPS
+    if settings.ENVIRONMENT == "prod":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
+    
+    # Reference policy
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    
+    return response
+
+# ✅ FIXED: Explicit origins, methods, and headers based on environment
+cors_origins = [
+    settings.FRONTEND_URL,
+]
+
+# Add localhost origins for development only
+if settings.ENVIRONMENT != "prod":
+    cors_origins.extend([
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ])
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.FRONTEND_URL] if settings.ENVIRONMENT == "prod" else ["*"],
+    allow_origins=cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # ✅ Explicit methods
+    allow_headers=[
+        "Content-Type",
+        "Authorization",
+        "X-Institution-Id",
+        "X-Portal-Role"
+    ],  # ✅ Explicit headers
+    expose_headers=["Content-Type"],
+    max_age=600,  # Cache preflight for 10 minutes
 )
+
+# Database Exception Handler
+@app.exception_handler(SQLAlchemyError)
+async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
+    logger.error(f"Database error on {request.url.path}: {str(exc)}")
+    headers = {
+        "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
+        "Access-Control-Allow-Credentials": "true",
+        "Access-Control-Allow-Methods": "*",
+        "Access-Control-Allow-Headers": "*"
+    }
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "A database operation failed. Please try again or contact support.",
+            "internal_error": str(exc) if settings.ENVIRONMENT != "prod" else None
+        },
+        headers=headers
+    )
 
 # Global Exception Handler
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    import traceback
     error_msg = traceback.format_exc()
     logger.critical(f"UNHANDLED SYSTEM EXCEPTION on {request.url.path}: {error_msg}")
+    headers = {
+        "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
+        "Access-Control-Allow-Credentials": "true",
+        "Access-Control-Allow-Methods": "*",
+        "Access-Control-Allow-Headers": "*"
+    }
+    
     return JSONResponse(
         status_code=500,
         content={
-            "detail": "Internal Server Error", 
+            "detail": "An unexpected system error occurred. Our team has been notified.", 
             "error_type": type(exc).__name__,
-            "message": str(exc)
+            "internal_error": str(exc) if settings.ENVIRONMENT != "prod" else None
         },
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "*",
-            "Access-Control-Allow-Headers": "*"
-        }
+        headers=headers
     )
 
 # --- System Status Endpoints ---

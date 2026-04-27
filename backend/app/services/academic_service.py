@@ -3,6 +3,7 @@ from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
 from app.models.academic import Grade, Section, SchoolClass, Subject
+from app.models.finance import StudentFee
 from app.schemas import academic as schemas
 
 class AcademicService:
@@ -24,14 +25,45 @@ class AcademicService:
 
     @staticmethod
     async def update_grade(db: AsyncSession, institution_id: int, grade_id: int, grade_in: schemas.GradeUpdate):
-        result = await db.execute(select(Grade).where(Grade.id == grade_id))
+        result = await db.execute(
+            select(Grade).where(Grade.id == grade_id, Grade.institution_id == institution_id)
+        )
         db_grade = result.scalars().first()
         if not db_grade:
             return None
         
         update_data = grade_in.model_dump(exclude_unset=True)
+        fee_changed = False
+        if 'tuition_fee' in update_data and update_data['tuition_fee'] != db_grade.tuition_fee:
+            fee_changed = True
+        if 'fee_due_date' in update_data and update_data['fee_due_date'] != db_grade.fee_due_date:
+            fee_changed = True
+
         for k, v in update_data.items():
             setattr(db_grade, k, v)
+
+        if fee_changed:
+            # Cascade to all SchoolClass mapping for this grade
+            classes_result = await db.execute(select(SchoolClass).where(SchoolClass.grade_id == grade_id))
+            school_classes = classes_result.scalars().all()
+            for sc in school_classes:
+                if 'tuition_fee' in update_data:
+                    sc.tuition_fee = update_data['tuition_fee']
+                    sc.total_fee = sc.tuition_fee + sc.transport_fee + sc.other_fee
+                if 'fee_due_date' in update_data:
+                    sc.fee_due_date = update_data['fee_due_date']
+                
+                from datetime import date
+                student_fees_res = await db.execute(select(StudentFee).where(StudentFee.class_id == sc.id))
+                student_fees = student_fees_res.scalars().all()
+                for sf in student_fees:
+                    if 'tuition_fee' in update_data:
+                        # Re-calculate due amount based on new total
+                        # Prevent negative due amounts if new total is less than what they already paid
+                        sf.total_amount = sc.total_fee
+                        sf.due_amount = max(0.0, sf.total_amount - sf.amount_paid)
+                    if 'fee_due_date' in update_data:
+                        sf.due_date = update_data['fee_due_date'] if update_data['fee_due_date'] else date.today()
         
         await db.commit()
         await db.refresh(db_grade)
@@ -39,7 +71,9 @@ class AcademicService:
 
     @staticmethod
     async def delete_grade(db: AsyncSession, institution_id: int, grade_id: int):
-        result = await db.execute(select(Grade).where(Grade.id == grade_id))
+        result = await db.execute(
+            select(Grade).where(Grade.id == grade_id, Grade.institution_id == institution_id)
+        )
         db_grade = result.scalars().first()
         if db_grade:
             await db.delete(db_grade)
@@ -53,7 +87,7 @@ class AcademicService:
         stmt = select(Section).where(Section.institution_id == institution_id)
         if grade_id:
             stmt = stmt.where(Section.grade_id == grade_id)
-        result = await db.execute(stmt.order_by(Section.name))
+        result = await db.execute(stmt)
         return result.scalars().all()
 
     @staticmethod
@@ -98,10 +132,11 @@ class AcademicService:
             section_id=db_section.id,
             institution_id=institution_id,
             display_name=f"{db_grade.level}-{db_section.name}",
-            tuition_fee=0.0,
+            tuition_fee=db_grade.tuition_fee,
             transport_fee=0.0,
             other_fee=0.0,
-            total_fee=0.0
+            total_fee=db_grade.tuition_fee,
+            fee_due_date=db_grade.fee_due_date
         )
         db.add(db_school_class)
         

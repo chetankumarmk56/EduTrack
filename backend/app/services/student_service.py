@@ -16,8 +16,10 @@ class StudentService:
         password_value = data.pop('password', None)
         student_email = data.pop('email', None)
         
-        user_result = await db.execute(select(User).where(User.email == student_email))
-        existing_user = user_result.scalars().first()
+        existing_user = None
+        if student_email:
+            user_result = await db.execute(select(User).where(User.email == student_email))
+            existing_user = user_result.scalars().first()
 
         if existing_user:
             db_user = existing_user
@@ -109,13 +111,55 @@ class StudentService:
 
     @staticmethod
     async def delete_student(db: AsyncSession, institution_id: int, student_id: int):
+        from sqlalchemy import delete
+        
         result = await db.execute(
             select(Student).where(Student.id == student_id, Student.institution_id == institution_id)
         )
         student = result.scalars().first()
+        
         if student:
+            user_id = student.user_id
+            
+            # Explicitly delete dependent records to prevent ForeignKey constraint violations
+            from app.models.finance import StudentFee, FeeStructure, Payment, PaymentAllocation
+            from app.models.attendance import Attendance
+            from app.models.mark import Mark
+            from app.models.transport import StudentTransport, NotificationLog
+            from app.models.communication import Announcement
+            from app.models.core import User
+
+            # Delete transport and communication records
+            await db.execute(delete(StudentTransport).where(StudentTransport.student_id == student_id))
+            await db.execute(delete(NotificationLog).where(NotificationLog.student_id == student_id))
+            await db.execute(delete(Announcement).where(Announcement.student_id == student_id))
+            
+            # Delete payment allocations and payments
+            payment_res = await db.execute(select(Payment.id).where(Payment.student_id == student_id))
+            payment_ids = [row[0] for row in payment_res.all()]
+            if payment_ids:
+                await db.execute(delete(PaymentAllocation).where(PaymentAllocation.payment_id.in_(payment_ids)))
+                await db.execute(delete(Payment).where(Payment.student_id == student_id))
+
+            # Delete fee tracking and structure
+            await db.execute(delete(StudentFee).where(StudentFee.student_id == student_id))
+            await db.execute(delete(FeeStructure).where(FeeStructure.student_id == student_id))
+            
+            # Finally delete the student profile (ORM will handle Mark and Attendance via cascades)
             await db.delete(student)
+            await db.flush() 
+            
+            # Clean up the unified User credential record
+            if user_id:
+                from app.models.core import AuditLog
+                from app.models.communication import Notification
+                
+                await db.execute(delete(AuditLog).where(AuditLog.user_id == user_id))
+                await db.execute(delete(Notification).where(Notification.user_id == user_id))
+                await db.execute(delete(User).where(User.id == user_id))
+                
             await db.commit()
+            
             # Invalidate cache
             await delete_cache_pattern(f"students_list:{institution_id}:*")
             return True

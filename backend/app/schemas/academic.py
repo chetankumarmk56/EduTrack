@@ -5,6 +5,8 @@ from datetime import date
 class GradeBase(BaseModel):
     level: int
     name: str
+    tuition_fee: float = 0.0
+    fee_due_date: Optional[date] = None
 
 class GradeCreate(GradeBase):
     pass
@@ -12,6 +14,8 @@ class GradeCreate(GradeBase):
 class GradeUpdate(BaseModel):
     level: Optional[int] = None
     name: Optional[str] = None
+    tuition_fee: Optional[float] = None
+    fee_due_date: Optional[date] = None
 
 class GradeResponse(GradeBase):
     id: int

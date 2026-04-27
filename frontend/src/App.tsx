@@ -46,12 +46,14 @@ import SuperAdminLayout from './components/layout/SuperAdminLayout';
 import SuperAdminLogin from './pages/superadmin/SuperAdminLogin';
 import SuperAdminDashboard from './pages/superadmin/SuperAdminDashboard';
 import SuperAdminCredentials from './pages/superadmin/SuperAdminCredentials';
+import { Toaster } from 'react-hot-toast';
 
 function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
         <AppProvider>
+          <Toaster position="top-right" />
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/parent-login" element={<GuestRoute><Login /></GuestRoute>} />

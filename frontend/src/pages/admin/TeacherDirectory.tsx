@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   UserPlus, Pencil, Trash2, 
@@ -24,7 +24,11 @@ export default function TeacherDirectory() {
   
   const [isAdding, setIsAdding] = useState(false);
   const [editingTeacher, setEditingTeacher] = useState<any | null>(null);
-  const [isAssigning, setIsAssigning] = useState<any | null>(null);
+  const [isAssigningId, setIsAssigningId] = useState<number | null>(null);
+  const isAssigning = useMemo(() => 
+    teachers.find(t => t.id === isAssigningId), 
+    [teachers, isAssigningId]
+  );
   
   const [form, setForm] = useState({ name: '', email: '', phone: '', password: '' });
   const [assignmentForm, setAssignmentForm] = useState({ school_class_id: 0, subject_id: 0 });
@@ -35,7 +39,7 @@ export default function TeacherDirectory() {
       await directoryApi.createTeacher(form);
       setIsAdding(false);
       setForm({ name: '', email: '', phone: '', password: '' });
-      refreshDirectory(true);
+      refreshTeachers();
     } catch (err) { console.error(err); }
   };
 
@@ -49,7 +53,7 @@ export default function TeacherDirectory() {
         phone: editingTeacher.phone
       });
       setEditingTeacher(null);
-      refreshDirectory(true);
+      refreshTeachers();
     } catch (err) { console.error(err); }
   };
 
@@ -57,7 +61,7 @@ export default function TeacherDirectory() {
     if (!confirm('Permanent removal of faculty member? This action is irreversible.')) return;
     try {
       await directoryApi.deleteTeacher(id);
-      refreshDirectory(true);
+      refreshTeachers();
     } catch (err) { console.error(err); }
   };
 
@@ -70,15 +74,15 @@ export default function TeacherDirectory() {
         ...assignmentForm
       });
       setAssignmentForm({ school_class_id: 0, subject_id: 0 });
-      setIsAssigning(null);
-      refreshDirectory(true); 
+      // Keep modal open but refresh data
+      await refreshTeachers(); 
     } catch (err) { console.error(err); }
   };
 
   const handleDeleteAssignment = async (id: number) => {
     try {
       await directoryApi.deleteAssignment(id);
-      refreshDirectory(true);
+      refreshTeachers();
     } catch (err) { console.error(err); }
   };
 
@@ -185,7 +189,7 @@ export default function TeacherDirectory() {
                       <Library className="w-3.5 h-3.5" /> Disciplinary Assets
                     </h5>
                     <button 
-                      onClick={() => setIsAssigning(t)}
+                      onClick={() => setIsAssigningId(t.id)}
                       className="text-[9px] font-black uppercase tracking-widest text-brand-indigo hover:text-white transition-colors underline underline-offset-4"
                     >
                       Configure Assignments
@@ -249,18 +253,17 @@ export default function TeacherDirectory() {
         )}
       </AnimatePresence>
 
-      {/* Assignment Modal */}
       <AnimatePresence>
-        {isAssigning && (
+        {isAssigningId && isAssigning && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsAssigning(null)} className="absolute inset-0 bg-black/90 backdrop-blur-2xl" />
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsAssigningId(null)} className="absolute inset-0 bg-black/90 backdrop-blur-2xl" />
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full max-w-3xl obsidian-card border-brand-indigo/30 p-10 shadow-2xl">
               <div className="flex items-center justify-between mb-10">
                 <div className="space-y-1">
                   <h2 className="text-3xl font-black tracking-tight uppercase italic">{isAssigning.name}</h2>
                   <p className="text-[10px] font-black uppercase tracking-widest text-brand-indigo opacity-80">Matrix Alignment Configuration</p>
                 </div>
-                <button onClick={() => setIsAssigning(null)} className="p-2 hover:bg-white/5 rounded-xl border border-glass-border"><X className="w-6 h-6 opacity-40" /></button>
+                <button onClick={() => setIsAssigningId(null)} className="p-2 hover:bg-white/5 rounded-xl border border-glass-border"><X className="w-6 h-6 opacity-40" /></button>
               </div>
               
               <div className="space-y-10">

@@ -4,6 +4,8 @@ import type { Grade, Section, SchoolClass, Subject } from '../types';
 export interface GradeCreate {
   level: number;
   name: string;
+  tuition_fee?: number;
+  fee_due_date?: string;
 }
 
 export interface SectionCreate {

@@ -3,6 +3,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.dependencies import get_current_user, UserContext
+from app.core.limiter import limiter  # ✅ NEW: Rate limiter
 from app.services.auth_service import auth_service
 from app.schemas.auth import Token
 from app.core.logger import logger
@@ -13,9 +14,10 @@ router = APIRouter(
 )
 
 @router.post("/login", response_model=Token)
+@limiter.limit("5/minute")  # ✅ NEW: Max 5 login attempts per minute per IP
 async def login_for_access_token(
+    request: Request,  # ✅ NEW: Required for rate limiter
     response: Response,
-    request: Request,
     db: AsyncSession = Depends(get_db),
     form_data: OAuth2PasswordRequestForm = Depends()
 ):
@@ -48,22 +50,24 @@ async def login_for_access_token(
     
     token_data = auth_service.create_token(user)
     
-    # Set Refresh Token in HttpOnly Cookie
+    # ✅ IMPROVED: Secure cookie settings
     from app.core.config import settings
     response.set_cookie(
         key=f"edu_refresh_{user.role}_{user.id}",
         value=token_data.pop("refresh_token"),
         path="/api/auth/refresh",
-        httponly=True,
-        secure=settings.ENVIRONMENT == "prod",
-        samesite="lax",
-        max_age=7 * 24 * 3600
+        httponly=True,           # ✅ Not accessible to JavaScript (prevents XSS token theft)
+        secure=True,             # ✅ HTTPS only (no HTTP transmission)
+        samesite="Strict",       # ✅ CSRF prevention (strict cross-site filtering)
+        domain=settings.COOKIE_DOMAIN if settings.COOKIE_DOMAIN else None,
+        max_age=30 * 60,         # ✅ 30 minutes(was 7 days!)
     )
     
     logger.info(f"AUTH_SUCCESS: user_id={user.id}, role={user.role}, institution_id={user.institution_id}")
     return token_data
 
 @router.post("/refresh", response_model=Token)
+@limiter.limit("10/minute")  # ✅ NEW: Max 10 refresh attempts per minute per IP
 async def refresh_access_token(
     request: Request,
     response: Response,

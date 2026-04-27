@@ -10,6 +10,9 @@ class Grade(Base, TimestampMixin):
     id = Column(Integer, primary_key=True, index=True)
     level = Column(Integer) # e.g., 10
     name = Column(String)  # e.g., "Grade 10"
+    
+    tuition_fee = Column(Float, default=0.0)
+    fee_due_date = Column(Date, nullable=True)
 
     institution_id = Column(Integer, ForeignKey("institutions.id"), index=True)
     institution = relationship("Institution", back_populates="grades")

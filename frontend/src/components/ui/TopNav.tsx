@@ -56,9 +56,9 @@ export default function TopNav({ onMenuClick }: TopNavProps) {
             <Menu className="h-6 w-6" />
           </button>
           <div className="md:hidden">
-             <span className="text-xl font-black tracking-tight text-primary glow-text">
-               {institutionName?.[0] || 'E'}.
-             </span>
+            <span className="text-xl font-black tracking-tight text-primary glow-text">
+              {institutionName?.[0] || 'E'}.
+            </span>
           </div>
         </div>
 
@@ -68,7 +68,7 @@ export default function TopNav({ onMenuClick }: TopNavProps) {
         {/* User Actions Segment */}
         <div className="flex items-center gap-4 min-w-max">
           <NotificationMenu />
-          
+
           <div className="h-8 w-px bg-glass-border mx-1 hidden sm:block"></div>
 
           {/* Clickable Profile Area */}

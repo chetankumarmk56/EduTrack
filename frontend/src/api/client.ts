@@ -1,5 +1,7 @@
 import axios from 'axios';
 import type { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
+import toast from 'react-hot-toast';
+import { getErrorMessage } from '../lib/errorHandler';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/';
 
@@ -11,6 +13,25 @@ const client: AxiosInstance = axios.create({
   },
 });
 
+// ============================================
+// OPTIMIZATION: Request Deduplication
+// ============================================
+// Request deduplication cache: stores pending requests by their signature
+// Multiple identical in-flight requests are merged into one
+const pendingRequests = new Map<string, Promise<any>>();
+
+// Generate signature for request deduplication
+// Only applies to GET requests (idempotent operations)
+const getRequestSignature = (config: InternalAxiosRequestConfig): string | null => {
+  // Only deduplicate GET requests
+  if (config.method !== 'get') return null;
+
+  // Create signature from URL and params
+  const params = new URLSearchParams(config.params || {}).toString();
+  const key = params ? `${config.url}?${params}` : config.url;
+  return key || null;
+};
+
 // Helper to determine the current portal's role context based on URL
 // This MUST match the logic in AuthContext.tsx exactly
 const getCurrentPortalRole = () => {
@@ -18,7 +39,7 @@ const getCurrentPortalRole = () => {
   if (path.startsWith('/superadmin')) return 'super_admin';
   if (path.startsWith('/admin') || path.includes('admin-login')) return 'admin';
   if (path.startsWith('/teacher') || path.includes('teacher-login')) return 'teacher';
-  return 'parent'; 
+  return 'parent';
 };
 
 // Queue to handle multiple simultaneous requests during token refresh
@@ -42,34 +63,88 @@ const processQueue = (error: any, token: string | null = null) => {
 // Request Interceptor: Inject Auth Token and Institution ID
 client.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const role = getCurrentPortalRole();
-    const token = localStorage.getItem(`edu_auth_token_${role}`);
-    const institutionId = localStorage.getItem(`edu_institution_id_${role}`) || '1';
+    // OPTIMIZATION: Deduplicate identical GET requests
+    const signature = getRequestSignature(config);
+    if (signature && pendingRequests.has(signature)) {
+      // Return cached pending request
+      return Promise.reject(new Error(`[Dedup] Request already in-flight: ${signature}`));
+    }
+
+    const currentRole = getCurrentPortalRole();
+    const token = localStorage.getItem(`edu_auth_token_${currentRole}`);
+    const institutionId = localStorage.getItem(`edu_institution_id_${currentRole}`) || '1';
 
     if (token) {
       config.headers.set('Authorization', `Bearer ${token}`);
     }
-    
+
     config.headers.set('X-Institution-Id', institutionId);
-    config.headers.set('X-Portal-Role', role); // Tell backend which refresh cookie to check
+    config.headers.set('X-Portal-Role', currentRole); // Tell backend which refresh cookie to check
     return config;
   },
   (error) => Promise.reject(error)
 );
 
-// Response Interceptor: Handle 401 with Token Rotation
+// Response Interceptor: Handle 401 with Token Rotation + Dedup cleanup
 client.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Clean up dedup cache for this request on success
+    const signature = getRequestSignature(response.config as InternalAxiosRequestConfig);
+    if (signature) {
+      pendingRequests.delete(signature);
+    }
+
+    // Global Success Toast for mutations if a message is returned
+    const method = response.config.method?.toLowerCase();
+    const url = response.config.url || '';
+    const isAuth = url.includes('login') || url.includes('auth/refresh');
+    
+    if (['post', 'put', 'patch', 'delete'].includes(method || '') && !isAuth) {
+      const message = response.data?.message;
+      if (message && typeof message === 'string') {
+        toast.success(message);
+      } else {
+        // Auto-generate friendly success message based on URL and Method
+        const segments = url.split('?')[0].split('/').filter(s => s && isNaN(Number(s)));
+        let entity = "Record";
+        if (segments.length > 0) {
+          let lastSegment = segments[segments.length - 1];
+          lastSegment = lastSegment.charAt(0).toUpperCase() + lastSegment.slice(1).replace(/-/g, ' ');
+          // Basic singularization
+          if (lastSegment.endsWith('s') && lastSegment !== 'Class') {
+            lastSegment = lastSegment.slice(0, -1);
+          }
+          entity = lastSegment;
+        }
+
+        let actionStr = "processed";
+        if (method === 'post') actionStr = "created";
+        if (method === 'put' || method === 'patch') actionStr = "updated";
+        if (method === 'delete') actionStr = "deleted";
+
+        toast.success(`${entity} ${actionStr} successfully`);
+      }
+    }
+
+    return response;
+  },
   async (error) => {
-    const originalRequest = error.config;
+    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+
+    // Clean up dedup cache on error
+    const signature = getRequestSignature(originalRequest);
+    if (signature) {
+      pendingRequests.delete(signature);
+    }
+
     const role = getCurrentPortalRole();
 
     // 1. AVOID REFRESH LOOPS & DEADLOCKS:
     // Do not attempt refresh for /auth/refresh OR any /login endpoint
-    const isLoginRequest = originalRequest.url.includes('login');
-    if (originalRequest.url.includes('auth/refresh') || isLoginRequest) {
-       if (isLoginRequest) console.debug("[Auth] Bypassing Priority Login Request");
-       return Promise.reject(error);
+    const isLoginRequest = originalRequest.url?.includes('login');
+    if (originalRequest.url?.includes('auth/refresh') || isLoginRequest) {
+      if (isLoginRequest) console.debug("[Auth] Bypassing Priority Login Request");
+      return Promise.reject(error);
     }
 
     // 2. Handle 401 Unauthorized
@@ -77,13 +152,9 @@ client.interceptors.response.use(
       const data = error.response.data;
       const errorCode = data?.code || data?.detail?.code;
       const errorDetail = data?.detail?.message || data?.detail || error.message;
-      
-      const isAuthTerminal = errorCode === 'TOKEN_EXPIRED' || errorCode === 'INVALID_TOKEN';
-      
+
       console.error(`[Auth] 401 Unauthorized (${errorCode || 'UNKNOWN'}) for ${originalRequest.url}:`, errorDetail);
-      
-      const role = getCurrentPortalRole();
-      
+
       // If we are already retrying or on a login page, don't try to refresh
       if (originalRequest._retry || window.location.pathname.includes('-login')) {
         return Promise.reject(error);
@@ -93,12 +164,12 @@ client.interceptors.response.use(
       if (errorCode === 'INVALID_TOKEN') {
         console.warn("[Auth] Terminal token error. Skipping refresh.");
         if (!window.location.pathname.includes('-login')) {
-           localStorage.removeItem(`edu_auth_token_${role}`);
-           localStorage.removeItem(`edu_user_${role}`);
-           const loginRedirect = `${role === 'admin' ? '/admin-login' : 
-                                 role === 'teacher' ? '/teacher-login' : 
-                                 role === 'super_admin' ? '/superadmin-login' : '/parent-login'}?reason=expired`;
-           window.location.href = loginRedirect;
+          localStorage.removeItem(`edu_auth_token_${role}`);
+          localStorage.removeItem(`edu_user_${role}`);
+          const loginRedirect = `${role === 'admin' ? '/admin-login' :
+            role === 'teacher' ? '/teacher-login' :
+              role === 'super_admin' ? '/superadmin-login' : '/parent-login'}?reason=expired`;
+          window.location.href = loginRedirect;
         }
         return Promise.reject(error);
       }
@@ -124,27 +195,27 @@ client.interceptors.response.use(
 
         console.debug("[Auth] Refresh Successful. Updating access token.");
         localStorage.setItem(`edu_auth_token_${role}`, access_token);
-        
+
         // Retry original request
         originalRequest.headers.set('Authorization', `Bearer ${access_token}`);
         processQueue(null, access_token);
-        
+
         return client(originalRequest);
       } catch (refreshError) {
         console.error("[Auth] Refresh Failed. Clearing session for role:", role);
         processQueue(refreshError, null);
-        
+
         // Only clear and redirect if we are NOT already on a login page
         if (!window.location.pathname.includes('-login')) {
           localStorage.removeItem(`edu_auth_token_${role}`);
           localStorage.removeItem(`edu_user_${role}`);
           localStorage.removeItem(`edu_institution_id_${role}`);
-          
+
           // Determine the appropriate login redirect based on the current portal
-          const loginRedirect = `${role === 'admin' ? '/admin-login' : 
-                                 role === 'teacher' ? '/teacher-login' : 
-                                 role === 'super_admin' ? '/superadmin-login' : '/parent-login'}?reason=expired`;
-          
+          const loginRedirect = `${role === 'admin' ? '/admin-login' :
+            role === 'teacher' ? '/teacher-login' :
+              role === 'super_admin' ? '/superadmin-login' : '/parent-login'}?reason=expired`;
+
           console.debug(`[Auth] Redirecting to ${loginRedirect} due to failed session.`);
           window.location.href = loginRedirect;
         }
@@ -154,7 +225,13 @@ client.interceptors.response.use(
       }
     }
 
-    const message = error.response?.data?.detail || error.message;
+    const { message } = getErrorMessage(error);
+    
+    // Show error toast globally, except for 401s that are actively redirecting to login
+    if (error.response?.status !== 401 || window.location.pathname.includes('-login')) {
+      toast.error(message);
+    }
+
     return Promise.reject(new Error(message));
   }
 );

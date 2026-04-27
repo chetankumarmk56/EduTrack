@@ -66,40 +66,45 @@ export default function TeacherDashboard() {
   
   const activeExam = useMemo(() => exams.find(e => e.id === activeExamId), [exams, activeExamId]);
 
-  const fetchExamsAndMarks = async (filteredDB: any[]) => {
+  const fetchExams = async () => {
     if (!activeAssignment) return;
-    setIsFetching(true);
     try {
       const schoolClassId = activeAssignment.school_class?.id;
       const subjectId = activeAssignment.subject_id || activeAssignment.subject_ref?.id;
-      const subjectName = activeAssignment.subject_ref?.name;
       
-      if (!schoolClassId || !subjectId) {
-        console.warn("⚠️ Marks Context Incomplete: class or subject ID missing.", { schoolClassId, subjectId });
-        return;
-      }
+      if (!schoolClassId || !subjectId) return;
       
-      // 1. Fetch formal exams
       const examData = await marksApi.getExams(schoolClassId, subjectId);
       setExams(examData);
+      
+      // Auto-select first exam if none active
       if (examData.length > 0 && !activeExamId) {
         setActiveExamId(examData[0].id);
       }
+    } catch (err) {
+      console.error("Failed to load assessments:", err);
+    }
+  };
 
-      // 2. Fetch marks specific to this exam for better performance and consistency
+  const fetchMarksForActiveExam = async () => {
+    if (!activeAssignment || !activeExamId) return;
+    setIsFetching(true);
+    try {
+      const schoolClassId = activeAssignment.school_class?.id;
+      const subjectName = activeAssignment.subject_ref?.name;
+      
       const marksData = await fetchClassMarks(subjectName, schoolClassId, activeExamId);
       
-      const newStudentsMap = filteredDB.map(student => {
+      setStudents(filteredDB.map(student => {
         const marksRecords = marksData.filter((d: any) => d.student_id === student.id);
         const mappedMarks = marksRecords.map((m: any) => ({ 
           test: m.exam_id || m.test_name, 
           score: m.score 
         }));
         return { roll: student.id, name: student.name, marks: mappedMarks };
-      });
-      setStudents(newStudentsMap); 
+      })); 
     } catch(err) {
-      console.error(err);
+      console.error("Failed to load marks:", err);
     } finally {
       setIsFetching(false);
     }
@@ -122,11 +127,17 @@ export default function TeacherDashboard() {
     fetchTeacherStats();
   }, []);
 
-  // 2. Classroom-Specific Data Fetch
+  // 2. Classroom-Specific Exam List Fetch
   useEffect(() => {
     if (!activeAssignment) return;
-    fetchExamsAndMarks(filteredDB);
-  }, [activeAssignment?.id, filteredDB.length]);
+    fetchExams();
+  }, [activeAssignment?.id]);
+
+  // 3. Marks Data Fetch on Exam Switch
+  useEffect(() => {
+    if (!activeAssignment || !activeExamId || filteredDB.length === 0) return;
+    fetchMarksForActiveExam();
+  }, [activeAssignment?.id, activeExamId, filteredDB.length]);
 
   const handleScoreChange = (roll: number, newScore: number) => {
     if (!activeExamId) return;
@@ -172,7 +183,7 @@ export default function TeacherDashboard() {
     try {
         await marksApi.recordMarksBatch(batchPayload);
         setSaveStatus('success');
-        fetchExamsAndMarks(classDirectory);
+        fetchMarksForActiveExam();
         fetchTeacherStats();
         setTimeout(() => setSaveStatus('idle'), 3000);
     } catch(err) {
@@ -206,6 +217,34 @@ export default function TeacherDashboard() {
     } catch (err: any) {
       console.error(err);
       alert(`Ledger Error: ${err.message || 'Could not synchronize assessment structure.'}`);
+    }
+  };
+  
+  const handleUpdateExam = async (examId: number, currentName: string) => {
+    const newName = window.prompt("Modify Assessment Designation:", currentName);
+    if (!newName || newName === currentName) return;
+
+    try {
+      const updated = await marksApi.updateExam(examId, newName);
+      setExams(prev => prev.map(e => e.id === examId ? updated : e));
+    } catch (err: any) {
+      console.error(err);
+      alert("Failed to update assessment designation.");
+    }
+  };
+
+  const handleDeleteExam = async (examId: number) => {
+    if (!window.confirm("CRITICAL: Erasing this assessment will PERMANENTLY delete all student marks recorded under it. This action cannot be reversed. Continue?")) return;
+
+    try {
+      await marksApi.deleteExam(examId);
+      setExams(prev => prev.filter(e => e.id !== examId));
+      if (activeExamId === examId) {
+        setActiveExamId(undefined);
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert("Failed to decommission assessment.");
     }
   };
 
@@ -302,28 +341,33 @@ export default function TeacherDashboard() {
                   <motion.div
                     layout
                     key={exam.id}
+                    onClick={() => setActiveExamId(exam.id)}
                     className={cn(
-                      "flex items-center gap-3 px-8 py-4 rounded-[1.5rem] text-[10px] font-black uppercase tracking-[0.25em] transition-all duration-500",
+                      "relative flex items-center gap-3 px-8 py-4 rounded-[1.5rem] text-[10px] font-black uppercase tracking-[0.25em] transition-all duration-300 cursor-pointer",
                       activeExamId === exam.id 
-                        ? 'aurora-gradient text-white shadow-2xl aurora-glow scale-105' 
-                        : 'bg-white/5 border border-white/5 text-muted-foreground hover:text-white hover:bg-white/10 hover:border-white/20'
+                        ? 'text-white' 
+                        : 'text-muted-foreground hover:text-white'
                     )}
                   >
-                    <button 
-                      onClick={() => setActiveExamId(exam.id)}
-                      className="focus:outline-none"
-                    >
-                      {exam.name}
-                    </button>
+                    {activeExamId === exam.id && (
+                      <motion.div 
+                        layoutId="activeTab"
+                        className="absolute inset-0 aurora-gradient rounded-[1.5rem] shadow-2xl aurora-glow"
+                        transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                      />
+                    )}
+                    <span className="relative z-10">{exam.name}</span>
                     
                     {activeExamId === exam.id && (
-                      <div className="flex items-center ml-2 pl-3 border-l border-white/20 gap-2">
+                      <div className="relative z-10 flex items-center ml-2 pl-3 border-l border-white/20 gap-2">
                         <button 
+                          onClick={(e) => { e.stopPropagation(); handleUpdateExam(exam.id, exam.name); }}
                           className="hover:scale-125 transition-transform text-white/60 hover:text-white"
                         >
                           <Edit3 className="w-3.5 h-3.5" />
                         </button>
                         <button 
+                          onClick={(e) => { e.stopPropagation(); handleDeleteExam(exam.id); }}
                           className="hover:scale-125 transition-transform text-white/40 hover:text-red-300"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -360,7 +404,23 @@ export default function TeacherDashboard() {
             </div>
 
             {/* Obsidian Table */}
-            <div className="overflow-x-auto custom-scrollbar">
+            <div className="overflow-x-auto custom-scrollbar relative">
+              <AnimatePresence>
+                {isFetching && (
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="absolute inset-0 bg-black/20 backdrop-blur-[1px] z-50 flex items-start justify-center pt-20 pointer-events-none"
+                  >
+                      <div className="flex items-center gap-3 px-6 py-3 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-black uppercase tracking-[0.3em] aurora-pulse shadow-2xl">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 aurora-glow" />
+                        Establishing Secure Ledger Link
+                      </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               <table className="w-full text-sm text-left border-collapse">
                 <thead className="bg-muted/10">
                   <tr>
@@ -370,22 +430,14 @@ export default function TeacherDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  <AnimatePresence mode="popLayout">
-                    {isFetching ? (
+                  <AnimatePresence mode="wait">
+                    {students.length === 0 && !isFetching ? (
                       <motion.tr 
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                      >
-                        <td colSpan={3} className="px-8 py-32 text-center text-muted-foreground/30 italic font-black uppercase tracking-widest text-xs">
-                           Establishing secure ledger connection...
-                        </td>
-                      </motion.tr>
-                    ) : students.length === 0 ? (
-                      <motion.tr 
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
+                        key="empty"
+                        initial={{ opacity: 0, scale: 0.98 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.98 }}
+                        transition={{ duration: 0.2 }}
                       >
                         <td colSpan={3} className="px-8 py-32 text-center">
                            <div className="flex flex-col items-center gap-4 opacity-30 italic font-black uppercase tracking-widest text-xs text-muted-foreground">
@@ -395,64 +447,71 @@ export default function TeacherDashboard() {
                         </td>
                       </motion.tr>
                     ) : (
-                      students.map((student, idx) => {
-                        const score = student.marks.find(m => m.test === activeExamId)?.score || 0;
-                        
-                        return (
-                          <motion.tr 
-                            layout
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.95 }}
-                            transition={{ 
-                              duration: 0.4, 
-                              delay: idx * 0.02,
-                              ease: [0.23, 1, 0.32, 1] 
-                            }}
-                            key={student.roll} 
-                            className="group transition-all hover:bg-white/5"
-                          >
-                            <td className="px-10 py-6">
-                               <span className="text-xs font-black tabular-nums opacity-30 tracking-[0.2em] group-hover:opacity-100 group-hover:text-primary transition-all">{student.roll.toString().padStart(3, '0')}</span>
-                            </td>
-                            <td className="px-10 py-6">
-                               <div className="flex items-center gap-5">
-                                  <div className={cn(
-                                    "w-12 h-12 rounded-2xl flex items-center justify-center font-black transition-all border border-white/5 group-hover:border-primary/30 group-hover:scale-110",
-                                    score > (activeMaxScore * 0.8) ? "aurora-gradient text-white aurora-glow" : "bg-muted/40 text-foreground"
-                                  )}>
-                                     {student.name.charAt(0)}
-                                  </div>
-                                  <div>
-                                     <p className="font-black tracking-tight text-lg group-hover:text-primary transition-colors">{student.name}</p>
-                                     <p className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground/40 group-hover:text-primary/40 transition-colors">Registered Candidate</p>
-                                  </div>
-                                </div>
-                            </td>
-                            <td className="px-10 py-6 text-right">
-                              <div className="flex items-center justify-end gap-5">
-                                <motion.div 
-                                  whileHover={{ scale: 1.05 }}
-                                  className="relative"
-                                >
-                                  <input
-                                    type="number"
-                                    value={score || ''}
-                                    onChange={(e) => handleScoreChange(student.roll, Number(e.target.value))}
-                                    className={cn(
-                                      "w-28 h-14 rounded-2xl bg-black border border-white/10 px-5 text-right font-black text-xl focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all tabular-nums aurora-glow-focus hover:border-primary/40",
-                                      score >= (activeMaxScore * 0.9) ? "text-primary glow-text" : "text-foreground"
-                                    )}
-                                  />
-                                </motion.div>
-                                <div className="text-muted-foreground/20 font-black text-xs uppercase tracking-[0.2em]">
-                                   / {activeMaxScore}
-                                </div>
-                              </div>
-                            </td>
-                          </motion.tr>
-                        );
-                      })
+                      <motion.tr key={activeExamId || 'list'} className="perspective-1000">
+                        <td colSpan={3} className="p-0">
+                          <table className="w-full">
+                            <tbody className="divide-y divide-white/5">
+                              {students.map((student, idx) => {
+                                const score = student.marks.find(m => m.test === activeExamId)?.score || 0;
+                                
+                                return (
+                                  <motion.tr 
+                                    layout
+                                    initial={{ opacity: 0, x: -30, rotateY: -15, scale: 0.95 }}
+                                    animate={{ opacity: 1, x: 0, rotateY: 0, scale: 1 }}
+                                    transition={{ 
+                                      duration: 0.5, 
+                                      delay: idx * 0.03,
+                                      ease: [0.23, 1, 0.32, 1] 
+                                    }}
+                                    key={student.roll} 
+                                    className="group transition-all hover:bg-white/5"
+                                  >
+                                    <td className="px-10 py-6">
+                                      <span className="text-xs font-black tabular-nums opacity-30 tracking-[0.2em] group-hover:opacity-100 group-hover:text-primary transition-all">{student.roll.toString().padStart(3, '0')}</span>
+                                    </td>
+                                    <td className="px-10 py-6">
+                                      <div className="flex items-center gap-5">
+                                          <div className={cn(
+                                            "w-12 h-12 rounded-2xl flex items-center justify-center font-black transition-all border border-white/5 group-hover:border-primary/30 group-hover:scale-110 shadow-lg",
+                                            score > (activeMaxScore * 0.8) ? "aurora-gradient text-white aurora-glow border-none" : "bg-muted/40 text-foreground"
+                                          )}>
+                                            {student.name.charAt(0)}
+                                          </div>
+                                          <div>
+                                            <p className="font-black tracking-tight text-lg group-hover:text-primary transition-colors">{student.name}</p>
+                                            <p className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground/40 group-hover:text-primary/40 transition-colors">Registered Candidate</p>
+                                          </div>
+                                        </div>
+                                    </td>
+                                    <td className="px-10 py-6 text-right">
+                                      <div className="flex items-center justify-end gap-5">
+                                        <motion.div 
+                                          whileHover={{ scale: 1.05 }}
+                                          className="relative"
+                                        >
+                                          <input
+                                            type="number"
+                                            value={score || ''}
+                                            onChange={(e) => handleScoreChange(student.roll, Number(e.target.value))}
+                                            className={cn(
+                                              "w-28 h-14 rounded-2xl bg-black border border-white/10 px-5 text-right font-black text-xl focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all tabular-nums aurora-glow-focus hover:border-primary/40",
+                                              score >= (activeMaxScore * 0.9) ? "text-primary glow-text" : "text-foreground"
+                                            )}
+                                          />
+                                        </motion.div>
+                                        <div className="text-muted-foreground/20 font-black text-xs uppercase tracking-[0.2em]">
+                                          / {activeMaxScore}
+                                        </div>
+                                      </div>
+                                    </td>
+                                  </motion.tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </td>
+                      </motion.tr>
                     )}
                   </AnimatePresence>
                 </tbody>

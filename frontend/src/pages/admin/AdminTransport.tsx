@@ -9,7 +9,7 @@ import {
   Sparkles, Wand2, User, ChevronDown, CheckCircle2
 } from 'lucide-react';
 import { transportApi } from '../../api/transportApi';
-import { directoryApi } from '../../api/directoryApi';
+import { useApp } from '../../lib/AppContext';
 import { cn } from '../../lib/utils';
 import { findNearestPointOnPath, sortStopsByPath } from '../../lib/geoUtils';
 
@@ -50,9 +50,9 @@ function MapClickInterceptor({ onMapClick }: { onMapClick: (lat: number, lng: nu
 }
 
 export default function AdminTransport() {
+  const { students } = useApp();
   const [routes, setRoutes] = useState<any[]>([]);
   const [buses, setBuses] = useState<any[]>([]);
-  const [students, setStudents] = useState<any[]>([]);
   
   const [selectedRouteId, setSelectedRouteId] = useState<number | null>(null);
   const [stops, setStops] = useState<Stop[]>([]);
@@ -70,14 +70,12 @@ export default function AdminTransport() {
   useEffect(() => {
     const fetchMatrix = async () => {
       try {
-        const [rData, bData, sData] = await Promise.all([
+        const [rData, bData] = await Promise.all([
           transportApi.getRoutes(),
-          transportApi.getBuses(),
-          directoryApi.getStudents()
+          transportApi.getBuses()
         ]);
         setRoutes(rData);
         setBuses(bData);
-        setStudents(sData);
       } catch (err) {
         console.error("Failed to load transport matrix", err);
       } finally {

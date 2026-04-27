@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List, Optional
-import jwt
+from jose import jwt
 
 from app.core.database import get_db
 from app.core.config import settings
@@ -73,7 +73,7 @@ async def get_current_user(
         
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token has expired")
-    except (jwt.InvalidTokenError, ValueError):
+    except (jwt.JWTError, ValueError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication token")
 
 async def get_current_active_user(
@@ -100,6 +100,7 @@ require_institution_admin = require_admin
 require_teacher = RoleChecker(["super_admin", "admin", "teacher"])
 require_parent = RoleChecker(["super_admin", "admin", "parent"])
 require_student = RoleChecker(["super_admin", "admin", "student"])
+require_payment_admin = RoleChecker(["super_admin", "admin", "finance"])
 
 async def require_teacher_strict(user: UserContext = Depends(get_current_active_user)) -> UserContext:
     if user.role != "teacher":

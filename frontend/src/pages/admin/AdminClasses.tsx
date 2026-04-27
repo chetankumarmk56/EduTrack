@@ -21,7 +21,7 @@ export default function AdminClasses() {
   const [editingSubject, setEditingSubject] = useState<any | null>(null);
   const [editingClass, setEditingClass] = useState<any | null>(null);
   
-  const [classForm, setClassForm] = useState({ name: '', level: 0 });
+  const [classForm, setClassForm] = useState({ name: '', level: 0, tuition_fee: 0, fee_due_date: '' });
   const [sectionName, setSectionName] = useState('');
   const [subjectForm, setSubjectForm] = useState({ name: '', code: '' });
 
@@ -33,14 +33,19 @@ export default function AdminClasses() {
     e.preventDefault();
     try {
       let result;
+      const payload = {
+        ...classForm,
+        fee_due_date: classForm.fee_due_date === '' ? undefined : classForm.fee_due_date
+      };
+
       if (editingClass) {
-        result = await academicApi.updateClass(editingClass.id, classForm);
+        result = await academicApi.updateClass(editingClass.id, payload);
         setEditingClass(null);
       } else {
-        result = await academicApi.createClass(classForm);
+        result = await academicApi.createClass(payload);
       }
       setIsAddingClass(false);
-      setClassForm({ name: '', level: 0 });
+      setClassForm({ name: '', level: 0, tuition_fee: 0, fee_due_date: '' });
       
       // Wait for directory to refresh so we have latest IDs
       await refreshDirectory(true);
@@ -78,7 +83,7 @@ export default function AdminClasses() {
       });
       setIsAddingSubject(false);
       setSubjectForm({ name: '', code: '' });
-      refreshDirectory(true);
+      await refreshDirectory(true);
     } catch (err: any) { 
       console.error(err);
       alert(err.response?.data?.detail || "Failed to initialize discipline.");
@@ -94,8 +99,9 @@ export default function AdminClasses() {
         code: editingSubject.code
       });
       setEditingSubject(null);
-      refreshDirectory(true);
-    } catch (err) { console.error(err); }
+      await refreshDirectory(true);
+    } catch (err) { 
+      console.error(err); }
   };
 
   const handleDelete = async (id: number, type: 'grade' | 'section' | 'subject') => {
@@ -140,7 +146,7 @@ export default function AdminClasses() {
               <School className="w-3.5 h-3.5" /> Classes
             </h3>
             <button 
-              onClick={() => { setIsAddingClass(true); setEditingClass(null); setClassForm({ name: '', level: 0 }); }}
+              onClick={() => { setIsAddingClass(true); setEditingClass(null); setClassForm({ name: '', level: 0, tuition_fee: 0, fee_due_date: '' }); }}
               className="p-2 rounded-xl bg-brand-indigo/10 text-brand-indigo hover:bg-brand-indigo/20 transition-all shadow-sm"
             >
               <Plus className="w-4 h-4" />
@@ -178,7 +184,7 @@ export default function AdminClasses() {
                       onClick={(e) => { 
                         e.stopPropagation(); 
                         setEditingClass(c); 
-                        setClassForm({ name: c.name, level: c.level }); 
+                        setClassForm({ name: c.name, level: c.level, tuition_fee: c.tuition_fee || 0, fee_due_date: c.fee_due_date || '' }); 
                         setIsAddingClass(true); 
                       }}
                       className="p-2 rounded-lg hover:bg-white/10 text-white/10 hover:text-white transition-all opacity-0 group-hover:opacity-100"
@@ -219,8 +225,27 @@ export default function AdminClasses() {
                     autoFocus 
                     className="input-obsidian text-sm italic font-black" 
                     value={classForm.level || ''} 
-                    onChange={e => setClassForm({ name: `Class ${e.target.value}`, level: Number(e.target.value) })} 
+                    onChange={e => setClassForm({ ...classForm, name: `Class ${e.target.value}`, level: Number(e.target.value) })} 
                     required
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[8px] font-black uppercase tracking-widest ml-2 text-text-secondary">Class Payment Fee</label>
+                  <input 
+                    type="number" 
+                    placeholder="e.g. 5000" 
+                    className="input-obsidian text-sm italic font-black" 
+                    value={classForm.tuition_fee || ''} 
+                    onChange={e => setClassForm({ ...classForm, tuition_fee: Number(e.target.value) })} 
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[8px] font-black uppercase tracking-widest ml-2 text-text-secondary">Fee Payment Deadline</label>
+                  <input 
+                    type="date" 
+                    className="input-obsidian text-sm italic font-black" 
+                    value={classForm.fee_due_date || ''} 
+                    onChange={e => setClassForm({ ...classForm, fee_due_date: e.target.value })} 
                   />
                 </div>
                 <button type="submit" className="indigo-glow-button w-full py-3 text-[10px] font-black uppercase tracking-widest italic">

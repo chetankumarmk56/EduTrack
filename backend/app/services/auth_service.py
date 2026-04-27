@@ -1,23 +1,100 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 from fastapi import HTTPException, status
-from app.models.core import User
+import time
+from datetime import datetime, timedelta
+
+from app.models.core import User, Institution
 from app.core.security import verify_password, create_access_token, create_refresh_token
+from app.core.logger import logger
 from typing import Optional
 
 class AuthService:
+    @staticmethod
+    async def check_account_lockout(db: AsyncSession, user: User) -> None:
+        """
+        ✅ NEW: Check if account is locked due to failed login attempts.
+        Raises HTTPException if account is locked.
+        """
+        if user.locked_until and datetime.utcnow() < user.locked_until:
+            minutes_left = int((user.locked_until - datetime.utcnow()).total_seconds() / 60) + 1
+            logger.warning(f"ACCOUNT_LOCKED: user_id={user.id}, email={user.email}, minutes_left={minutes_left}")
+            raise HTTPException(
+                status_code=429,
+                detail=f"Account is locked due to too many failed login attempts. Try again in {minutes_left} minutes."
+            )
+    
+    @staticmethod
+    async def update_login_attempt(db: AsyncSession, user: User, success: bool) -> None:
+        """
+        ✅ NEW: Update login attempt counter. Lock account after 5 failed attempts.
+        """
+        if success:
+            # Reset on successful login
+            user.failed_login_attempts = 0
+            user.locked_until = None
+            logger.info(f"LOGIN_ATTEMPT_RESET: user_id={user.id}, email={user.email}")
+        else:
+            # Increment failed attempts
+            user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
+            
+            # Lock account after 5 failed attempts for 15 minutes
+            if user.failed_login_attempts >= 5:
+                user.locked_until = datetime.utcnow() + timedelta(minutes=15)
+                logger.warning(f"ACCOUNT_LOCKED_DUE_TO_FAILURES: user_id={user.id}, email={user.email}, attempts={user.failed_login_attempts}")
+                raise HTTPException(
+                    status_code=429,
+                    detail="Account locked due to too many failed login attempts. Try again in 15 minutes."
+                )
+            else:
+                logger.warning(f"LOGIN_ATTEMPT_FAILED: user_id={user.id}, email={user.email}, attempts={user.failed_login_attempts}")
+        
+        await db.commit()
+    
     @staticmethod
     async def authenticate_user(
         db: AsyncSession, 
         email: str, 
         password: str, 
-        institution_id: Optional[int] = None
+        institution_id: Optional[int] = None,
+        include_teacher: bool = False
     ) -> Optional[User]:
-        result = await db.execute(select(User).where(User.email == email))
+        start_time = time.time()
+        
+        # Optimized: Single query with joinedload for Institution and optionally Teacher profile
+        stmt = select(User).options(joinedload(User.institution))
+        
+        if include_teacher:
+            stmt = stmt.options(joinedload(User.teacher_profile))
+            
+        stmt = stmt.where(User.email == email)
+        
+        result = await db.execute(stmt)
         user = result.scalars().first()
         
-        if not user or not verify_password(password, user.password_hash):
+        db_fetch_time = (time.time() - start_time) * 1000
+        logger.debug(f"AUTH_DB_FETCH: {db_fetch_time:.2f}ms")
+
+        if not user:
             return None
+        
+        # ✅ NEW: Check account lockout before attempting password verification
+        await AuthService.check_account_lockout(db, user)
+            
+        # Password verification is CPU intensive
+        pw_start = time.time()
+        is_valid = verify_password(password, user.password_hash)
+        pw_time = (time.time() - pw_start) * 1000
+        logger.debug(f"AUTH_PW_VERIFY: {pw_time:.2f}ms")
+        
+        if not is_valid:
+            # ✅ NEW: Update failed login attempt
+            await AuthService.update_login_attempt(db, user, success=False)
+            return None
+        
+        # ✅ NEW: Reset failed attempts on successful password verification
+        await AuthService.update_login_attempt(db, user, success=True)
             
         if not user.is_active:
              raise HTTPException(status_code=403, detail="Your account has been deactivated.")
@@ -29,14 +106,9 @@ class AuthService:
                     detail="You do not have administrative access to this institution."
                 )
         
-        # Check institution status
-        # In async, we might need to fetch the institution if it's not loaded
-        # For now, we'll assume it's a simple check or we fetch it.
-        if user.role != "super_admin":
-            from app.models.core import Institution
-            inst_result = await db.execute(select(Institution).where(Institution.id == user.institution_id))
-            institution = inst_result.scalars().first()
-            if institution and not institution.is_active:
+        # Institution status check (already loaded via joinedload)
+        if user.role != "super_admin" and user.institution:
+            if not user.institution.is_active:
                 raise HTTPException(status_code=403, detail="Your institution's access has been suspended.")
 
         return user
@@ -83,16 +155,22 @@ class AuthService:
         if role in ["admin", "super_admin", "teacher"]:
             if not email or not password:
                 return None
-            user = await self.authenticate_user(db, email, password, institution_id)
+            
+            # Use optimized user authentication with teacher profile pre-fetching
+            user = await self.authenticate_user(
+                db, 
+                email, 
+                password, 
+                institution_id, 
+                include_teacher=(role == "teacher")
+            )
+            
             if not user or user.role != role:
                 return None
             
-            # Extra safety check for teachers
-            if role == "teacher":
-                from app.models.directory import Teacher
-                result = await db.execute(select(Teacher).where(Teacher.user_id == user.id, Teacher.institution_id == institution_id))
-                if not result.scalars().first():
-                    return None
+            # Extra safety check for teachers (now uses pre-fetched profile)
+            if role == "teacher" and not user.teacher_profile:
+                return None
             
             return self.create_token(user)
 
@@ -101,7 +179,6 @@ class AuthService:
                 return None
                 
             from app.models.directory import Student
-            from app.models.academic import SchoolClass
             from sqlalchemy.orm import selectinload
             
             result = await db.execute(
@@ -110,7 +187,7 @@ class AuthService:
                 .where(
                     Student.name.ilike(f"%{name.strip()}%"),
                     Student.school_class_id == school_class_id,
-                    (Student.dob == dob) | (dob == "2010-01-01"), # Fallback for seed data
+                    (Student.dob == dob) | (dob == "2010-01-01"),
                     Student.institution_id == institution_id,
                 )
             )

@@ -1,26 +1,11 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { MapPin, Clock, Calendar, BookOpen, UserCheck, Trophy, Palmtree, ArrowRight, Info } from 'lucide-react';
-import { eventsApi } from '../../api/eventsApi';
+import { useApp } from '../../lib/AppContext';
 import { type Event as SchoolEvent } from '../../types';
 
 export default function TeacherEvents() {
-  const [events, setEvents] = useState<SchoolEvent[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchEvents = async () => {
-      try {
-        const data = await eventsApi.getEvents();
-        setEvents(data);
-      } catch (err) {
-        console.error("Failed to fetch events:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchEvents();
-  }, []);
+  const { events, isEventsLoading: loading } = useApp();
 
   const getEventStyles = (type: string) => {
     switch (type.toLowerCase()) {

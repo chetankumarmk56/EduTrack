@@ -1,26 +1,46 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Dict, Any
+import asyncio
 
 from app.services.academic_service import academic_service
 from app.services.statistics import StatisticsService
 from app.services.teacher_service import teacher_service
 from app.services.student_service import student_service
-from app.core.dependencies import UserContext  # Context object
+from app.core.dependencies import UserContext
+from app.core.database import AsyncSessionLocal
 
 class SystemService:
     @staticmethod
     async def get_initialization_context(db: AsyncSession, user: UserContext) -> Dict[str, Any]:
         """
-        Aggregates all necessary metadata and user-specific stats into a single 
-        Composite Payload for high-performance frontend initialization.
+        High-performance consolidated initialization context.
+        Uses parallel execution for non-dependent academic metadata and role-specific data.
         """
-        import asyncio
+        # Define parallel fetch tasks for shared metadata
+        # Spawning separate sessions to allow concurrent database queries (AsyncSession is not thread-safe)
+        async def fetch_grades():
+            async with AsyncSessionLocal() as session:
+                return await academic_service.get_grades(session, user.institution_id)
+        
+        async def fetch_sections():
+            async with AsyncSessionLocal() as session:
+                return await academic_service.get_sections(session, user.institution_id)
+                
+        async def fetch_subjects():
+            async with AsyncSessionLocal() as session:
+                return await academic_service.get_subjects(session, user.institution_id)
+                
+        async def fetch_classes():
+            async with AsyncSessionLocal() as session:
+                return await academic_service.get_school_classes(session, user.institution_id)
 
-        # 1. Fetch Shared Academic Metadata (Sequential to avoid session concurrency)
-        grades = await academic_service.get_grades(db, user.institution_id)
-        sections = await academic_service.get_sections(db, user.institution_id)
-        subjects = await academic_service.get_subjects(db, user.institution_id)
-        school_classes = await academic_service.get_school_classes(db, user.institution_id)
+        # Execute academic metadata queries in parallel
+        grades, sections, subjects, school_classes = await asyncio.gather(
+            fetch_grades(),
+            fetch_sections(),
+            fetch_subjects(),
+            fetch_classes()
+        )
 
         context = {
             "academic": {
@@ -37,21 +57,30 @@ class SystemService:
             "institution_id": user.institution_id
         }
 
-        # 2. Append Role-Specific Data (Sequential to avoid session concurrency)
+        # Handle Role-Specific Data in parallel
         if user.role == "teacher":
-            stats = await StatisticsService.get_teacher_stats(db, user.institution_id, user.id)
-            students = await student_service.get_teacher_students(db, user.institution_id, user.id)
-            teacher_info = await teacher_service.get_teacher_by_user_id(db, user.institution_id, user.id)
+            async def fetch_teacher_stats():
+                async with AsyncSessionLocal() as session:
+                    return await StatisticsService.get_teacher_stats(session, user.institution_id, user.id)
+            
+            async def fetch_teacher_students():
+                async with AsyncSessionLocal() as session:
+                    return await student_service.get_teacher_students(session, user.institution_id, user.id)
+            
+            async def fetch_teacher_details():
+                async with AsyncSessionLocal() as session:
+                    return await teacher_service.get_teacher_by_user_id(session, user.institution_id, user.id)
+
+            stats, students, teacher_info = await asyncio.gather(
+                fetch_teacher_stats(),
+                fetch_teacher_students(),
+                fetch_teacher_details()
+            )
 
             context["stats"] = stats
             context["students"] = students
             if teacher_info:
                 context["teacher_details"] = teacher_info
-
-        elif user.role in ["admin", "super_admin"]:
-            # Admins only need academic metadata for the initial layout.
-            # Directories (students/teachers) should be lazy-loaded on their respective pages.
-            pass
 
         return context
 

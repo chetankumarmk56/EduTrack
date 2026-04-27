@@ -16,9 +16,10 @@ elif DATABASE_URL.startswith("postgres://"):
 engine = create_async_engine(
     DATABASE_URL, 
     pool_pre_ping=True,
-    pool_size=settings.DATABASE_POOL_SIZE if hasattr(settings, "DATABASE_POOL_SIZE") else 20,
-    max_overflow=settings.DATABASE_MAX_OVERFLOW if hasattr(settings, "DATABASE_MAX_OVERFLOW") else 10,
-    pool_recycle=3600
+    pool_size=getattr(settings, "DATABASE_POOL_SIZE", 25),  # Default increased from 20 to 25
+    max_overflow=getattr(settings, "DATABASE_MAX_OVERFLOW", 15),  # Default increased from 10 to 15
+    pool_recycle=3600,
+    echo=False,  # Set to True for SQL query debugging
 )
 
 AsyncSessionLocal = async_sessionmaker(

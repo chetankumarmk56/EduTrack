@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator, field_validator
 from typing import Optional, List, Any
 from datetime import datetime
 from uuid import UUID
@@ -14,13 +14,29 @@ class AnnouncementPriority(str, Enum):
     HIGH = "high"
 
 class AnnouncementBase(BaseModel):
-    title: str = Field(..., min_length=1, description="Announcement title cannot be empty")
-    message: str = Field(..., min_length=1, description="Announcement message cannot be empty")
+    title: str = Field(..., min_length=1, max_length=200, description="Announcement title")
+    message: str = Field(..., min_length=1, max_length=5000, description="Announcement message")
     type: AnnouncementType
     priority: AnnouncementPriority = AnnouncementPriority.LOW
     class_id: Optional[int] = None
     student_id: Optional[int] = None
     attachment_url: Optional[str] = None
+    
+    @field_validator('message', 'title')
+    @classmethod
+    def prevent_xss(cls, v: str) -> str:
+        """Prevent XSS by blocking dangerous HTML/JavaScript"""
+        if v is None:
+            return v
+        dangerous_patterns = [
+            '<script', 'javascript:', 'onerror=', 'onload=', 
+            'onclick=', 'onmouseover=', '<iframe', 'eval('
+        ]
+        v_lower = v.lower()
+        for pattern in dangerous_patterns:
+            if pattern in v_lower:
+                raise ValueError(f"HTML/JavaScript content not allowed")
+        return v
 
 class AnnouncementCreate(AnnouncementBase):
     @model_validator(mode='after')
@@ -32,13 +48,29 @@ class AnnouncementCreate(AnnouncementBase):
         return self
 
 class AnnouncementUpdate(BaseModel):
-    title: Optional[str] = Field(None, min_length=1)
-    message: Optional[str] = Field(None, min_length=1)
+    title: Optional[str] = Field(None, min_length=1, max_length=200)
+    message: Optional[str] = Field(None, min_length=1, max_length=5000)
     type: Optional[AnnouncementType] = None
     priority: Optional[AnnouncementPriority] = None
     class_id: Optional[int] = None
     student_id: Optional[int] = None
     attachment_url: Optional[str] = None
+    
+    @field_validator('message', 'title')
+    @classmethod
+    def prevent_xss(cls, v: Optional[str]) -> Optional[str]:
+        """Prevent XSS by blocking dangerous HTML/JavaScript"""
+        if v is None:
+            return v
+        dangerous_patterns = [
+            '<script', 'javascript:', 'onerror=', 'onload=', 
+            'onclick=', 'onmouseover=', '<iframe', 'eval('
+        ]
+        v_lower = v.lower()
+        for pattern in dangerous_patterns:
+            if pattern in v_lower:
+                raise ValueError(f"HTML/JavaScript content not allowed")
+        return v
 
 class AnnouncementResponse(AnnouncementBase):
     id: UUID

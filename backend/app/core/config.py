@@ -1,5 +1,6 @@
 import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field
 from typing import Optional
 
 class Settings(BaseSettings):
@@ -18,7 +19,12 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     
     # Security (using standard field names with env aliases)
-    SECRET_KEY: str = "edutrack-secret-key-32-bytes-placeholder"
+    # ✅ CRITICAL FIX: No default SECRET_KEY - must be provided via environment variable
+    SECRET_KEY: str = Field(
+        ...,  # Makes it REQUIRED - no default!
+        min_length=32,
+        description="Must be set via SECRET_KEY environment variable. Generate with: python -c 'import secrets; print(secrets.token_urlsafe(32))'"
+    )
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
@@ -37,6 +43,10 @@ class Settings(BaseSettings):
     
     # Frontend
     FRONTEND_URL: str = "http://localhost:5173"
+    COOKIE_DOMAIN: str = Field(
+        default="",
+        description="Cookie domain for production, e.g. 'yourdomain.com'"
+    )
     
     # Infrastructure
     PORT: int = 8000
@@ -60,6 +70,10 @@ class Settings(BaseSettings):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        # Validate SECRET_KEY length at runtime
+        if len(self.SECRET_KEY) < 32:
+            raise ValueError("SECRET_KEY must be at least 32 characters long. Generate with: python -c 'import secrets; print(secrets.token_urlsafe(32))'")
+        
         # Handle aliases manual override if provided in env
         if self.JWT_SECRET:
             self.SECRET_KEY = self.JWT_SECRET

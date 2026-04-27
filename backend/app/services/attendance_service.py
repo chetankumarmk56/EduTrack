@@ -45,16 +45,31 @@ class AttendanceService:
             if not assign_result.scalars().first():
                 return None
 
+        from sqlalchemy import or_
         ex_result = await db.execute(select(Attendance).where(
             Attendance.student_id == att.student_id,
-            Attendance.subject == att.subject,
             Attendance.date == att.date,
-            Attendance.institution_id == institution_id
-        ))
-        existing = ex_result.scalars().first()
+            Attendance.institution_id == institution_id,
+            or_(
+                Attendance.subject == att.subject,
+                Attendance.subject == None if not att.subject else False,
+                Attendance.subject == "" if not att.subject else False
+            )
+        ).order_by(Attendance.id.desc()))
+        existing_list = ex_result.scalars().all()
         
-        if existing:
+        if existing_list:
+            existing = existing_list[0]
             existing.status = att.status
+            existing.subject = att.subject # Standardize on current input
+            if att.subject_id:
+                existing.subject_id = att.subject_id
+            
+            # Clean up other duplicates if they exist
+            if len(existing_list) > 1:
+                for dupe in existing_list[1:]:
+                    await db.delete(dupe)
+                    
             await db.commit()
             await db.refresh(existing)
             return existing
@@ -62,8 +77,20 @@ class AttendanceService:
             db_att = Attendance(**att.model_dump(), institution_id=institution_id)
             db.add(db_att)
             await db.commit()
-            await db.refresh(db_att)
-            return db_att
+            
+            # Fetch with relationships after commit
+            from app.models.academic import SchoolClass
+            res = await db.execute(
+                select(Attendance)
+                .options(
+                    selectinload(Attendance.student),
+                    selectinload(Attendance.school_class).selectinload(SchoolClass.grade),
+                    selectinload(Attendance.school_class).selectinload(SchoolClass.section),
+                    selectinload(Attendance.subject_ref)
+                )
+                .where(Attendance.id == db_att.id)
+            )
+            return res.scalars().first()
 
     @staticmethod
     async def mark_attendance_batch(db: AsyncSession, institution_id: int, batch: schemas.AttendanceBatch, teacher_user_id: int = None):
@@ -94,30 +121,56 @@ class AttendanceService:
             if not assign_result.scalars().first():
                  return []
 
+        # OPTIMIZATION: Bulk-load all students in batch instead of looping (eliminates N+1)
+        student_ids = [item.student_id for item in batch.records]
+        students_result = await db.execute(select(Student).where(
+            Student.id.in_(student_ids),
+            Student.institution_id == institution_id,
+            Student.school_class_id == batch.school_class_id
+        ))
+        students = {s.id: s for s in students_result.scalars().all()}
+        
+        # OPTIMIZATION: Bulk-load existing attendance records
+        from sqlalchemy import or_
+        existing_result = await db.execute(select(Attendance).where(
+            Attendance.student_id.in_(student_ids),
+            Attendance.date == batch.date,
+            Attendance.institution_id == institution_id,
+            or_(
+                Attendance.subject == batch.subject,
+                Attendance.subject == None if not batch.subject else False,
+                Attendance.subject == "" if not batch.subject else False
+            )
+        ).order_by(Attendance.id.desc()))
+        
+        existing_att_map = {}
+        for a in existing_result.scalars().all():
+            if a.student_id not in existing_att_map:
+                existing_att_map[a.student_id] = [a]
+            else:
+                existing_att_map[a.student_id].append(a)
+
         results = []
         for item in batch.records:
-            s_result = await db.execute(select(Student).where(
-                Student.id == item.student_id, 
-                Student.institution_id == institution_id,
-                Student.school_class_id == batch.school_class_id
-            ))
-            student = s_result.scalars().first()
+            student = students.get(item.student_id)
             if not student:
                 continue
                 
-            ex_result = await db.execute(select(Attendance).where(
-                Attendance.student_id == item.student_id,
-                Attendance.subject == batch.subject,
-                Attendance.date == batch.date,
-                Attendance.institution_id == institution_id
-            ))
-            existing = ex_result.scalars().first()
+            existing_list = existing_att_map.get(item.student_id, [])
             
-            if existing:
+            if existing_list:
+                existing = existing_list[0]
                 existing.status = item.status
                 existing.school_class_id = batch.school_class_id
+                existing.subject = batch.subject # Standardize
                 if batch.subject_id:
                     existing.subject_id = batch.subject_id
+                
+                # Deduplicate on the fly
+                if len(existing_list) > 1:
+                    for dupe in existing_list[1:]:
+                        await db.delete(dupe)
+                results.append(existing)
             else:
                 db_att = Attendance(
                     student_id=item.student_id,
@@ -133,9 +186,23 @@ class AttendanceService:
             results.append(existing)
         
         await db.commit()
-        for r in results:
-            await db.refresh(r)
-        return results
+        
+        # Optimized: Final fetch with all relationships for the batch
+        final_ids = [r.id for r in results if r.id]
+        if final_ids:
+            from app.models.academic import SchoolClass
+            res = await db.execute(
+                select(Attendance)
+                .options(
+                    selectinload(Attendance.student),
+                    selectinload(Attendance.school_class).selectinload(SchoolClass.grade),
+                    selectinload(Attendance.school_class).selectinload(SchoolClass.section),
+                    selectinload(Attendance.subject_ref)
+                )
+                .where(Attendance.id.in_(final_ids))
+            )
+            return res.scalars().all()
+        return []
             
     @staticmethod
     async def get_attendance(db: AsyncSession, institution_id: int, student_id: int, subject: str = None):

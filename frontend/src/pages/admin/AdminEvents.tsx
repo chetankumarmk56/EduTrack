@@ -61,7 +61,7 @@ export default function AdminEvents() {
         await eventsApi.createEvent(form);
       }
       closeModal();
-      refreshDirectory(true);
+      await refreshDirectory(true);
     } catch (err) { console.error(err); }
   };
 
@@ -69,7 +69,7 @@ export default function AdminEvents() {
     if (!confirm('Erase this event from the timeline?')) return;
     try {
       await eventsApi.deleteEvent(id);
-      refreshDirectory(true);
+      await refreshDirectory(true);
     } catch (err) { console.error(err); }
   };
 

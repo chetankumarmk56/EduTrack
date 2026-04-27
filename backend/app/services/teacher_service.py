@@ -78,8 +78,11 @@ class TeacherService:
         data = teacher.model_dump()
         password_value = data.pop('password', None)
 
-        user_result = await db.execute(select(User).where(User.email == data.get('email')))
-        existing_user = user_result.scalars().first()
+        email = data.get('email')
+        existing_user = None
+        if email:
+            user_result = await db.execute(select(User).where(User.email == email))
+            existing_user = user_result.scalars().first()
         
         if existing_user:
             db_user = existing_user
@@ -153,12 +156,33 @@ class TeacherService:
 
     @staticmethod
     async def delete_teacher(db: AsyncSession, institution_id: int, teacher_id: int):
+        from sqlalchemy import delete
         result = await db.execute(
             select(Teacher).where(Teacher.id == teacher_id, Teacher.institution_id == institution_id)
         )
         teacher = result.scalars().first()
         if teacher:
+            user_id = teacher.user_id
+            
+            # 1. Clean up assignments
+            await db.execute(delete(TeacherAssignment).where(TeacherAssignment.teacher_id == teacher_id))
+            
+            # 2. Clean up notifications/comms if any (optional but good for consistency)
+            from app.models.communication import Notification, Announcement
+            await db.execute(delete(Announcement).where(Announcement.teacher_id == teacher_id))
+            
+            # 3. Delete teacher profile
             await db.delete(teacher)
+            await db.flush()
+            
+            # 4. Clean up user credentials and audit trail
+            if user_id:
+                from app.models.core import AuditLog
+                from app.models.communication import Notification
+                await db.execute(delete(AuditLog).where(AuditLog.user_id == user_id))
+                await db.execute(delete(Notification).where(Notification.user_id == user_id))
+                await db.execute(delete(User).where(User.id == user_id))
+                
             await db.commit()
             # Invalidate cache
             await delete_cache_pattern(f"teachers_list:{institution_id}:*")

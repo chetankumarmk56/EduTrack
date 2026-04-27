@@ -72,14 +72,26 @@ async def delete_cache(key: str) -> bool:
 async def delete_cache_pattern(pattern: str) -> bool:
     """
     Invalidate multiple keys matching a pattern (e.g., 'students_list:*').
-    Note: KEYS is O(N), but acceptable for small-to-medium datasets.
+    OPTIMIZATION: Uses SCAN instead of KEYS to avoid blocking Redis on large datasets.
     """
     if not redis_client:
         return False
     try:
-        keys = await redis_client.keys(pattern)
-        if keys:
-            await redis_client.delete(*keys)
+        # Use SCAN cursor to iterate without blocking
+        cursor = 0
+        keys_to_delete = []
+        while True:
+            cursor, keys = await redis_client.scan(cursor, match=pattern, count=100)
+            if keys:
+                keys_to_delete.extend(keys)
+            if cursor == 0:
+                break
+        
+        if keys_to_delete:
+            # Delete in batches to avoid command size limits
+            for i in range(0, len(keys_to_delete), 1000):
+                batch = keys_to_delete[i:i+1000]
+                await redis_client.delete(*batch)
         return True
     except Exception as e:
         logger.error(f"❌ Cache INVALIDATE PATTERN '{pattern}' error: {e}")
