@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { MapPin, Clock, Calendar, BookOpen, UserCheck, Trophy, Palmtree, ArrowRight, Info } from 'lucide-react';
 import { useApp } from '../../lib/AppContext';

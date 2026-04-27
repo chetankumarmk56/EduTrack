@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, Check, Clock, Info, AlertCircle, X } from 'lucide-react';
+import { Bell, Check, Clock, Info, AlertCircle } from 'lucide-react';
 import { useApp } from '../../lib/AppContext';
 import { cn } from '../../lib/utils';
 

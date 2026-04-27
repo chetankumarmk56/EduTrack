@@ -8,7 +8,7 @@ import {
   Pencil, Hash,
   Filter, User, Mail, Phone, Calendar,
   ShieldCheck, Search, School, Layers,
-  AlertCircle, CheckCircle, Loader
+  AlertCircle, Loader
 } from 'lucide-react';
 import { directoryApi } from '../../api/directoryApi';
 import { useApp } from '../../lib/AppContext';
@@ -53,7 +53,6 @@ export default function StudentDirectory() {
     parent_name: '', parent_email: '', parent_phone: ''
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [successMessage, setSuccessMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
