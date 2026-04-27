@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 from fastapi import HTTPException, status
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.models.core import User, Institution
 from app.core.security import verify_password, create_access_token, create_refresh_token
@@ -17,8 +17,8 @@ class AuthService:
         ✅ NEW: Check if account is locked due to failed login attempts.
         Raises HTTPException if account is locked.
         """
-        if user.locked_until and datetime.utcnow() < user.locked_until:
-            minutes_left = int((user.locked_until - datetime.utcnow()).total_seconds() / 60) + 1
+        if user.locked_until and datetime.now(timezone.utc) < user.locked_until:
+            minutes_left = int((user.locked_until - datetime.now(timezone.utc)).total_seconds() / 60) + 1
             logger.warning(f"ACCOUNT_LOCKED: user_id={user.id}, email={user.email}, minutes_left={minutes_left}")
             raise HTTPException(
                 status_code=429,
@@ -41,7 +41,7 @@ class AuthService:
             
             # Lock account after 5 failed attempts for 15 minutes
             if user.failed_login_attempts >= 5:
-                user.locked_until = datetime.utcnow() + timedelta(minutes=15)
+                user.locked_until = datetime.now(timezone.utc) + timedelta(minutes=15)
                 logger.warning(f"ACCOUNT_LOCKED_DUE_TO_FAILURES: user_id={user.id}, email={user.email}, attempts={user.failed_login_attempts}")
                 raise HTTPException(
                     status_code=429,
