@@ -168,8 +168,6 @@ export default function StudentDirectory() {
         parent_phone: editingStudent.parent_phone
       } as any);
       setEditingStudent(null);
-      setSuccessMessage("Student information updated successfully!");
-      setTimeout(() => setSuccessMessage(''), 3000);
       refreshStudents();
     } catch (err: any) { 
       const error = getErrorMessage(err);
@@ -188,8 +186,6 @@ export default function StudentDirectory() {
     setErrors({});
     try {
       await directoryApi.deleteStudent(id);
-      setSuccessMessage(`Student "${name}" has been removed.`);
-      setTimeout(() => setSuccessMessage(''), 3000);
       refreshStudents();
     } catch (err: any) { 
       const error = getErrorMessage(err);
