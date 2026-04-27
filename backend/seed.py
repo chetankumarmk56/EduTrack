@@ -145,9 +145,23 @@ def seed_db():
                     if not db.query(Student).filter(Student.user_id == su.id).first():
                         s = Student(user_id=su.id, name=su.name, parent_id=p.id, school_class_id=room.id, institution_id=inst.id)
                         db.add(s)
-        db.commit()
         print("👥 Students, Parents, Marks, and Attendance populated.")
-        print("✅ Database Seeding Complete (Idempotent)")
+        try:
+            db.commit()
+            print("✅ Database Seeding Complete (Idempotent)")
+        except Exception as e:
+            db.rollback()
+            print(f"❌ SEEDING CRASHED: {str(e)}")
+            print("🔍 Inspecting session objects:")
+            for obj in db:
+                print(f" - Object: {type(obj).__name__}")
+                if hasattr(obj, 'title'):
+                    print(f"   Title: {obj.title}")
+                if hasattr(obj, 'audience'):
+                    print(f"   Audience (ERROR FIELD): {obj.audience}")
+            raise e
+        finally:
+            db.close()
 
     except Exception as e:
         db.rollback()

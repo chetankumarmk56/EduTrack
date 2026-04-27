@@ -19,7 +19,7 @@ engine = create_async_engine(
     pool_size=getattr(settings, "DATABASE_POOL_SIZE", 25),  # Default increased from 20 to 25
     max_overflow=getattr(settings, "DATABASE_MAX_OVERFLOW", 15),  # Default increased from 10 to 15
     pool_recycle=3600,
-    echo=False,  # Set to True for SQL query debugging
+    echo=True,  # Set to True for SQL query debugging
 )
 
 AsyncSessionLocal = async_sessionmaker(
@@ -33,7 +33,8 @@ AsyncSessionLocal = async_sessionmaker(
 # Standard Sync Engine & Session (for seeding/scripts)
 sync_engine = create_engine(
     settings.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://", 1) if "asyncpg" in settings.DATABASE_URL else settings.DATABASE_URL,
-    pool_pre_ping=True
+    pool_pre_ping=True,
+    echo=True
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
 

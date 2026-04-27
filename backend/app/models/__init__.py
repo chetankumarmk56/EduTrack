@@ -5,6 +5,8 @@ from app.models.attendance import Attendance
 from app.models.mark import Mark, Exam
 from app.models.event import Event
 from app.models.communication import Announcement
+import app.models.communication as comm
+print(f"DEBUG: Announcement model loaded from: {comm.__file__}")
 from app.models.transport import Bus, Route, Stop, StudentTransport, BusLocation, NotificationLog
 from app.models.finance import FeeStructure, Payment, PaymentAllocation
 from app.core.database import Base

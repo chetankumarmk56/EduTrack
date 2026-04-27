@@ -20,6 +20,7 @@ class Announcement(Base):
     """
     Robust targeted announcements system.
     """
+    print("DEBUG: Announcement class (CLEAN VERSION) is being defined now!")
     __tablename__ = "announcements"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
