@@ -210,6 +210,7 @@ class AuthService:
                 "institution_id": institution_id,
                 "user": {
                     "id": student.user_id or student.id,
+                    "student_id": student.id,
                     "name": student.name
                 }
             }

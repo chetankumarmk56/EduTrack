@@ -5,13 +5,14 @@ from uuid import UUID
 from enum import Enum
 
 class AnnouncementType(str, Enum):
-    CLASS = "class"
-    STUDENT = "student"
+    CLASS = "CLASS"
+    STUDENT = "STUDENT"
 
 class AnnouncementPriority(str, Enum):
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+
 
 class AnnouncementBase(BaseModel):
     title: str = Field(..., min_length=1, max_length=200, description="Announcement title")

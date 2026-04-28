@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Request, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
@@ -15,7 +15,10 @@ from slowapi.errors import RateLimitExceeded  # ✅ NEW: Rate limit error
 from app import models
 from app.core.database import Base
 
+import os
+
 # Modular Routers
+
 from app.api.routes.auth import router as auth_router
 from app.api.routes.admin import router as admin_router
 from app.api.routes.students import router as students_router
@@ -58,12 +61,15 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
 async def add_security_headers(request: Request, call_next):
     """Add important security headers to all responses"""
     response = await call_next(request)
+
+
     
     # Prevent MIME type sniffing
     response.headers["X-Content-Type-Options"] = "nosniff"
     
-    # Prevent clickjacking
-    response.headers["X-Frame-Options"] = "DENY"
+    # Prevent clickjacking (Allow SAMEORIGIN for PDF previews)
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+
     
     # Prevent XSS
     response.headers["X-XSS-Protection"] = "1; mode=block"
@@ -89,41 +95,36 @@ if settings.ENVIRONMENT != "prod":
         "http://127.0.0.1:5173",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "http://localhost:8000", # Allow backend to call itself if needed
     ])
 
+# Support for mobile/LAN development: Allow all subdomains of localhost if needed,
+# but for standard dev, explicit list is safer with credentials.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=cors_origins,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # ✅ Explicit methods
-    allow_headers=[
-        "Content-Type",
-        "Authorization",
-        "X-Institution-Id",
-        "X-Portal-Role"
-    ],  # ✅ Explicit headers
-    expose_headers=["Content-Type"],
-    max_age=600,  # Cache preflight for 10 minutes
+    allow_origins=cors_origins if settings.ENVIRONMENT == "prod" else ["*"] if not cors_origins else cors_origins,
+    allow_credentials=True, 
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=600,
 )
+
+
+
 
 # Database Exception Handler
 @app.exception_handler(SQLAlchemyError)
 async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
     logger.error(f"Database error on {request.url.path}: {str(exc)}")
-    headers = {
-        "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
-        "Access-Control-Allow-Credentials": "true",
-        "Access-Control-Allow-Methods": "*",
-        "Access-Control-Allow-Headers": "*"
-    }
     return JSONResponse(
         status_code=500,
         content={
             "detail": "A database operation failed. Please try again or contact support.",
             "internal_error": str(exc) if settings.ENVIRONMENT != "prod" else None
-        },
-        headers=headers
+        }
     )
+
 
 # Global Exception Handler
 @app.exception_handler(Exception)
@@ -131,22 +132,15 @@ async def global_exception_handler(request: Request, exc: Exception):
     import traceback
     error_msg = traceback.format_exc()
     logger.critical(f"UNHANDLED SYSTEM EXCEPTION on {request.url.path}: {error_msg}")
-    headers = {
-        "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
-        "Access-Control-Allow-Credentials": "true",
-        "Access-Control-Allow-Methods": "*",
-        "Access-Control-Allow-Headers": "*"
-    }
-    
     return JSONResponse(
         status_code=500,
         content={
             "detail": "An unexpected system error occurred. Our team has been notified.", 
             "error_type": type(exc).__name__,
             "internal_error": str(exc) if settings.ENVIRONMENT != "prod" else None
-        },
-        headers=headers
+        }
     )
+
 
 # --- System Status Endpoints ---
 
@@ -175,7 +169,29 @@ async def version_info():
         "environment": settings.ENVIRONMENT
     }
 
+# Ensure static directories exist
+os.makedirs("static/uploads", exist_ok=True)
+
+# ✅ Custom static file route — replaces app.mount so CORS headers are applied.
+# FastAPI's StaticFiles sub-app bypasses CORSMiddleware entirely, causing
+# "Origin not allowed" errors when the frontend fetches uploaded attachments.
+@app.get("/static/{file_path:path}", include_in_schema=False)
+async def serve_static(file_path: str):
+    full_path = os.path.join("static", file_path)
+    if not os.path.exists(full_path) or os.path.isdir(full_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(
+        full_path,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Expose-Headers": "*",
+        }
+    )
+
 # Router Registrations
+
 app.include_router(auth_router)
 app.include_router(admin_router)
 app.include_router(students_router)

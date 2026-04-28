@@ -12,11 +12,12 @@ import { useApp } from '../../lib/AppContext';
 import { announcementApi, type AnnouncementCreate, type Announcement } from '../../api/announcementApi';
 import { cn } from '../../lib/utils';
 
-const PRIORITY_STYLES = {
-  high:   { bar: 'bg-rose-500',   badge: 'bg-rose-500/10 border-rose-500/20 text-rose-500' },
-  medium: { bar: 'bg-amber-500',  badge: 'bg-amber-500/10 border-amber-500/20 text-amber-500' },
-  low:    { bar: 'bg-brand-indigo', badge: 'bg-brand-indigo/10 border-brand-indigo/20 text-brand-indigo' },
+const PRIORITY_STYLES: Record<string, any> = {
+  HIGH:   { bar: 'bg-rose-500',   badge: 'bg-rose-500/10 border-rose-500/20 text-rose-500' },
+  MEDIUM: { bar: 'bg-amber-500',  badge: 'bg-amber-500/10 border-amber-500/20 text-amber-500' },
+  LOW:    { bar: 'bg-brand-indigo', badge: 'bg-brand-indigo/10 border-brand-indigo/20 text-brand-indigo' },
 };
+
 
 function AttachmentIcon({ url }: { url: string }) {
   const type = announcementApi.getAttachmentType(url);
@@ -44,9 +45,11 @@ export default function TeacherAnnouncements() {
   const [isUploading, setIsUploading]   = useState(false);
 
   const [form, setForm] = useState<AnnouncementCreate>({
-    title: '', message: '', type: 'class', priority: 'low',
+    title: '', message: '', type: 'CLASS', priority: 'LOW',
     class_id: undefined, student_id: undefined, attachment_url: undefined,
   });
+
+
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -86,8 +89,10 @@ export default function TeacherAnnouncements() {
   useEffect(() => { fetchAnnouncements(); }, [teacherId]);
 
   const resetForm = () => {
-    setForm({ title: '', message: '', type: 'class', priority: 'low',
+    setForm({ title: '', message: '', type: 'CLASS', priority: 'LOW',
       class_id: undefined, student_id: undefined, attachment_url: undefined });
+
+
     setUploadedFileName(null);
     setFormError(null);
   };
@@ -96,12 +101,13 @@ export default function TeacherAnnouncements() {
     e.preventDefault();
     setFormError(null);
 
-    if (form.type === 'class' && !form.class_id) {
+    if (form.type === 'CLASS' && !form.class_id) {
       setFormError('Please select a target class.'); return;
     }
-    if (form.type === 'student' && !form.student_id) {
+    if (form.type === 'STUDENT' && !form.student_id) {
       setFormError('Please select a target student.'); return;
     }
+
 
     setIsSubmitting(true);
     try {
@@ -178,8 +184,9 @@ export default function TeacherAnnouncements() {
         <div className="grid grid-cols-3 gap-6">
           {[
             { label: 'Total Sent', value: announcements.length, color: 'text-brand-indigo' },
-            { label: 'Class-Wide', value: announcements.filter(a => a.type === 'class').length, color: 'text-emerald-400' },
-            { label: 'Individual', value: announcements.filter(a => a.type === 'student').length, color: 'text-amber-400' },
+            { label: 'Class-Wide', value: announcements.filter(a => a.type === 'CLASS').length, color: 'text-emerald-400' },
+            { label: 'Individual', value: announcements.filter(a => a.type === 'STUDENT').length, color: 'text-amber-400' },
+
           ].map(({ label, value, color }) => (
             <div key={label} className="obsidian-card p-6 flex flex-col gap-1">
               <p className="text-[10px] font-black uppercase tracking-widest text-text-secondary">{label}</p>
@@ -230,8 +237,9 @@ export default function TeacherAnnouncements() {
 
                   {/* Type icon */}
                   <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center text-brand-indigo shrink-0">
-                    {a.type === 'class' ? <Users className="w-6 h-6" /> : <User className="w-6 h-6" />}
+                    {a.type === 'CLASS' ? <Users className="w-6 h-6" /> : <User className="w-6 h-6" />}
                   </div>
+
 
                   <div className="flex-1 min-w-0 space-y-3">
                     <div className="flex items-center gap-3 flex-wrap">
@@ -239,8 +247,9 @@ export default function TeacherAnnouncements() {
                         {a.priority}
                       </span>
                       <span className="text-[9px] font-bold uppercase tracking-widest text-text-secondary opacity-50">
-                        {a.type === 'class' ? 'Class-Wide' : 'Individual'}
+                        {a.type === 'CLASS' ? 'Class-Wide' : 'Individual'}
                       </span>
+
                       <span className="text-[9px] text-text-secondary opacity-40 flex items-center gap-1 ml-auto">
                         <Clock className="w-3 h-3" /> {formatDate(a.created_at)}
                       </span>
@@ -342,10 +351,11 @@ export default function TeacherAnnouncements() {
                       {(['class', 'student'] as const).map(t => (
                         <button
                           key={t} type="button"
-                          onClick={() => setForm({ ...form, type: t, class_id: undefined, student_id: undefined })}
+                          onClick={() => setForm({ ...form, type: t.toUpperCase() as AnnouncementCreate['type'], class_id: undefined, student_id: undefined })}
+
                           className={cn(
                             'h-14 rounded-2xl border flex items-center justify-center gap-2 font-black text-xs uppercase tracking-widest transition-all',
-                            form.type === t
+                            form.type === t.toUpperCase()
                               ? 'bg-brand-indigo/10 border-brand-indigo text-brand-indigo shadow-[0_0_20px_rgba(99,102,241,0.2)]'
                               : 'bg-white/5 border-white/10 text-text-secondary hover:bg-white/10'
                           )}
@@ -353,6 +363,7 @@ export default function TeacherAnnouncements() {
                           {t === 'class' ? <Users className="w-4 h-4" /> : <User className="w-4 h-4" />}
                           {t === 'class' ? 'Whole Class' : 'Individual Student'}
                         </button>
+
                       ))}
                     </div>
                   </div>
@@ -360,9 +371,10 @@ export default function TeacherAnnouncements() {
                   {/* Target Selector */}
                   <div className="space-y-2">
                     <label className="text-[10px] font-black uppercase tracking-widest text-text-secondary">
-                      {form.type === 'class' ? 'Target Class' : 'Target Student'}
+                      {form.type === 'CLASS' ? 'Target Class' : 'Target Student'}
                     </label>
-                    {form.type === 'class' ? (
+                    {form.type === 'CLASS' ? (
+
                       <select
                         className="input-obsidian h-14"
                         value={form.class_id || ''}
@@ -401,10 +413,11 @@ export default function TeacherAnnouncements() {
                       {(['low', 'medium', 'high'] as const).map(p => (
                         <button
                           key={p} type="button"
-                          onClick={() => setForm({ ...form, priority: p })}
+                          onClick={() => setForm({ ...form, priority: p.toUpperCase() as AnnouncementCreate['priority'] })}
+
                           className={cn(
                             'flex-1 h-12 rounded-xl border font-black text-[10px] uppercase tracking-widest transition-all',
-                            form.priority === p
+                            form.priority === p.toUpperCase()
                               ? p === 'high' ? 'bg-rose-500/10 border-rose-500 text-rose-500'
                                 : p === 'medium' ? 'bg-amber-500/10 border-amber-500 text-amber-500'
                                 : 'bg-brand-indigo/10 border-brand-indigo text-brand-indigo'
@@ -412,6 +425,7 @@ export default function TeacherAnnouncements() {
                           )}
                         >{p}</button>
                       ))}
+
                     </div>
                   </div>
 

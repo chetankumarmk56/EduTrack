@@ -8,13 +8,14 @@ from app.core.database import Base
 from app.models.core import TimestampMixin
 
 class AnnouncementType(str, Enum):
-    CLASS = "class"
-    STUDENT = "student"
+    CLASS = "CLASS"
+    STUDENT = "STUDENT"
 
 class AnnouncementPriority(str, Enum):
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+
 
 class Announcement(Base):
     """

@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_, and_, exists
+from sqlalchemy import select, or_, and_, exists, literal as sa_literal
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
 from uuid import UUID
@@ -13,55 +13,91 @@ class AnnouncementService:
     async def get_announcements_for_parent(
         db: AsyncSession, 
         institution_id: int, 
-        parent_id: int,
+        parent_id: Optional[int],
+        student_id: Optional[int] = None,
         limit: int = 20,
         offset: int = 0
     ) -> List[dict]:
         """
-        Fetch announcements relevant to a parent's children with read status and teacher names.
+        Fetch announcements relevant to a parent's children or a specific student.
+        Handles both parent portal and student portal views.
         """
-        from app.models.directory import Teacher
+        from app.models.directory import Teacher, Student, Parent
         from app.models.core import User as AuthUser
+        from app.models.communication import AnnouncementType
         
-        # 1. Get all children of the parent
-        result = await db.execute(
-            select(Parent)
-            .options(selectinload(Parent.students))
-            .where(Parent.id == parent_id, Parent.institution_id == institution_id)
-        )
-        parent = result.scalars().first()
-        if not parent:
+        student_ids = []
+        class_ids = []
+
+        if parent_id:
+            # 1. Get all children of the parent
+            result = await db.execute(
+                select(Parent)
+                .options(selectinload(Parent.students))
+                .where(Parent.id == parent_id, Parent.institution_id == institution_id)
+            )
+            parent = result.scalars().first()
+            if parent:
+                student_ids = [s.id for s in parent.students]
+                class_ids = [s.school_class_id for s in parent.students if s.school_class_id]
+        
+        if student_id and student_id not in student_ids:
+            # Fetch specific student if requested (e.g. for student portal)
+            res = await db.execute(select(Student).where(Student.id == student_id))
+            s = res.scalars().first()
+            if s:
+                student_ids.append(s.id)
+                if s.school_class_id:
+                    class_ids.append(s.school_class_id)
+
+        if not student_ids and not class_ids:
             return []
         
-        # 2. Extract child_ids and class_ids
-        student_ids = [s.id for s in parent.students]
-        class_ids = [s.school_class_id for s in parent.students if s.school_class_id]
+        from sqlalchemy import func
 
+
+        
         # 3. Fetch announcements with teacher and read status
+        # We use an outer join for teacher to ensure announcements are never hidden if teacher profile is missing
         stmt = select(
             Announcement,
-            AuthUser.name.label("teacher_name"),
-            exists().where(
-                and_(
-                    AnnouncementRead.announcement_id == Announcement.id,
-                    AnnouncementRead.parent_id == parent_id
-                )
-            ).label("is_read")
-        ).join(Teacher, Teacher.id == Announcement.teacher_id)\
-         .join(AuthUser, AuthUser.id == Teacher.user_id)\
-         .where(
-            Announcement.institution_id == institution_id,
-            or_(
-                and_(Announcement.type == AnnouncementType.CLASS, Announcement.class_id.in_(class_ids)),
-                and_(Announcement.type == AnnouncementType.STUDENT, Announcement.student_id.in_(student_ids))
+            func.coalesce(AuthUser.name, "School Faculty").label("teacher_name")
+        )
+        
+        # Add is_read only if we have a parent_id
+        if parent_id:
+            stmt = stmt.add_columns(
+                exists(
+                    select(1).select_from(AnnouncementRead).where(
+                        and_(
+                            AnnouncementRead.announcement_id == Announcement.id,
+                            AnnouncementRead.parent_id == parent_id
+                        )
+                    )
+                ).label("is_read")
             )
-        ).order_by(Announcement.created_at.desc())\
-         .limit(limit).offset(offset)
+        else:
+            stmt = stmt.add_columns(sa_literal(False).label("is_read"))
+
+
+        stmt = stmt.outerjoin(Teacher, Teacher.id == Announcement.teacher_id)\
+             .outerjoin(AuthUser, AuthUser.id == Teacher.user_id)\
+             .where(
+                Announcement.institution_id == institution_id,
+                or_(
+                    and_(Announcement.type == AnnouncementType.CLASS, Announcement.class_id.in_(class_ids)),
+                    and_(Announcement.type == AnnouncementType.STUDENT, Announcement.student_id.in_(student_ids))
+                )
+            ).order_by(Announcement.created_at.desc())\
+             .limit(limit).offset(offset)
+
         
         result = await db.execute(stmt)
         rows = result.all()
         
         enriched = []
+
+
         for row in rows:
             a, t_name, read_status = row
             a_dict = {

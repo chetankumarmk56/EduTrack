@@ -3,8 +3,9 @@ import client from './client';
 export interface AnnouncementCreate {
   title: string;
   message: string;
-  type: 'class' | 'student';
-  priority: 'low' | 'medium' | 'high';
+  type: 'CLASS' | 'STUDENT';
+  priority: 'LOW' | 'MEDIUM' | 'HIGH';
+
   class_id?: number;
   student_id?: number;
   attachment_url?: string;
@@ -14,8 +15,9 @@ export interface Announcement {
   id: string;
   title: string;
   message: string;
-  type: 'class' | 'student';
-  priority: 'low' | 'medium' | 'high';
+  type: 'CLASS' | 'STUDENT';
+  priority: 'LOW' | 'MEDIUM' | 'HIGH';
+
   class_id?: number;
   student_id?: number;
   attachment_url?: string;
@@ -83,5 +85,21 @@ export const announcementApi = {
     if (lower.includes('/video/upload/')) return 'video';
     if (lower.includes('/raw/upload/')) return 'doc';
     return 'other';
+  },
+
+  /**
+   * Generate a force-download URL via the backend /api/announcements/download endpoint.
+   * The backend serves the file with Content-Disposition: attachment, guaranteeing
+   * a Save dialog instead of opening in a new tab.
+   */
+  getDownloadUrl: (path: string): string => {
+    if (!path) return '';
+    const base = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api')
+      .replace(/\/api\/?$/, '');
+    // Build the full file URL to pass to the backend
+    const fullPath = (path.startsWith('http://') || path.startsWith('https://'))
+      ? path
+      : `${base}${path}`;
+    return `${base}/api/announcements/download?file_path=${encodeURIComponent(fullPath)}`;
   },
 };

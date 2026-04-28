@@ -1,64 +1,80 @@
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import FileResponse
+import os
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
-from uuid import UUID
 
-from app.core.database import get_db, AsyncSessionLocal
-from app.core.dependencies import (
-    get_current_user, RoleChecker, UserContext, 
-    require_teacher_strict, require_parent_strict
-)
-from app.schemas.communication import (
-    AnnouncementCreate, 
-    AnnouncementUpdate, 
-    AnnouncementResponse,
-    AnnouncementReadCreate
-)
+from app.core.database import get_db
+from app.core.dependencies import get_current_active_user, UserContext
+from app.schemas.communication import AnnouncementResponse, AnnouncementCreate, AnnouncementUpdate
 from app.services.announcement_service import announcement_service
+from app.models import User, Teacher
 
-router = APIRouter(prefix="/api/announcements", tags=["Announcements"])
+router = APIRouter(
+    prefix="/api/announcements",
+    tags=["announcements"]
+)
 
-# Background Task Wrapper
-async def run_notification_task(announcement_id: UUID):
-    async with AsyncSessionLocal() as db:
-        await announcement_service.trigger_announcement_notifications(db, announcement_id)
+@router.get("/download")
+async def download_announcement_file(file_path: str):
+    """
+    Publicly accessible but secure download handler.
+    Forces download of files stored in static/uploads.
+    Accepts both full URLs (http://...) and relative paths (/static/uploads/...).
+    """
+    from urllib.parse import urlparse
+
+    # If it's a full URL, extract just the path component
+    if file_path.startswith("http://") or file_path.startswith("https://"):
+        parsed = urlparse(file_path)
+        file_path = parsed.path  # e.g. /static/uploads/filename.jpg
+
+    # Sanitize and resolve path
+    relative_path = file_path.lstrip("/")
+    if not relative_path.startswith("static/uploads/"):
+        raise HTTPException(status_code=400, detail="Invalid path")
+
+    full_path = os.path.abspath(relative_path)
+    if not full_path.startswith(os.path.abspath("static/uploads")):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    if not os.path.exists(full_path):
+        raise HTTPException(status_code=404, detail="Not Found")
+
+    return FileResponse(
+        full_path,
+        filename=os.path.basename(full_path),
+        media_type='application/octet-stream'
+    )
+
+
 
 @router.get("/teacher/{teacher_id}", response_model=List[AnnouncementResponse])
 async def get_announcements_for_teacher(
     teacher_id: int,
-    limit: int = 20,
-    offset: int = 0,
     db: AsyncSession = Depends(get_db),
-    user: UserContext = Depends(require_teacher_strict)
+    user: UserContext = Depends(get_current_active_user),
+    limit: int = 20,
+    offset: int = 0
 ):
-    """
-    Teachers can fetch their own announcements with engagement metrics.
-    """
-    # Verify the logged-in teacher matches the requested ID
-    from app.models.directory import Teacher
-    teacher_result = await db.execute(select(Teacher).where(Teacher.user_id == user.id))
-    db_teacher = teacher_result.scalars().first()
-    
-    if not db_teacher or db_teacher.id != teacher_id:
-        raise HTTPException(status_code=403, detail="Unauthorized to access these metrics")
-
+    """Fetch announcements created by a specific teacher."""
     return await announcement_service.get_announcements_for_teacher(
         db, user.institution_id, teacher_id, limit, offset
     )
 
 @router.get("/my", response_model=List[AnnouncementResponse])
 async def get_my_announcements(
-    limit: int = 20,
-    offset: int = 0,
     db: AsyncSession = Depends(get_db),
-    user: UserContext = Depends(get_current_user)
+    user: UserContext = Depends(get_current_active_user),
+    limit: int = 20,
+    offset: int = 0
 ):
     """
     Unified endpoint for students and parents to fetch relevant announcements.
     """
     if user.role == "teacher":
-        from app.models.directory import Teacher
         teacher_result = await db.execute(select(Teacher).where(Teacher.user_id == user.id))
         db_teacher = teacher_result.scalars().first()
         if not db_teacher:
@@ -69,23 +85,31 @@ async def get_my_announcements(
 
     if user.role in ["student", "parent"]:
         from app.models.directory import Parent, Student
-        if user.role == "parent":
-            parent_result = await db.execute(select(Parent).where(Parent.user_id == user.id))
-            db_parent = parent_result.scalars().first()
-            if not db_parent:
-                return []
+        
+        # 1. Try resolving as parent profile
+        parent_result = await db.execute(select(Parent).where(Parent.user_id == user.id))
+        db_parent = parent_result.scalars().first()
+        
+        if db_parent:
             return await announcement_service.get_announcements_for_parent(
-                db, user.institution_id, db_parent.id, limit, offset
+                db, user.institution_id, parent_id=db_parent.id, limit=limit, offset=offset
             )
-        else:
-            # For students: fetch based on their own student record
-            student_result = await db.execute(select(Student).where(Student.user_id == user.id))
-            db_student = student_result.scalars().first()
-            if not db_student or not db_student.parent_id:
-                return []
+            
+        # 2. Try resolving as student profile
+        student_result = await db.execute(select(Student).where(Student.user_id == user.id))
+        db_student = student_result.scalars().first()
+        
+        if db_student:
             return await announcement_service.get_announcements_for_parent(
-                db, user.institution_id, db_student.parent_id, limit, offset
+                db, user.institution_id, 
+                parent_id=db_student.parent_id, 
+                student_id=db_student.id, 
+                limit=limit, offset=offset
             )
+            
+        return []
+
+
 
     return []
 
@@ -95,71 +119,64 @@ async def get_announcements_for_parent(
     limit: int = 20,
     offset: int = 0,
     db: AsyncSession = Depends(get_db),
-    user: UserContext = Depends(require_parent_strict)
+    user: UserContext = Depends(get_current_active_user)
 ):
-    """
-    Fetch announcements relevant to a parent's children with pagination.
-    """
-    # Authorization Check: Ensure parent is accessing their own feed
-    from app.models.directory import Parent
-    parent_result = await db.execute(select(Parent).where(Parent.user_id == user.id))
-    db_parent = parent_result.scalars().first()
-    
-    if not db_parent or db_parent.id != parent_id:
-        raise HTTPException(status_code=403, detail="Unauthorized access to parent feed")
-
+    """Fetch announcements relevant to a parent and their children."""
     return await announcement_service.get_announcements_for_parent(
-        db, user.institution_id, parent_id, limit, offset
+        db, user.institution_id, parent_id=parent_id, limit=limit, offset=offset
     )
 
-@router.post("/", response_model=AnnouncementResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=AnnouncementResponse)
 async def create_announcement(
-    announcement: AnnouncementCreate,
-    background_tasks: BackgroundTasks,
+    data: AnnouncementCreate,
     db: AsyncSession = Depends(get_db),
-    user: UserContext = Depends(require_teacher_strict)
+    user: UserContext = Depends(get_current_active_user)
 ):
-    """
-    Only teachers can create announcements, and only for classes/students they are assigned to.
-    """
-    new_announcement = await announcement_service.create_announcement(db, user.institution_id, user.id, announcement)
+    """Create a new announcement (Teachers only)."""
+    if user.role != "teacher":
+        raise HTTPException(status_code=403, detail="Only teachers can create announcements")
     
-    # Trigger background notifications
-    background_tasks.add_task(run_notification_task, new_announcement.id)
-    
-    return new_announcement
+    teacher_result = await db.execute(select(Teacher).where(Teacher.user_id == user.id))
+    teacher = teacher_result.scalars().first()
+    if not teacher:
+        raise HTTPException(status_code=403, detail="Teacher profile not found")
+        
+    return await announcement_service.create_announcement(
+        db, user.institution_id, teacher.id, data
+    )
 
-@router.post("/read", status_code=status.HTTP_200_OK)
+@router.post("/read")
 async def mark_announcement_as_read(
-    read_data: AnnouncementReadCreate,
+    data: dict,
     db: AsyncSession = Depends(get_db),
-    user: UserContext = Depends(require_parent_strict)
+    user: UserContext = Depends(get_current_active_user)
 ):
-    """
-    Mark an announcement as read (Parent role only).
-    """
-    # Verify the logged-in user is the parent specified or an admin
-    from app.models.directory import Parent
-    parent_result = await db.execute(select(Parent).where(Parent.user_id == user.id))
-    db_parent = parent_result.scalars().first()
-    
-    if not db_parent or db_parent.id != read_data.parent_id:
-         raise HTTPException(status_code=403, detail="Unauthorized to mark as read for this parent")
+    """Mark an announcement as read for a specific parent/student."""
+    announcement_id = data.get("announcement_id")
+    parent_id = data.get("parent_id")
+    if not announcement_id or not parent_id:
+        raise HTTPException(status_code=400, detail="Missing announcement_id or parent_id")
+        
+    await announcement_service.mark_as_read(db, announcement_id, parent_id)
+    return {"message": "Marked as read"}
 
-    success = await announcement_service.mark_as_read(db, read_data.announcement_id, read_data.parent_id)
-    if not success:
-        raise HTTPException(status_code=400, detail="Failed to mark as read")
-    return {"status": "success"}
-
-@router.delete("/{announcement_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{announcement_id}")
 async def delete_announcement(
-    announcement_id: UUID,
+    announcement_id: str,
     db: AsyncSession = Depends(get_db),
-    user: UserContext = Depends(require_teacher_strict)
+    user: UserContext = Depends(get_current_active_user)
 ):
-    """
-    Only the creating teacher can delete an announcement.
-    """
-    success = await announcement_service.delete_announcement(db, announcement_id, user.id)
+    """Delete an announcement (Teacher only)."""
+    if user.role != "teacher":
+        raise HTTPException(status_code=403, detail="Only teachers can delete announcements")
+        
+    teacher_result = await db.execute(select(Teacher).where(Teacher.user_id == user.id))
+    teacher = teacher_result.scalars().first()
+    
+    success = await announcement_service.delete_announcement(
+        db, announcement_id, teacher.id if teacher else None
+    )
     if not success:
-        raise HTTPException(status_code=403, detail="Access denied or announcement not found")
+        raise HTTPException(status_code=404, detail="Announcement not found or access denied")
+        
+    return {"message": "Announcement deleted"}
