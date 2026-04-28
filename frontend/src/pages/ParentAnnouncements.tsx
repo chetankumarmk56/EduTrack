@@ -10,8 +10,8 @@ import {
 
 
 import { announcementApi, type Announcement } from '../api/announcementApi';
-import client from '../api/client';
 import { cn } from '../lib/utils';
+
 
 const PRIORITY_STYLES: Record<string, any> = {
   HIGH: { border: 'border-rose-500/40', bar: 'bg-rose-500', icon: 'text-rose-500', badge: 'bg-rose-500/10 text-rose-500' },
@@ -243,7 +243,7 @@ export default function ParentAnnouncements() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [parentId, setParentId] = useState<number | null>(null);
+
 
   // Profile resolution is handled on-the-fly by the backend announcements endpoint
   useEffect(() => {
@@ -281,13 +281,12 @@ export default function ParentAnnouncements() {
     setAnnouncements(prev => prev.map(x => x.id === a.id ? { ...x, is_read: true } : x));
 
     // 2. Persist to backend
-    if (parentId) {
-      try {
-        await announcementApi.markAsRead(a.id, parentId);
-      } catch (err) {
-        console.warn("Failed to persist mark-as-read:", err);
-      }
+    try {
+      await announcementApi.markAsRead(a.id);
+    } catch (err) {
+      console.warn("Failed to persist mark-as-read:", err);
     }
+
   };
 
 

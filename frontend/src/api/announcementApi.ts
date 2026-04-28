@@ -43,7 +43,7 @@ export const announcementApi = {
   createAnnouncement: (data: AnnouncementCreate): Promise<Announcement> =>
     client.post('/announcements', data).then(res => res.data),
 
-  markAsRead: (announcementId: string, parentId: number) =>
+  markAsRead: (announcementId: string, parentId?: number) =>
     client.post('/announcements/read', {
       announcement_id: announcementId,
       parent_id: parentId,

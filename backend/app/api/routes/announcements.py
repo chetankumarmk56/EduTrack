@@ -154,11 +154,28 @@ async def mark_announcement_as_read(
     """Mark an announcement as read for a specific parent/student."""
     announcement_id = data.get("announcement_id")
     parent_id = data.get("parent_id")
+    
+    # Auto-resolve parent_id from token if not provided (Performance optimization)
+    if not parent_id and user.role in ["student", "parent"]:
+        from app.models.directory import Parent, Student
+        # 1. Try resolving as parent
+        parent_result = await db.execute(select(Parent).where(Parent.user_id == user.id))
+        db_parent = parent_result.scalars().first()
+        if db_parent:
+            parent_id = db_parent.id
+        else:
+            # 2. Try resolving via student's parent link
+            student_result = await db.execute(select(Student).where(Student.user_id == user.id))
+            db_student = student_result.scalars().first()
+            if db_student:
+                parent_id = db_student.parent_id
+
     if not announcement_id or not parent_id:
-        raise HTTPException(status_code=400, detail="Missing announcement_id or parent_id")
+        raise HTTPException(status_code=400, detail="Missing announcement_id or resolvable parent_id")
         
     await announcement_service.mark_as_read(db, announcement_id, parent_id)
     return {"message": "Marked as read"}
+
 
 @router.delete("/{announcement_id}")
 async def delete_announcement(
