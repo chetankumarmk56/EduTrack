@@ -35,6 +35,11 @@ class Settings(BaseSettings):
     
     # AI (Optional)
     GOOGLE_API_KEY: Optional[str] = None
+
+    # Cloudinary (File Storage)
+    CLOUDINARY_CLOUD_NAME: Optional[str] = None
+    CLOUDINARY_API_KEY: Optional[str] = None
+    CLOUDINARY_API_SECRET: Optional[str] = None
     
     # Razorpay
     RAZORPAY_KEY_ID: Optional[str] = "rzp_test_placeholder"

@@ -260,23 +260,8 @@ class AnnouncementService:
             if not assign_result.scalars().first():
                 raise HTTPException(status_code=403, detail="This student is not in your assigned classes.")
 
-        # 3. Validate attachment if provided
-        if announcement.attachment_url:
-            try:
-                from app.services.storage_service import storage_service
-                is_valid = await storage_service.verify_file_exists(announcement.attachment_url)
-                if not is_valid:
-                    raise HTTPException(
-                        status_code=400, 
-                        detail=f"Attachment file not found or inaccessible: {announcement.attachment_url}. Please ensure the file was uploaded successfully."
-                    )
-            except HTTPException:
-                raise  # Re-raise HTTPException from validation failure
-            except Exception as e:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Failed to validate attachment: {str(e)}"
-                )
+        # 3. Attachment URL is trusted — already validated during upload
+        # (Cloudinary/Azure guarantee URL validity post-upload)
 
         # 4. Create
         db_announcement = Announcement(

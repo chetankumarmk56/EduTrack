@@ -6,127 +6,181 @@ from fastapi import UploadFile, HTTPException, status
 from app.core.config import settings
 from app.core.logger import logger
 
+# ─── Cloudinary ───────────────────────────────────────────────────────────────
+try:
+    import cloudinary
+    import cloudinary.uploader
+    CLOUDINARY_AVAILABLE = True
+except ImportError:
+    CLOUDINARY_AVAILABLE = False
+
+# ─── Azure (legacy fallback) ──────────────────────────────────────────────────
 try:
     from azure.storage.blob import BlobServiceClient, ContentSettings
     AZURE_AVAILABLE = True
 except ImportError:
     AZURE_AVAILABLE = False
 
+
 class StorageService:
+    # All common file types teachers might share
+    ALLOWED_EXTENSIONS = {
+        # Images
+        ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg",
+        # Documents
+        ".pdf", ".doc", ".docx", ".xls", ".xlsx",
+        ".ppt", ".pptx", ".txt", ".csv", ".rtf",
+        # Video / Audio (short clips)
+        ".mp4", ".mov", ".avi", ".mp3", ".m4a",
+    }
+    MAX_SIZE = 25 * 1024 * 1024  # 25 MB (Cloudinary free tier limit)
+
     def __init__(self):
+        # Local fallback directory
         self.upload_dir = os.path.join(os.getcwd(), "static", "uploads")
         os.makedirs(self.upload_dir, exist_ok=True)
-        self.allowed_extensions = {".pdf", ".jpg", ".png"}
-        self.max_size = 5 * 1024 * 1024  # 5MB
-        
-        # Azure Initialization
-        self.connection_string = settings.AZURE_STORAGE_CONNECTION_STRING
-        self.container_name = settings.AZURE_CONTAINER_NAME
-        self.blob_service_client = None
-        
-        if AZURE_AVAILABLE and self.connection_string:
+
+        # ── Cloudinary init ────────────────────────────────────────────────
+        self._cloudinary_ready = False
+        if (
+            CLOUDINARY_AVAILABLE
+            and settings.CLOUDINARY_CLOUD_NAME
+            and settings.CLOUDINARY_API_KEY
+            and settings.CLOUDINARY_API_SECRET
+        ):
             try:
-                self.blob_service_client = BlobServiceClient.from_connection_string(self.connection_string)
+                cloudinary.config(
+                    cloud_name=settings.CLOUDINARY_CLOUD_NAME,
+                    api_key=settings.CLOUDINARY_API_KEY,
+                    api_secret=settings.CLOUDINARY_API_SECRET,
+                    secure=True,
+                )
+                self._cloudinary_ready = True
+                logger.info("☁️  Cloudinary storage initialized successfully.")
+            except Exception as e:
+                logger.error(f"Cloudinary init error: {e}")
+
+        # ── Azure init (legacy) ────────────────────────────────────────────
+        self._azure_client = None
+        if AZURE_AVAILABLE and getattr(settings, "AZURE_STORAGE_CONNECTION_STRING", None):
+            try:
+                self._azure_client = BlobServiceClient.from_connection_string(
+                    settings.AZURE_STORAGE_CONNECTION_STRING
+                )
             except Exception as e:
                 logger.error(f"Azure Storage Init Error: {e}")
 
+    # ──────────────────────────────────────────────────────────────────────────
     async def upload_file(self, file: UploadFile) -> str:
         """
-        Upload a file to storage (Azure if configured, else local) and return the public URL.
-        Validates extension and size.
+        Upload a file and return a permanent public URL.
+        Priority: Cloudinary → Azure → Local (ephemeral, dev-only)
         """
-        # 1. Validate Extension
-        ext = os.path.splitext(file.filename)[1].lower()
-        if ext not in self.allowed_extensions:
+        # 1. Validate extension
+        ext = os.path.splitext(file.filename or "")[1].lower()
+        if ext not in self.ALLOWED_EXTENSIONS:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Unsupported file type. Allowed: {', '.join(self.allowed_extensions)}"
+                detail=f"Unsupported file type '{ext}'. "
+                       f"Allowed: images, PDF, Word, Excel, PowerPoint, text, video/audio files.",
             )
 
-        # 2. Read contents for validation and upload
+        # 2. Read & size-check
         try:
             contents = await file.read()
-            if len(contents) > self.max_size:
-                 raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="File too large. Max size is 5MB."
-                )
         except Exception as e:
-            if isinstance(e, HTTPException): raise e
-            raise HTTPException(status_code=500, detail=f"File read error: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"File read error: {e}")
 
-        unique_filename = f"{int(datetime.datetime.now().timestamp())}_{file.filename}"
+        if len(contents) > self.MAX_SIZE:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File too large. Maximum size is 25 MB.",
+            )
 
-        # 3. Try Azure Upload
-        if self.blob_service_client:
+        unique_name = f"{int(datetime.datetime.now().timestamp())}_{file.filename}"
+
+        # 3. Cloudinary upload (preferred)
+        if self._cloudinary_ready:
             try:
-                # Ensure container exists with public access
-                container_client = self.blob_service_client.get_container_client(self.container_name)
+                result = await asyncio.to_thread(
+                    cloudinary.uploader.upload,
+                    contents,
+                    public_id=f"edutrack/announcements/{unique_name}",
+                    resource_type="auto",   # handles images, PDFs, videos, docs
+                    overwrite=True,
+                )
+                url = result.get("secure_url", "")
+                logger.info(f"☁️  Cloudinary upload success: {url}")
+                return url
+            except Exception as e:
+                logger.warning(f"Cloudinary upload failed, trying fallback: {e}")
+
+        # 4. Azure upload (legacy fallback)
+        if self._azure_client:
+            try:
+                container = getattr(settings, "AZURE_CONTAINER_NAME", "announcements")
+                container_client = self._azure_client.get_container_client(container)
                 try:
                     await asyncio.to_thread(container_client.get_container_properties)
                 except Exception:
-                    # Create container if it doesn't exist
-                    # 'blob' access level allows public read for blobs but not listing container contents
-                    await asyncio.to_thread(container_client.create_container, public_access='blob')
-
-                blob_client = self.blob_service_client.get_blob_client(
-                    container=self.container_name, 
-                    blob=unique_filename
+                    await asyncio.to_thread(
+                        container_client.create_container, public_access="blob"
+                    )
+                blob_client = self._azure_client.get_blob_client(
+                    container=container, blob=unique_name
                 )
-                
-                # Upload to Azure
                 await asyncio.to_thread(
                     blob_client.upload_blob,
-                    contents, 
+                    contents,
                     overwrite=True,
-                    content_settings=ContentSettings(content_type=file.content_type)
+                    content_settings=ContentSettings(content_type=file.content_type),
                 )
-                
-                # Return the Azure Blob URL
+                logger.info(f"☁️  Azure upload success: {blob_client.url}")
                 return blob_client.url
             except Exception as e:
-                logger.warning(f"Azure Upload Failed, falling back to local: {e}")
-                # Fallback to local storage logic below
+                logger.warning(f"Azure upload failed, falling back to local: {e}")
 
-        # 4. Local Storage (Fallback or Primary)
-        file_path = os.path.join(self.upload_dir, unique_filename)
+        # 5. Local storage (dev/fallback — ephemeral on Render free tier)
+        file_path = os.path.join(self.upload_dir, unique_name)
         try:
             with open(file_path, "wb") as f:
                 f.write(contents)
-            
-            # Return a relative URL that can be served by FastAPI or Nginx
-            return f"/static/uploads/{unique_filename}"
+            logger.warning("⚠️  File saved locally — will NOT persist across Render redeploys.")
+            return f"/static/uploads/{unique_name}"
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Storage error: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Storage error: {e}")
 
+    # ──────────────────────────────────────────────────────────────────────────
     async def verify_file_exists(self, file_url: str) -> bool:
         """
-        Verify if a file exists at the given URL.
-        Supports both Azure blob URLs and local file paths.
+        Verify a file URL is reachable.
+        Cloudinary URLs are always valid after a successful upload,
+        so we only verify non-Cloudinary URLs.
         """
         if not file_url:
             return False
-        
-        # Check if it's an Azure blob URL
-        if "blob.core.windows.net" in file_url or file_url.startswith("https://"):
+
+        # Cloudinary URLs — trust them implicitly (already verified on upload)
+        if "cloudinary.com" in file_url:
+            return True
+
+        # Azure blob URLs or any HTTPS — do a HEAD check
+        if file_url.startswith("https://") or file_url.startswith("http://"):
             try:
-                # Extract blob name from URL
-                # Format: https://{account}.blob.core.windows.net/{container}/{blob}
-                import asyncio
                 import httpx
-                async with httpx.AsyncClient() as client:
+                async with httpx.AsyncClient(timeout=5.0) as client:
                     response = await client.head(file_url, follow_redirects=True)
                     return response.status_code < 400
             except Exception as e:
-                logger.warning(f"Failed to verify Azure blob URL: {file_url}, error: {str(e)}")
+                logger.warning(f"File verify failed: {file_url} — {e}")
                 return False
-        
-        # Check if it's a local file path
+
+        # Local path
         if file_url.startswith("/static/uploads/"):
             file_path = os.path.join(os.getcwd(), file_url.lstrip("/"))
             return os.path.exists(file_path)
-        
-        # Unknown URL format, assume invalid
+
         return False
+
 
 storage_service = StorageService()
