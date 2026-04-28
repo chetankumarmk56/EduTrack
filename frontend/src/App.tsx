@@ -57,7 +57,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/parent-login" element={<GuestRoute><Login /></GuestRoute>} />
-            
+
             <Route path="/parent" element={
               <ProtectedRoute allowedRoles={['parent', 'student', 'super_admin']}>
                 <DashboardLayout />
@@ -92,7 +92,7 @@ function App() {
               <Route path="transport" element={<TeacherTransport />} />
               <Route path="announcements" element={<TeacherAnnouncements />} />
             </Route>
-            
+
             <Route path="/admin-login" element={<GuestRoute><AdminLogin /></GuestRoute>} />
             <Route path="/admin" element={
               <ProtectedRoute allowedRoles={['admin', 'finance', 'super_admin']}>
