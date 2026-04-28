@@ -34,7 +34,7 @@ function formatDate(iso: string) {
 
 export default function TeacherAnnouncements() {
   const { user } = useAuth();
-  const { teacherDirectory, schoolClasses, students } = useApp() as any;
+  const { teacherDirectory, students } = useApp() as any;
 
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [isLoading, setIsLoading]   = useState(true);
