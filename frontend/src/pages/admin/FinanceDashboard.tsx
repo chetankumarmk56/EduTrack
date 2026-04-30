@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { 
-  TrendingUp, Users, Search, Filter, Plus, 
-  ArrowUpRight, History, CheckCircle2, 
-  AlertCircle, X, Loader2, ShieldCheck, RefreshCw,
+  TrendingUp, Search, Filter, Plus, 
+  ArrowUpRight, CheckCircle2, 
+  AlertCircle, X, Loader2, RefreshCw,
   Phone, MessageCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -10,10 +10,7 @@ import type { FinanceSummaryResponse, PaymentDetails, DefaulterResponse, ClassFi
 import { financeApi } from '../../api/financeApi';
 import { cn } from '../../lib/utils';
 import { useApp } from '../../lib/AppContext';
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart as RePieChart, Pie, Cell
-} from 'recharts';
+// Removed unused recharts imports
 
 export default function FinanceDashboard() {
   const [summary, setSummary] = useState<FinanceSummaryResponse | null>(null);
@@ -87,8 +84,6 @@ export default function FinanceDashboard() {
       setIsSubmitting(false);
     }
   };
-
-  const COLORS = ['#6366f1', '#a855f7', '#ec4899', '#f43f5e', '#f97316'];
 
   const handleBackfill = async () => {
     if (!confirm('This will sync fee records for ALL active students based on their current class fees. Continue?')) return;
