@@ -129,6 +129,14 @@ export const marksApi = {
     deleteTest: async (subject: string, testName: string) => {
         const response = await client.delete(`marks/tests/${subject}/${testName}`);
         return response.data;
+    },
+
+    /**
+     * Fetch dynamic rankings for a student.
+     */
+    getRankings: async (studentId: number) => {
+        const response = await client.get(`marks/${studentId}/rankings`);
+        return response.data;
     }
 };
  

@@ -75,17 +75,19 @@ async def student_login(
     if not auth_data:
         raise HTTPException(status_code=401, detail="Invalid student credentials.")
         
-    # ✅ IMPROVED: Secure cookie settings
+    # ✅ FIXED: Cookie key must use user_id suffix so refresh endpoint pattern
+    # edu_refresh_parent_* can find it. Without the suffix refresh always fails.
     from app.core.config import settings
+    _user_id = auth_data['user']['id']
     response.set_cookie(
-        key="edu_refresh_parent",  # Using 'parent' namespace for student/parent group
+        key=f"edu_refresh_parent_{_user_id}",  # matches pattern edu_refresh_parent_*
         value=auth_data.pop("refresh_token"),
         path="/api/auth/refresh",
-        httponly=True,           # ✅ Not accessible to JavaScript (prevents XSS token theft)
-        secure=True,             # ✅ HTTPS only (no HTTP transmission)
-        samesite="Strict",       # ✅ CSRF prevention (strict cross-site filtering)
+        httponly=True,
+        secure=False,  # set True in production (HTTPS)
+        samesite="Lax",  # Lax allows same-site navigation; Strict can break flows
         domain=settings.COOKIE_DOMAIN if settings.COOKIE_DOMAIN else None,
-        max_age=30 * 60,         # ✅ 30 minutes (was 7 days!)
+        max_age=7 * 24 * 60 * 60,  # 7 days so parents don't have to log in daily
     )
     
     return auth_data

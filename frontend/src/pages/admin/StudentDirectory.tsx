@@ -85,6 +85,8 @@ export default function StudentDirectory() {
 
   const filteredStudents = useMemo(() => {
     if (!selectedSchoolClassId) return [];
+    
+    // 1. Get all students for the section
     let list = students.filter((s: any) => {
       const matchesClass = s.school_class_id === selectedSchoolClassId || 
                            s.school_class?.id === selectedSchoolClassId ||
@@ -92,15 +94,26 @@ export default function StudentDirectory() {
       return matchesClass;
     });
 
+    // 2. Sort alphabetically by name
+    list.sort((a, b) => a.name.localeCompare(b.name));
+
+    // 3. Assign roll numbers based on sorted order
+    let listWithRoll = list.map((s, idx) => ({
+      ...s,
+      roll_number: idx + 1
+    }));
+
+    // 4. Filter by search term (if any)
     if (searchTerm) {
       const lowSearch = searchTerm.toLowerCase();
-      list = list.filter(s => 
+      listWithRoll = listWithRoll.filter(s => 
         s.name.toLowerCase().includes(lowSearch) || 
         s.parent_name?.toLowerCase().includes(lowSearch) ||
-        s.email?.toLowerCase().includes(lowSearch)
+        s.parent_email?.toLowerCase().includes(lowSearch)
       );
     }
-    return list;
+    
+    return listWithRoll;
   }, [students, selectedSchoolClassId, searchTerm]);
 
   // Handlers
@@ -342,14 +355,19 @@ export default function StudentDirectory() {
                     {/* Visual Card Accent */}
                     <div className="absolute top-0 left-0 w-full h-1 aurora-gradient opacity-20 group-hover:opacity-100 transition-opacity" />
                     
-                    <div className={cn("p-8 w-full", viewMode === 'list' && "flex items-center justify-between")}>
-                      <div className="flex items-center gap-6">
+                    <div className={cn("p-8 w-full", viewMode === 'list' && "flex items-center justify-between gap-6")}>
+                      <div className={cn("flex items-center gap-6", viewMode === 'list' && "flex-1 min-w-0")}>
                         <div className="w-20 h-20 rounded-[2.5rem] bg-brand-indigo/10 border border-brand-indigo/20 flex items-center justify-center font-black text-3xl text-brand-indigo relative shadow-inner group-hover:scale-105 transition-transform duration-500">
                           {s.name.charAt(0)}
                           <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-lg bg-emerald-500 border-4 border-obsidian" />
                         </div>
-                        <div className="space-y-2">
-                          <h4 className="font-black text-2xl tracking-tight group-hover:text-brand-indigo transition-colors uppercase italic">{s.name}</h4>
+                        <div className={cn("space-y-2", viewMode === 'grid' && "pr-24")}>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[10px] font-black bg-brand-indigo text-white px-2 py-0.5 rounded-md flex-shrink-0">Roll #{s.roll_number}</span>
+                            <h4 className="font-black text-2xl tracking-tight group-hover:text-brand-indigo transition-colors uppercase italic truncate">
+                              {s.name}
+                            </h4>
+                          </div>
                           <div className="flex flex-wrap items-center gap-3">
                             <span className="text-[9px] font-black tracking-widest uppercase bg-emerald-500/10 text-emerald-500 px-3 py-1 rounded-lg border border-emerald-500/20">Enrolled</span>
                           </div>

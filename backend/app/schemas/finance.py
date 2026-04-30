@@ -112,6 +112,10 @@ class PaymentVerifyResponse(BaseModel):
     message: str
     payment_id: Optional[int] = None
 
+class PaymentCancel(BaseModel):
+    razorpay_order_id: str
+    student_id: int
+
 class ManualPaymentCreate(BaseModel):
     student_id: int
     amount: float
@@ -137,6 +141,9 @@ class DefaulterResponse(BaseModel):
     student_name: str
     total_due: float
     class_name: Optional[str] = None
+    phone: Optional[str] = None
+    class_id: Optional[int] = None
+    grade_id: Optional[int] = None
 
 class CategoryWiseDue(BaseModel):
     fee_type: str
@@ -148,6 +155,9 @@ class StudentDuesResponse(BaseModel):
     student_id: int
     student_name: str
     total_due: float
+    total_paid: float
+    due_date: Optional[date]
+    is_overdue: bool
     breakdown: List[CategoryWiseDue]
 
 class PaginatedPaymentResponse(BaseModel):
@@ -155,6 +165,28 @@ class PaginatedPaymentResponse(BaseModel):
     limit: int
     offset: int
     items: List[PaymentResponse]
+
+class ClassFinanceRow(BaseModel):
+    class_id: int
+    class_name: str         # e.g. "10-A"
+    fee_per_student: float  # total_fee on the SchoolClass
+    total_students: int     # enrolled active students
+    paid_count: int         # students with status=PAID
+    partial_count: int      # students with status=PARTIAL
+    unpaid_count: int       # students with status=UNPAID
+    no_record_count: int    # students with NO StudentFee record at all
+    total_expected: float   # fee_per_student × total_students
+    total_collected: float  # sum of amount_paid across StudentFee records
+    total_pending: float    # sum of due_amount across StudentFee records
+
+class ClassFinanceBreakdownResponse(BaseModel):
+    rows: List[ClassFinanceRow]
+    grand_total_expected: float
+    grand_total_collected: float
+    grand_total_pending: float
+    total_classes_with_fee: int
+    total_students: int
+
 
 class ParentFeeResponse(BaseModel):
     student_name: str

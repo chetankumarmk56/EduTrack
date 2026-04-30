@@ -39,16 +39,20 @@ export default function Attendance() {
   const [filterState, setFilterState] = useState<'all' | 'present' | 'absent' | 'late'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
+  const subjectAttendance = useMemo(() => {
+    return attendance.filter(a => a.subject && a.subject.trim() !== '');
+  }, [attendance]);
+
   const stats = useMemo(() => {
-    const total = attendance.length;
-    const presentCount = attendance.filter(a => a.status.toLowerCase() === 'present' || a.status.toLowerCase() === 'late').length;
+    const total = subjectAttendance.length;
+    const presentCount = subjectAttendance.filter(a => a.status.toLowerCase() === 'present' || a.status.toLowerCase() === 'late').length;
     const absentCount = total - presentCount;
     const rate = total > 0 ? Math.round((presentCount / total) * 100) : 100;
     return { total, present: presentCount, absent: absentCount, rate };
-  }, [attendance]);
+  }, [subjectAttendance]);
 
   const filteredAttendance = useMemo(() => {
-    let list = [...attendance];
+    let list = [...subjectAttendance];
     if (filterState !== 'all') {
       list = list.filter(a => a.status.toLowerCase() === filterState);
     }
@@ -61,7 +65,7 @@ export default function Attendance() {
     }
     // Sort by date descending
     return list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [attendance, filterState, searchQuery]);
+  }, [subjectAttendance, filterState, searchQuery]);
 
   if (!user?.id) return null;
 
@@ -88,7 +92,7 @@ export default function Attendance() {
              </div>
              <div className="px-8 py-6 rounded-[2rem] premium-glass border-2 border-primary/20 shadow-xl shadow-primary/5 flex flex-col items-center">
                 <div className="text-4xl font-black text-primary tracking-tighter"><AnimatedCounter value={stats.total} /></div>
-                <p className="text-[10px] font-black uppercase text-muted-foreground tracking-[0.2em] mt-1">Total Sessions</p>
+                <p className="text-[10px] font-black uppercase text-muted-foreground tracking-[0.2em] mt-1">Total Classes</p>
              </div>
           </div>
         </div>
@@ -115,7 +119,7 @@ export default function Attendance() {
 
                  <div className="space-y-2">
                     {[
-                       { id: 'all', label: 'All Sessions', icon: Users, color: 'primary' },
+                       { id: 'all', label: 'All Classes', icon: Users, color: 'primary' },
                        { id: 'present', label: 'Present', icon: CheckCircle, color: 'emerald-500' },
                        { id: 'absent', label: 'Absent', icon: XCircle, color: 'rose-500' },
                        { id: 'late', label: 'Delayed', icon: Clock, color: 'amber-500' }
@@ -145,7 +149,7 @@ export default function Attendance() {
            <StaggerItem className="lg:col-span-9">
               <div className="premium-glass rounded-[3rem] overflow-hidden shadow-2xl">
                  <div className="px-10 py-8 border-b border-glass-border flex items-center justify-between bg-slate-50">
-                    <h3 className="text-xl font-black text-foreground">Session Log</h3>
+                    <h3 className="text-xl font-black text-foreground">Class Log</h3>
                     <div className="text-xs font-black uppercase text-muted-foreground tracking-widest bg-slate-100 px-4 py-2 rounded-full">
                        Displaying {filteredAttendance.length} matches
                     </div>
@@ -182,7 +186,6 @@ export default function Attendance() {
                                 </td>
                                 <td className="px-10 py-6">
                                    <p className="text-base font-black text-foreground">{record.subject}</p>
-                                   <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest mt-1">Section: {studentProfile?.class_level}-{studentProfile?.section}</p>
                                 </td>
                                 <td className="px-10 py-6 text-right">
                                    <p className="text-sm font-black text-foreground">{new Date(record.date).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}</p>
@@ -197,7 +200,7 @@ export default function Attendance() {
                                          <Calendar className="w-10 h-10 text-muted-foreground/30" />
                                       </div>
                                       <h4 className="text-xl font-black text-foreground">Matrix Empty</h4>
-                                      <p className="text-sm font-medium text-muted-foreground mt-2 max-w-xs mx-auto">None of the recorded sessions match your current filter matrix.</p>
+                                      <p className="text-sm font-medium text-muted-foreground mt-2 max-w-xs mx-auto">None of the recorded classes match your current filter matrix.</p>
                                       <button 
                                        onClick={() => {setFilterState('all'); setSearchQuery('');}}
                                        className="mt-8 px-6 py-3 rounded-2xl bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest hover:shadow-lg shadow-emerald-500/20 transition-all"

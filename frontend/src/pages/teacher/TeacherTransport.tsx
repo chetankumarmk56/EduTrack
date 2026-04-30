@@ -139,7 +139,26 @@ export default function TeacherTransport() {
   }, [assignments]);
 
   return (
-    <div className="premium-page-container animate-fade-in flex flex-col gap-6 h-[calc(100vh-120px)]">
+    <div className="premium-page-container animate-fade-in flex flex-col gap-6 h-[calc(100vh-120px)] relative">
+       {/* WIP Overlay */}
+       <div className="absolute inset-0 z-[100] backdrop-blur-md bg-slate-950/40 rounded-[3rem] flex flex-col items-center justify-center p-12 text-center border border-white/10 overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-transparent to-transparent pointer-events-none" />
+        <div className="relative space-y-8 max-w-2xl">
+          <div className="w-24 h-24 rounded-[2.5rem] bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mx-auto animate-pulse">
+            <Navigation className="w-12 h-12" />
+          </div>
+          <div className="space-y-4">
+            <h2 className="text-5xl font-black tracking-tighter text-white uppercase italic">Logistics <span className="text-indigo-500">Refactoring</span></h2>
+            <p className="text-sm font-medium text-text-secondary leading-relaxed uppercase tracking-widest">
+              The faculty logistics roster and live telemetry stream are undergoing a structural upgrade to support real-time institutional scaling.
+            </p>
+          </div>
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-[10px] font-black text-indigo-400 uppercase tracking-[0.3em]">
+             Engine Stabilization in Progress
+          </div>
+        </div>
+      </div>
+
       {/* HUD Header */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shrink-0">
          <div className="space-y-1">

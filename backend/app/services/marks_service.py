@@ -307,4 +307,97 @@ class MarksService:
             "count": summary.count
         }
 
+    @staticmethod
+    async def get_student_rankings(db: AsyncSession, institution_id: int, student_id: int):
+        from sqlalchemy import func
+        from app.models.academic import SchoolClass
+        
+        # 1. Get student's class and grade info
+        res = await db.execute(select(Student).where(Student.id == student_id))
+        student = res.scalars().first()
+        if not student or not student.school_class_id:
+            return None
+            
+        res = await db.execute(select(SchoolClass).where(SchoolClass.id == student.school_class_id))
+        school_class = res.scalars().first()
+        if not school_class:
+            return None
+            
+        # 2. Get all students in the same grade and same section (class) with names
+        grade_students_res = await db.execute(
+            select(Student.id, Student.name)
+            .join(SchoolClass)
+            .where(SchoolClass.grade_id == school_class.grade_id, Student.institution_id == institution_id)
+        )
+        grade_students_data = {r[0]: r[1] for r in grade_students_res.all()}
+        grade_student_ids = list(grade_students_data.keys())
+        
+        class_students_res = await db.execute(
+            select(Student.id, Student.name)
+            .where(Student.school_class_id == school_class.id, Student.institution_id == institution_id)
+        )
+        class_students_data = {r[0]: r[1] for r in class_students_res.all()}
+        class_student_ids = list(class_students_data.keys())
+        
+        # 3. Helper to calculate overall percentage for a list of students
+        async def calculate_percentages(s_ids):
+            if not s_ids: return {}
+            # Query sum of scores and sum of max_scores per student
+            marks_res = await db.execute(
+                select(
+                    Mark.student_id,
+                    func.sum(Mark.score).label("total_score"),
+                    func.sum(Mark.max_score).label("total_max")
+                )
+                .where(Mark.student_id.in_(s_ids), Mark.institution_id == institution_id)
+                .group_by(Mark.student_id)
+            )
+            pcts = {
+                r.student_id: (r.total_score / r.total_max * 100) if r.total_max > 0 else 0 
+                for r in marks_res.all()
+            }
+            # Fill in 0 for students with no marks
+            for s_id in s_ids:
+                if s_id not in pcts:
+                    pcts[s_id] = 0
+            return pcts
+            
+        grade_percentages = await calculate_percentages(grade_student_ids)
+        class_percentages = await calculate_percentages(class_student_ids)
+        
+        # 4. Helper to determine rank and leaderboard
+        def get_leaderboard(percentages_dict, names_dict):
+            # Sort by percentage desc
+            sorted_items = sorted(percentages_dict.items(), key=lambda x: x[1], reverse=True)
+            leaderboard = []
+            prev_pct = None
+            curr_rank = 0
+            for i, (sid, pct) in enumerate(sorted_items):
+                if pct != prev_pct:
+                    curr_rank = i + 1
+                prev_pct = pct
+                leaderboard.append({
+                    "student_id": sid,
+                    "name": names_dict.get(sid, "Unknown"),
+                    "percentage": round(pct, 2),
+                    "rank": curr_rank
+                })
+            return leaderboard
+
+        grade_leaderboard = get_leaderboard(grade_percentages, grade_students_data)
+        class_leaderboard = get_leaderboard(class_percentages, class_students_data)
+        
+        my_grade_rank = next((item["rank"] for item in grade_leaderboard if item["student_id"] == student_id), None)
+        my_class_rank = next((item["rank"] for item in class_leaderboard if item["student_id"] == student_id), None)
+            
+        return {
+            "grade_rank": my_grade_rank,
+            "grade_total": len(grade_student_ids),
+            "grade_leaderboard": grade_leaderboard,
+            "class_rank": my_class_rank,
+            "class_total": len(class_student_ids),
+            "class_leaderboard": class_leaderboard,
+            "percentage": round(class_percentages.get(student_id, 0), 2)
+        }
+
 marks_service = MarksService()

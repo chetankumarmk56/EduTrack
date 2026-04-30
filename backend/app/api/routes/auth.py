@@ -56,11 +56,11 @@ async def login_for_access_token(
         key=f"edu_refresh_{user.role}_{user.id}",
         value=token_data.pop("refresh_token"),
         path="/api/auth/refresh",
-        httponly=True,           # ✅ Not accessible to JavaScript (prevents XSS token theft)
-        secure=True,             # ✅ HTTPS only (no HTTP transmission)
-        samesite="Strict",       # ✅ CSRF prevention (strict cross-site filtering)
+        httponly=True,
+        secure=settings.COOKIE_SECURE,  # False in dev (HTTP), True in prod (HTTPS)
+        samesite="Lax",                 # Lax: works with SPA navigation (Strict was too restrictive)
         domain=settings.COOKIE_DOMAIN if settings.COOKIE_DOMAIN else None,
-        max_age=30 * 60,         # ✅ 30 minutes(was 7 days!)
+        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
     )
     
     logger.info(f"AUTH_SUCCESS: user_id={user.id}, role={user.role}, institution_id={user.institution_id}")
@@ -89,9 +89,9 @@ async def refresh_access_token(
     refresh_token = None
     
     try:
-        # Search for any cookie matching edu_refresh_{role}_*
+        # Search for any cookie matching edu_refresh_{role}_* (e.g. edu_refresh_parent_60)
         for cookie_name, cookie_value in request.cookies.items():
-            if cookie_name.startswith(f"edu_refresh_{role}_"):
+            if cookie_name.startswith(f"edu_refresh_{role}_") or cookie_name == f"edu_refresh_{role}":
                 # Try to decode this cookie
                 try:
                     payload = decode_access_token(cookie_value)

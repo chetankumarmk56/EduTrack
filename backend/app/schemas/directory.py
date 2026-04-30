@@ -91,6 +91,7 @@ class TeacherBase(BaseModel):
     is_active: Optional[bool] = True
     email: Optional[EmailStr] = None
     phone: Optional[str] = None
+    whatsapp: Optional[str] = None
 
 class TeacherCreate(TeacherBase):
     password: str = Field(..., min_length=10, description="Min 10 chars: uppercase, lowercase, digit, special char")

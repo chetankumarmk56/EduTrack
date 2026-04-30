@@ -38,6 +38,9 @@ class FinanceService:
     ) -> StudentFee:
         """
         Idempotently get or create a StudentFee record.
+        IMPORTANT: If the record exists but has a stale/zero total_amount and the
+        incoming amount is meaningful (>0), this method UPDATES it so that fee
+        changes cascade correctly to existing students.
         """
         from sqlalchemy.exc import IntegrityError
         
@@ -50,6 +53,25 @@ class FinanceService:
         existing = res.scalars().first()
         
         if existing:
+            # Update stale records: if the stored total is different from the incoming amount
+            # (e.g., student was enrolled when fee was 0, now fee has been set)
+            if total_amount > 0 and existing.total_amount != total_amount:
+                old_amount = existing.total_amount
+                existing.total_amount = total_amount
+                existing.due_amount = max(0.0, total_amount - existing.amount_paid)
+                # Recalculate status
+                if existing.due_amount <= 0:
+                    existing.status = StudentFeeStatus.PAID
+                elif existing.amount_paid > 0:
+                    existing.status = StudentFeeStatus.PARTIAL
+                else:
+                    existing.status = StudentFeeStatus.UNPAID
+                if due_date and existing.due_date != due_date:
+                    existing.due_date = due_date
+                logger.info(
+                    f"FEE_UPDATE: Updated StudentFee for Student {student_id}, Class {class_id}: "
+                    f"₹{old_amount} → ₹{total_amount}, due=₹{existing.due_amount}"
+                )
             return existing
 
         # 2. Try to create new
@@ -68,7 +90,7 @@ class FinanceService:
                 )
                 db.add(new_fee)
                 await db.flush() # Flush to trigger unique constraint check
-                logger.info(f"FEE_IDEMPOTENCY: Created new StudentFee for Student {student_id}, Class {class_id}")
+                logger.info(f"FEE_IDEMPOTENCY: Created new StudentFee for Student {student_id}, Class {class_id}, Amount=₹{total_amount}")
                 return new_fee
         except IntegrityError as e:
             logger.warning(f"FEE_IDEMPOTENCY: Constraint violation for Student {student_id}, Class {class_id}. Details: {str(e)}")
@@ -77,7 +99,9 @@ class FinanceService:
             res = await db.execute(stmt)
             return res.scalars().first()
 
+
     async def get_student_dues(self, db: AsyncSession, institution_id: int, student_id: int) -> Optional[StudentDuesResponse]:
+        from datetime import date as date_type
         # Fetch student details
         student_result = await db.execute(
             select(Student).where(Student.id == student_id, Student.institution_id == institution_id)
@@ -87,27 +111,42 @@ class FinanceService:
             return None
 
         # Fetch student fee from StudentFee
-        stmt = select(StudentFee).where(StudentFee.student_id == student_id, StudentFee.institution_id == institution_id)
+        stmt = select(StudentFee).where(
+            StudentFee.student_id == student_id,
+            StudentFee.institution_id == institution_id
+        )
         result = await db.execute(stmt)
         fees = result.scalars().all()
 
         total_due = 0.0
+        total_paid = 0.0
         breakdown = []
+        due_date = None
+        today = date_type.today()
 
         for fee in fees:
             total_due += fee.due_amount
+            total_paid += fee.amount_paid
+            if fee.due_date and (due_date is None or fee.due_date < due_date):
+                due_date = fee.due_date  # use earliest due_date
             if fee.total_amount > 0:
                 breakdown.append(CategoryWiseDue(
-                    fee_type="TUITION", # Map to generic tuition
+                    fee_type="TUITION",
                     total=fee.total_amount,
                     paid=fee.amount_paid,
                     due=fee.due_amount
                 ))
 
+        is_overdue = bool(due_date and due_date < today and total_due > 0)
+
+        # Always return the student record (even with no fees) so payment history can load
         return StudentDuesResponse(
             student_id=student_id,
             student_name=student.name,
             total_due=total_due,
+            total_paid=total_paid,
+            due_date=due_date,
+            is_overdue=is_overdue,
             breakdown=breakdown
         )
 
@@ -256,6 +295,37 @@ class FinanceService:
         return {"valid": True}
 
 
+    async def cancel_razorpay_order(
+        self, 
+        db: AsyncSession, 
+        institution_id: int, 
+        razorpay_order_id: str,
+        student_id: int
+    ) -> bool:
+        """
+        Mark a pending Razorpay order as CANCELLED when user dismisses the modal.
+        """
+        from app.models.finance import Payment, PaymentStatus
+        
+        result = await db.execute(
+            select(Payment).where(
+                Payment.razorpay_order_id == razorpay_order_id,
+                Payment.institution_id == institution_id,
+                Payment.student_id == student_id,
+                Payment.status == PaymentStatus.PENDING
+            )
+        )
+        payment = result.scalars().first()
+        
+        if not payment:
+            logger.warning(f"CANCEL: Pending payment not found for order {razorpay_order_id}")
+            return False
+            
+        payment.status = PaymentStatus.CANCELLED
+        await db.commit()
+        logger.info(f"CANCEL: Payment {payment.id} (Order {razorpay_order_id}) marked as CANCELLED")
+        return True
+
     async def verify_razorpay_payment(
         self, 
         db: AsyncSession, 
@@ -348,11 +418,15 @@ class FinanceService:
 
     async def allocate_payment(self, db: AsyncSession, payment_id: int):
         """
-        Distribute a successful payment across student fees based on priority.
-        Logic:
-        1. Get payment amount
-        2. Fetch fee_structure sorted by priority ASC
-        3. For each fee: allocate remaining amount, update paid_amount, insert allocation
+        Create PaymentAllocation audit records for a successful payment.
+        
+        Issue #5 Fix: Works against StudentFee (live source of truth) instead of the
+        legacy FeeStructure table. FeeStructure is NOT updated — dues are solely tracked
+        in StudentFee via _update_student_fee() which is called separately by the caller.
+        
+        This method's sole responsibility is creating the PaymentAllocation ledger entries
+        (used in admin Finance Dashboard for audit trail) and the PaymentTransaction
+        idempotency record.
         """
         # Fetch the payment
         stmt = select(Payment).where(Payment.id == payment_id)
@@ -361,61 +435,76 @@ class FinanceService:
         if not payment or payment.status != "SUCCESS":
             return
 
-        # Fetch fee structures for this student, sorted by priority
-        fee_stmt = select(FeeStructure).where(
-            FeeStructure.student_id == payment.student_id
-        ).order_by(FeeStructure.priority.asc())
+        logger.info(f"ALLOCATION: Starting for Payment {payment_id}, Student {payment.student_id}, Amount ₹{payment.amount}")
+
+        # Fetch StudentFee records for this student (authoritative source)
+        from app.models.finance import StudentFee
+        fee_stmt = select(StudentFee).where(
+            StudentFee.student_id == payment.student_id
+        ).order_by(StudentFee.class_id.asc())  # Stable ordering
         fee_result = await db.execute(fee_stmt)
-        fees = fee_result.scalars().all()
+        student_fees = fee_result.scalars().all()
 
         remaining_payment = payment.amount
-        logger.info(f"Starting allocation for Payment ID {payment_id} (Student: {payment.student_id}, Amount: {payment.amount})")
-
         allocated_count = 0
-        for fee in fees:
-            if remaining_payment <= 0:
-                break
-            
-            # Calculate how much can be allocated to this fee
-            due_on_fee = max(0.0, fee.total_amount - fee.paid_amount)
-            if due_on_fee <= 0:
-                continue
 
-            allocation_amount = min(remaining_payment, due_on_fee)
-            
-            # Update fee paid amount
-            fee.paid_amount += allocation_amount
-            
-            # Create allocation record
+        if student_fees:
+            for sf in student_fees:
+                if remaining_payment <= 0:
+                    break
+                
+                due_on_fee = max(0.0, sf.due_amount)
+                if due_on_fee <= 0:
+                    continue
+
+                allocation_amount = min(remaining_payment, due_on_fee)
+
+                # Create PaymentAllocation ledger record (audit trail only — does NOT modify StudentFee)
+                allocation = PaymentAllocation(
+                    payment_id=payment.id,
+                    fee_type="TUITION",  # Primary fee type from StudentFee
+                    allocated_amount=allocation_amount,
+                    institution_id=payment.institution_id
+                )
+                db.add(allocation)
+
+                remaining_payment -= allocation_amount
+                allocated_count += 1
+                logger.debug(f"ALLOCATION: ₹{allocation_amount} mapped to StudentFee {sf.id}. Remaining: ₹{remaining_payment}")
+        else:
+            # No StudentFee records: create a single catch-all allocation record for the full amount
+            logger.warning(f"ALLOCATION: No StudentFee records for Student {payment.student_id}. Creating generic TUITION allocation.")
             allocation = PaymentAllocation(
                 payment_id=payment.id,
-                fee_type=fee.fee_type,
-                allocated_amount=allocation_amount,
+                fee_type="TUITION",
+                allocated_amount=payment.amount,
                 institution_id=payment.institution_id
             )
             db.add(allocation)
-            
-            # Log transaction for audit trail
+            allocated_count = 1
+
+        # Idempotency record (used to prevent duplicate webhook processing)
+        razorpay_pid = payment.razorpay_payment_id or f"manual_{payment.id}"
+        existing_txn = await db.execute(
+            select(PaymentTransaction).where(PaymentTransaction.razorpay_payment_id == razorpay_pid)
+        )
+        if not existing_txn.scalars().first():
             transaction = PaymentTransaction(
-                razorpay_payment_id=payment.razorpay_payment_id or f"manual_{payment.id}",
+                razorpay_payment_id=razorpay_pid,
                 order_id=payment.razorpay_order_id or f"order_manual_{payment.id}",
-                amount=allocation_amount,
-                status="allocated",
-                metadata={"fee_type": fee.fee_type, "allocation_id": allocation.id}
+                amount=payment.amount,
+                status="allocated"
             )
             db.add(transaction)
-            
-            remaining_payment -= allocation_amount
-            allocated_count += 1
-            logger.debug(f"Allocated {allocation_amount} to {fee.fee_type} for Student {payment.student_id}. Remaining: {remaining_payment}")
 
-        logger.info(f"Allocation Engine completed. Created {allocated_count} allocation records. Unallocated balance: {remaining_payment}")
-        # Note: We assume the caller handles commit
+        logger.info(f"ALLOCATION: Completed for Payment {payment_id}. Created {allocated_count} allocation records.")
         await db.flush()
 
     async def allocate_payment_to_fees(self, db: AsyncSession, payment_id: int):
         # Deprecated: use allocate_payment
         await self.allocate_payment(db, payment_id)
+
+
 
     async def record_manual_payment(
         self, 
@@ -658,6 +747,123 @@ class FinanceService:
             category_pending=cat_pending
         )
 
+    async def get_class_finance_breakdown(self, db: AsyncSession, institution_id: int):
+        """
+        Per-class financial breakdown: for every SchoolClass with a fee defined,
+        return student counts (paid/partial/unpaid/no-record), expected, collected, and pending.
+        Fully dynamic — no hardcoded data.
+        """
+        from app.schemas.finance import ClassFinanceRow, ClassFinanceBreakdownResponse
+        from app.models.academic import Grade
+
+        # 1. Fetch all SchoolClasses in this institution
+        sc_res = await db.execute(
+            select(SchoolClass)
+            .where(SchoolClass.institution_id == institution_id)
+            .order_by(SchoolClass.display_name)
+        )
+        school_classes = sc_res.scalars().all()
+
+        rows = []
+        grand_total_expected = 0.0
+        grand_total_collected = 0.0
+        grand_total_pending = 0.0
+        total_students_all = 0
+
+        for sc in school_classes:
+            # Resolve fee_per_student (3-layer: total_fee → tuition_fee → Grade.tuition_fee)
+            fee_per_student = sc.total_fee or sc.tuition_fee or 0.0
+            if fee_per_student == 0.0 and sc.grade_id:
+                grade_res = await db.execute(select(Grade).where(Grade.id == sc.grade_id))
+                grade = grade_res.scalars().first()
+                if grade:
+                    fee_per_student = grade.tuition_fee or 0.0
+
+            # 2. Count all active students in this class
+            student_count_res = await db.execute(
+                select(func.count(Student.id)).where(
+                    Student.school_class_id == sc.id,
+                    Student.is_active == True
+                )
+            )
+            total_students = student_count_res.scalar() or 0
+
+            if total_students == 0 and fee_per_student == 0.0:
+                continue  # Skip empty classes with no fee
+
+            # 3. Count PAID / PARTIAL / UNPAID and aggregate amounts using individual queries
+            # (individual queries are cleaner and avoid SQLAlchemy CAST issues)
+
+            paid_res = await db.execute(
+                select(func.count(StudentFee.id)).where(
+                    StudentFee.class_id == sc.id,
+                    StudentFee.status == StudentFeeStatus.PAID.value
+                )
+            )
+            partial_res = await db.execute(
+                select(func.count(StudentFee.id)).where(
+                    StudentFee.class_id == sc.id,
+                    StudentFee.status == StudentFeeStatus.PARTIAL.value
+                )
+            )
+            unpaid_res = await db.execute(
+                select(func.count(StudentFee.id)).where(
+                    StudentFee.class_id == sc.id,
+                    StudentFee.status == StudentFeeStatus.UNPAID.value
+                )
+            )
+            collected_res = await db.execute(
+                select(func.sum(StudentFee.amount_paid)).where(StudentFee.class_id == sc.id)
+            )
+            pending_res = await db.execute(
+                select(func.sum(StudentFee.due_amount)).where(StudentFee.class_id == sc.id)
+            )
+
+            paid_count = paid_res.scalar() or 0
+            partial_count = partial_res.scalar() or 0
+            unpaid_count = unpaid_res.scalar() or 0
+            total_collected = collected_res.scalar() or 0.0
+            total_pending = pending_res.scalar() or 0.0
+            fee_record_count = paid_count + partial_count + unpaid_count
+
+            # Students with no StudentFee record (enrolled but sync hasn't run)
+            no_record_count = max(0, total_students - fee_record_count)
+
+            total_expected = fee_per_student * total_students
+
+            grand_total_expected += total_expected
+            grand_total_collected += total_collected
+            grand_total_pending += total_pending
+            total_students_all += total_students
+
+            class_name = sc.display_name or f"Class {sc.grade_id}-{sc.section_id}"
+
+            rows.append(ClassFinanceRow(
+                class_id=sc.id,
+                class_name=class_name,
+                fee_per_student=fee_per_student,
+                total_students=total_students,
+                paid_count=paid_count,
+                partial_count=partial_count,
+                unpaid_count=unpaid_count,
+                no_record_count=no_record_count,
+                total_expected=total_expected,
+                total_collected=total_collected,
+                total_pending=total_pending
+            ))
+
+        total_classes_with_fee = sum(1 for r in rows if r.fee_per_student > 0)
+
+        return ClassFinanceBreakdownResponse(
+            rows=rows,
+            grand_total_expected=grand_total_expected,
+            grand_total_collected=grand_total_collected,
+            grand_total_pending=grand_total_pending,
+            total_classes_with_fee=total_classes_with_fee,
+            total_students=total_students_all
+        )
+
+
     async def get_defaulters(self, db: AsyncSession, institution_id: int) -> List[DefaulterResponse]:
         """
         Identify students with outstanding balances.
@@ -666,7 +872,10 @@ class FinanceService:
             Student.id,
             Student.name,
             func.sum(StudentFee.due_amount).label("total_due"),
-            SchoolClass.display_name.label("class_name")
+            SchoolClass.display_name.label("class_name"),
+            Student.parent_phone.label("phone"),
+            SchoolClass.id.label("class_id"),
+            SchoolClass.grade_id.label("grade_id")
         ).join(
             StudentFee, Student.id == StudentFee.student_id
         ).join(
@@ -674,7 +883,7 @@ class FinanceService:
         ).where(
             Student.institution_id == institution_id
         ).group_by(
-            Student.id, Student.name, SchoolClass.display_name
+            Student.id, Student.name, SchoolClass.display_name, Student.parent_phone, SchoolClass.id, SchoolClass.grade_id
         ).having(
             func.sum(StudentFee.due_amount) > 0
         ).order_by(
@@ -687,7 +896,10 @@ class FinanceService:
                 student_id=row[0],
                 student_name=row[1],
                 total_due=row[2],
-                class_name=row[3]
+                class_name=row[3],
+                phone=row[4],
+                class_id=row[5],
+                grade_id=row[6]
             ) for row in result.all()
         ]
 

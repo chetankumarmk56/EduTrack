@@ -16,6 +16,7 @@ class PaymentStatus(str, enum.Enum):
     PENDING = "PENDING"
     SUCCESS = "SUCCESS"
     FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
 
 class FeeType(str, enum.Enum):
     TUITION = "TUITION"

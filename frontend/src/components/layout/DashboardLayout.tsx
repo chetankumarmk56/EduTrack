@@ -33,7 +33,7 @@ export default function DashboardLayout() {
         <TopNav />
         
         <main className="flex-1 p-4 md:p-6 overflow-y-auto pb-32 md:pb-8">
-          <AnimatePresence mode="wait">
+          <AnimatePresence>
             <PageWrapper key={location.pathname} speed="smooth">
               <Outlet />
             </PageWrapper>

@@ -71,7 +71,10 @@ export default function ContactList() {
       (c.parentName?.toLowerCase().includes(search.toLowerCase()) ?? false) ||
       (c.phone?.includes(search) ?? false)
     );
-    if (filtered.length > 0) acc[key] = filtered;
+    if (filtered.length > 0) {
+      // Standardized alphabetical sorting for roll assignment
+      acc[key] = filtered.sort((a, b) => a.studentName.localeCompare(b.studentName));
+    }
     return acc;
   }, {});
 
@@ -216,9 +219,14 @@ export default function ContactList() {
                           transition={{ delay: idx * 0.03 }}
                           className="flex items-center gap-4 px-5 py-3.5 hover:bg-white/5 transition-colors group"
                         >
-                          {/* Avatar */}
-                          <div className="h-10 w-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-sm shrink-0">
-                            {contact.studentName.charAt(0).toUpperCase()}
+                          {/* Avatar & Roll */}
+                          <div className="relative">
+                            <div className="h-10 w-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-sm shrink-0">
+                              {contact.studentName.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="absolute -top-1.5 -left-1.5 bg-brand-indigo text-white text-[8px] font-black px-1.5 py-0.5 rounded-md shadow-lg">
+                              #{idx + 1}
+                            </div>
                           </div>
 
                           {/* Student & Parent Info */}

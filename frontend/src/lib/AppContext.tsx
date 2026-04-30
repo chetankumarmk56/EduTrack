@@ -368,6 +368,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
          }).catch(() => {
             if (user?.id) fetchStudentData(user.id);
          });
+
+         // Load assigned teachers for students/parents to populate the performance cards
+         directoryApi.getMyTeachers().then(tList => {
+            setTeachers(tList);
+            localStorage.setItem('edu_cache_teachers', JSON.stringify(tList));
+         }).catch(err => console.error("Failed to load student teachers:", err));
       }
       
       // OPTIMIZATION: Defer non-critical notifications to load after UI renders

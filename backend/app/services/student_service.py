@@ -7,6 +7,8 @@ from app.core.security import get_password_hash
 from app.models.directory import Student
 from typing import List, Optional
 from app.core.cache import get_cache, set_cache, delete_cache_pattern
+from app.core.logger import logger
+
 
 class StudentService:
     @staticmethod
@@ -342,7 +344,7 @@ class StudentService:
             "role": role,
             "institution_id": institution_id,
             "user": {
-                "id": student.user_id or student.id,
+                "id": student.id,
                 "name": student.name
             }
         }
@@ -351,25 +353,64 @@ class StudentService:
     async def _sync_student_fee(db: AsyncSession, student_id: int, class_id: int, institution_id: int):
         """
         Ensures a StudentFee record exists for the given student and class.
-        Fetches fee structure from the Class model.
+        Resolution order for the fee amount (Issue #1 Fix):
+          1. SchoolClass.total_fee (set during deploy_segment or create_school_class)
+          2. SchoolClass.tuition_fee (direct fee column)
+          3. Grade.tuition_fee (parent grade — definitive source of truth)
+        Self-heals SchoolClass if total_fee was 0 but Grade has a fee defined.
         """
-        from app.models.academic import SchoolClass
+        from app.models.academic import SchoolClass, Grade
         from app.services.finance_service import finance_service
-        
-        # 1. Fetch class fee structure
+
+        # 1. Fetch the SchoolClass
         class_res = await db.execute(select(SchoolClass).where(SchoolClass.id == class_id))
         school_class = class_res.scalars().first()
         if not school_class:
-            return # Should not happen if data is consistent
+            return
 
-        # 2. Idempotent Get or Create
+        # 2. Resolve total_fee through three layers of fallback
+        total_amount = school_class.total_fee or 0.0
+
+        if total_amount == 0.0:
+            # Layer 2: try SchoolClass.tuition_fee directly
+            total_amount = school_class.tuition_fee or 0.0
+
+        if total_amount == 0.0 and school_class.grade_id:
+            # Layer 3: fall back to Grade.tuition_fee (source of truth from Admin setup)
+            grade_res = await db.execute(select(Grade).where(Grade.id == school_class.grade_id))
+            grade = grade_res.scalars().first()
+            if grade and (grade.tuition_fee or 0.0) > 0:
+                total_amount = grade.tuition_fee
+                # Self-heal: write resolved fee back to SchoolClass for future consistency
+                school_class.tuition_fee = total_amount
+                school_class.total_fee = total_amount
+                logger.info(
+                    f"FEE_SYNC: SchoolClass {class_id} had total_fee=0; "
+                    f"self-healed from Grade {school_class.grade_id} → ₹{total_amount}"
+                )
+
+        # 3. Resolve due_date — prefer class, fall back to grade
+        due_date = school_class.fee_due_date
+        if not due_date and school_class.grade_id:
+            grade_res2 = await db.execute(select(Grade).where(Grade.id == school_class.grade_id))
+            grade2 = grade_res2.scalars().first()
+            if grade2:
+                due_date = grade2.fee_due_date
+
+        logger.info(
+            f"FEE_SYNC: Syncing StudentFee for Student {student_id}, "
+            f"Class {class_id}, Amount=₹{total_amount}, DueDate={due_date}"
+        )
+
+        # 4. Idempotent Get or Create
         await finance_service.get_or_create_student_fee(
-            db, 
+            db,
             student_id=student_id,
             class_id=class_id,
             institution_id=institution_id,
-            total_amount=school_class.total_fee or 0.0,
-            due_date=school_class.fee_due_date
+            total_amount=total_amount,
+            due_date=due_date
         )
 
 student_service = StudentService()
+

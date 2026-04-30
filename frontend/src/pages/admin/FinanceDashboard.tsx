@@ -2,24 +2,33 @@ import { useState, useEffect } from 'react';
 import { 
   TrendingUp, Users, Search, Filter, Plus, 
   ArrowUpRight, History, CheckCircle2, 
-  AlertCircle, X, Loader2, ShieldCheck
+  AlertCircle, X, Loader2, ShieldCheck, RefreshCw,
+  Phone, MessageCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import type { FinanceSummaryResponse, PaymentDetails, DefaulterResponse } from '../../api/financeApi';
+import type { FinanceSummaryResponse, PaymentDetails, DefaulterResponse, ClassFinanceBreakdownResponse } from '../../api/financeApi';
 import { financeApi } from '../../api/financeApi';
 import { cn } from '../../lib/utils';
+import { useApp } from '../../lib/AppContext';
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, 
-  Tooltip, ResponsiveContainer, Cell, Pie, PieChart as RePieChart
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart as RePieChart, Pie, Cell
 } from 'recharts';
 
 export default function FinanceDashboard() {
   const [summary, setSummary] = useState<FinanceSummaryResponse | null>(null);
   const [payments, setPayments] = useState<PaymentDetails[]>([]);
   const [defaulters, setDefaulters] = useState<DefaulterResponse[]>([]);
+  const [classBreakdown, setClassBreakdown] = useState<ClassFinanceBreakdownResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'ledger' | 'defaulters'>('overview');
+  const [activeTab, setActiveTab] = useState<'classes' | 'ledger' | 'defaulters'>('classes');
+  const { grades, schoolClasses } = useApp();
+  const [filterGradeId, setFilterGradeId] = useState<number | null>(null);
+  const [filterClassId, setFilterClassId] = useState<number | null>(null);
+  const [ledgerMode, setLedgerMode] = useState<string>('ALL');
+  const [ledgerStatus, setLedgerStatus] = useState<string>('ALL');
+  const [ledgerSearch, setLedgerSearch] = useState('');
 
   // Manual Payment Form State
   const [manualForm, setManualForm] = useState({
@@ -30,6 +39,8 @@ export default function FinanceDashboard() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formStatus, setFormStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
 
   useEffect(() => {
     loadAllData();
@@ -38,14 +49,16 @@ export default function FinanceDashboard() {
   const loadAllData = async () => {
     try {
       setIsLoading(true);
-      const [sumData, payData, defData] = await Promise.all([
+      const [sumData, payData, defData, cbData] = await Promise.all([
         financeApi.getSummary(),
         financeApi.getAllPayments({ limit: 50 }),
-        financeApi.getDefaulters()
+        financeApi.getDefaulters(),
+        financeApi.getClassBreakdown()
       ]);
       setSummary(sumData);
       setPayments(payData?.items || []);
       setDefaulters(defData);
+      setClassBreakdown(cbData);
     } catch (err) {
       console.error("Dashboard Data Fetch Error:", err);
     } finally {
@@ -77,6 +90,21 @@ export default function FinanceDashboard() {
 
   const COLORS = ['#6366f1', '#a855f7', '#ec4899', '#f43f5e', '#f97316'];
 
+  const handleBackfill = async () => {
+    if (!confirm('This will sync fee records for ALL active students based on their current class fees. Continue?')) return;
+    try {
+      setIsSyncing(true);
+      setSyncResult(null);
+      const result = await financeApi.backfillFees();
+      setSyncResult(result.message);
+      loadAllData();
+    } catch (err: any) {
+      setSyncResult(`Error: ${err.message || 'Sync failed'}`);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="h-full flex flex-col items-center justify-center pt-32 p-4 text-center">
@@ -85,6 +113,17 @@ export default function FinanceDashboard() {
       </div>
     );
   }
+  const filteredPayments = (payments || []).filter(p => {
+    const matchesSearch = !ledgerSearch || 
+      p.id.toString().includes(ledgerSearch) ||
+      p.student_id.toString().includes(ledgerSearch) ||
+      (p as any).student_name?.toLowerCase().includes(ledgerSearch.toLowerCase());
+    
+    const matchesMode = ledgerMode === 'ALL' || p.payment_mode === ledgerMode;
+    const matchesStatus = ledgerStatus === 'ALL' || p.status === ledgerStatus;
+    
+    return matchesSearch && matchesMode && matchesStatus;
+  });
 
   return (
     <div className="space-y-10 pb-20">
@@ -100,7 +139,7 @@ export default function FinanceDashboard() {
         </div>
 
         <div className="flex items-center gap-2 p-1.5 bg-slate-900/50 backdrop-blur-md rounded-2xl border border-white/5 shadow-2xl">
-          {(['overview', 'ledger', 'defaulters'] as const).map((tab) => (
+          {(['classes', 'ledger', 'defaulters'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -115,6 +154,16 @@ export default function FinanceDashboard() {
             </button>
           ))}
           <div className="w-px h-6 bg-white/10 mx-2" />
+          <button
+            onClick={handleBackfill}
+            disabled={isSyncing}
+            title="Sync fee records for all active students based on current class fees"
+            className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-emerald-500/20 hover:scale-105 active:scale-95 transition-all disabled:opacity-60"
+          >
+            {isSyncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            Sync Fees
+          </button>
+          <div className="w-px h-6 bg-white/10 mx-2" />
           <button 
             onClick={() => {
               setManualForm({ student_id: '', amount: '', mode: 'CASH', note: '' });
@@ -128,132 +177,93 @@ export default function FinanceDashboard() {
         </div>
       </div>
 
+      {/* Sync Result Banner */}
+      {syncResult && (
+        <div className={cn(
+          "p-4 rounded-2xl flex items-center gap-3 text-xs font-black uppercase tracking-widest border",
+          syncResult.startsWith('Error') 
+            ? "bg-rose-500/10 border-rose-500/20 text-rose-600" 
+            : "bg-emerald-500/10 border-emerald-500/20 text-emerald-600"
+        )}>
+          {syncResult.startsWith('Error') ? <AlertCircle className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
+          {syncResult}
+          <button onClick={() => setSyncResult(null)} className="ml-auto opacity-40 hover:opacity-100"><X className="w-4 h-4" /></button>
+        </div>
+      )}
+
       <AnimatePresence mode="wait">
-        {activeTab === 'overview' && (
-          <motion.div
-            key="overview"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="space-y-12"
-          >
-            {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <div className="premium-glass p-8 rounded-[2.5rem] border-glass-border shadow-xl hover:shadow-2xl transition-all relative overflow-hidden group">
-                <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-3xl -mr-12 -mt-12 group-hover:scale-150 transition-transform duration-700" />
-                <div className="flex items-center justify-between mb-6">
-                  <div className="h-12 w-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center text-emerald-500">
-                    <TrendingUp className="w-6 h-6" />
-                  </div>
-                  <div className="flex items-center gap-1 text-emerald-500 font-bold text-xs">
-                    <ArrowUpRight className="w-4 h-4" /> Live
-                  </div>
-                </div>
-                <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest mb-1">Total Collected</p>
-                <p className="text-4xl font-black text-foreground">₹{summary?.total_collected.toLocaleString()}</p>
-              </div>
 
-              <div className="premium-glass p-8 rounded-[2.5rem] border-glass-border shadow-xl hover:shadow-2xl transition-all relative overflow-hidden group">
-                <div className="absolute top-0 right-0 w-24 h-24 bg-rose-500/5 rounded-full blur-3xl -mr-12 -mt-12 group-hover:scale-150 transition-transform duration-700" />
-                <div className="flex items-center justify-between mb-6">
-                  <div className="h-12 w-12 rounded-2xl bg-rose-500/10 flex items-center justify-center text-rose-500">
-                    <History className="w-6 h-6" />
+        {activeTab === 'classes' && (
+          <motion.div key="classes" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-8">
+            {/* Grand Totals */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+              {[
+                { label: 'Classes with Fees', value: classBreakdown?.total_classes_with_fee ?? '—', color: 'text-indigo-500', bg: 'bg-indigo-500/10' },
+                { label: 'Total Collected', value: summary ? `₹${summary.total_collected.toLocaleString()}` : '—', color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+                { label: 'Total Expected', value: classBreakdown ? `₹${classBreakdown.grand_total_expected.toLocaleString()}` : '—', color: 'text-amber-500', bg: 'bg-amber-500/10' },
+                { label: 'Total Pending', value: classBreakdown ? `₹${classBreakdown.grand_total_pending.toLocaleString()}` : '—', color: 'text-rose-500', bg: 'bg-rose-500/10' },
+              ].map((s, i) => (
+                <div key={i} className="premium-glass p-8 rounded-[2.5rem] border-glass-border shadow-xl">
+                  <div className={cn('h-10 w-10 rounded-xl flex items-center justify-center mb-4', s.bg)}>
+                    <TrendingUp className={cn('w-5 h-5', s.color)} />
                   </div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">{s.label}</p>
+                  <p className={cn('text-3xl font-black', s.color)}>{s.value}</p>
                 </div>
-                <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest mb-1">Dues Pending</p>
-                <p className="text-4xl font-black text-foreground">₹{summary?.total_pending.toLocaleString()}</p>
-              </div>
-
-              <div className="premium-glass p-8 rounded-[2.5rem] border-glass-border shadow-xl hover:shadow-2xl transition-all relative overflow-hidden group">
-                <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 rounded-full blur-3xl -mr-12 -mt-12 group-hover:scale-110" />
-                <div className="flex items-center gap-4 mb-6">
-                  <div className="h-12 w-12 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-indigo-500">
-                    <Users className="w-6 h-6" />
-                  </div>
-                </div>
-                <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest mb-1">Defaulter Count</p>
-                <p className="text-4xl font-black text-foreground">{defaulters.length}</p>
-              </div>
-
-              <div className="premium-glass p-8 rounded-[2.5rem] border-glass-border shadow-xl hover:shadow-2xl transition-all relative overflow-hidden group border-primary/10">
-                <div className="absolute top-0 right-0 w-24 h-24 bg-primary/10 rounded-full blur-3xl -mr-12 -mt-12" />
-                <div className="flex items-center gap-4 mb-6">
-                  <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
-                    <ShieldCheck className="w-6 h-6" />
-                  </div>
-                </div>
-                <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest mb-1">Ledger Integrity</p>
-                <p className="text-4xl font-black text-foreground">100%</p>
-              </div>
+              ))}
             </div>
 
-            {/* Charts Section */}
-            <div className="grid lg:grid-cols-12 gap-10">
-              <div className="lg:col-span-8 premium-glass p-10 rounded-[3rem] shadow-xl space-y-8">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-2xl font-black text-foreground tracking-tight">Collection by Category</h3>
-                  <div className="flex items-center gap-4 text-xs font-bold text-muted-foreground">
-                    <span className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-primary" /> Target Achieved</span>
-                  </div>
-                </div>
-                <div className="h-80 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={summary?.category_collected || []}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-                      <XAxis dataKey="category" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 800, fill: '#64748b' }} />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 800, fill: '#64748b' }} />
-                      <Tooltip 
-                        contentStyle={{ borderRadius: '1.5rem', border: 'none', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.1)' }}
-                        itemStyle={{ fontSize: '12px', fontWeight: 900 }}
-                      />
-                      <Bar dataKey="amount" radius={[10, 10, 10, 10]}>
-                        {(summary?.category_collected || []).map((_, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+            {/* Per-class table */}
+            <div className="premium-glass rounded-[3rem] overflow-hidden shadow-xl">
+              <div className="p-8 border-b border-glass-border">
+                <h3 className="text-2xl font-black text-foreground">Class-wise Fee Breakdown</h3>
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mt-1">Live data — updates on every sync</p>
               </div>
-
-              <div className="lg:col-span-4 premium-glass p-10 rounded-[3rem] shadow-xl flex flex-col items-center justify-center overflow-hidden">
-                <h3 className="text-xl font-black text-foreground mb-8">Pending Dues Arc</h3>
-                <div className="h-64 w-full flex items-center justify-center">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RePieChart>
-                      <Pie
-                        data={summary?.category_pending || []}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={80}
-                        paddingAngle={10}
-                        dataKey="amount"
-                        nameKey="category"
-                      >
-                       {(summary?.category_pending || []).map((_, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+              {(!classBreakdown || classBreakdown.rows.length === 0) ? (
+                <div className="py-20 text-center text-muted-foreground font-bold">No class data found. Create classes and enroll students first.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="bg-slate-50/50 border-b border-glass-border">
+                        {['Class', 'Fee / Student', 'Students', 'Paid', 'Partial', 'Unpaid', 'No Record', 'Collected', 'Pending', 'Progress'].map(h => (
+                          <th key={h} className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-muted-foreground text-left whitespace-nowrap">{h}</th>
                         ))}
-                      </Pie>
-                      <Tooltip 
-                        contentStyle={{ borderRadius: '1.5rem', border: 'none', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.1)' }}
-                        itemStyle={{ fontSize: '10px', fontWeight: 900 }}
-                      />
-                    </RePieChart>
-                  </ResponsiveContainer>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {classBreakdown.rows.map((row) => {
+                        const pct = row.total_expected > 0 ? Math.round((row.total_collected / row.total_expected) * 100) : 0;
+                        return (
+                          <tr key={row.class_id} className="hover:bg-slate-50/20 transition-colors">
+                            <td className="px-6 py-5 font-black text-foreground text-sm">{row.class_name}</td>
+                            <td className="px-6 py-5 font-black text-primary text-sm">₹{row.fee_per_student.toLocaleString()}</td>
+                            <td className="px-6 py-5 text-sm font-bold text-foreground">{row.total_students}</td>
+                            <td className="px-6 py-5"><span className="px-3 py-1 rounded-full text-[10px] font-black bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">{row.paid_count}</span></td>
+                            <td className="px-6 py-5"><span className="px-3 py-1 rounded-full text-[10px] font-black bg-amber-500/10 text-amber-600 border border-amber-500/20">{row.partial_count}</span></td>
+                            <td className="px-6 py-5"><span className="px-3 py-1 rounded-full text-[10px] font-black bg-rose-500/10 text-rose-600 border border-rose-500/20">{row.unpaid_count}</span></td>
+                            <td className="px-6 py-5"><span className="px-3 py-1 rounded-full text-[10px] font-black bg-slate-500/10 text-slate-500 border border-slate-500/20">{row.no_record_count}</span></td>
+                            <td className="px-6 py-5 font-black text-emerald-600 text-sm">₹{row.total_collected.toLocaleString()}</td>
+                            <td className="px-6 py-5 font-black text-rose-500 text-sm">₹{row.total_pending.toLocaleString()}</td>
+                            <td className="px-6 py-5 min-w-[140px]">
+                              <div className="flex items-center gap-3">
+                                <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+                                  <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                                </div>
+                                <span className="text-[10px] font-black text-muted-foreground w-8">{pct}%</span>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
-                <div className="mt-6 flex flex-wrap justify-center gap-4">
-                  {(summary?.category_pending || []).map((p, idx) => (
-                    <div key={idx} className="flex items-center gap-2">
-                       <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
-                       <span className="text-[10px] font-black uppercase text-muted-foreground tracking-tighter">{p.category}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              )}
             </div>
           </motion.div>
         )}
+
 
         {activeTab === 'ledger' && (
           <motion.div
@@ -269,16 +279,40 @@ export default function FinanceDashboard() {
                 <input 
                   type="text" 
                   placeholder="Search interactions..." 
-                  className="w-full pl-12 pr-6 py-4 bg-slate-50/50 rounded-2xl border border-slate-100 font-bold focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                  value={ledgerSearch}
+                  onChange={(e) => setLedgerSearch(e.target.value)}
+                  className="w-full pl-12 pr-6 py-4 bg-slate-900/40 rounded-2xl border border-white/10 font-bold focus:ring-2 focus:ring-primary/20 outline-none transition-all text-foreground"
                 />
               </div>
               <div className="flex items-center gap-4 overflow-x-auto w-full md:w-auto">
-                <button className="flex items-center gap-2 px-5 py-3 rounded-xl bg-slate-50 text-xs font-black uppercase tracking-widest border border-slate-100 hover:bg-white transition-all whitespace-nowrap">
-                  <Filter className="w-4 h-4" /> All Modes
-                </button>
-                <button className="flex items-center gap-2 px-5 py-3 rounded-xl bg-slate-50 text-xs font-black uppercase tracking-widest border border-slate-100 hover:bg-white transition-all whitespace-nowrap">
-                  Status: Success
-                </button>
+                <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900/50 border border-white/10">
+                  <Filter className="w-3.5 h-3.5 text-primary" />
+                  <select 
+                    value={ledgerMode}
+                    onChange={(e) => setLedgerMode(e.target.value)}
+                    className="bg-transparent text-[10px] font-black uppercase tracking-widest text-slate-400 outline-none cursor-pointer hover:text-white transition-colors"
+                  >
+                    <option value="ALL">All Modes</option>
+                    <option value="CASH">Cash</option>
+                    <option value="ONLINE">Online</option>
+                    <option value="UPI">UPI</option>
+                    <option value="OFFLINE">Offline</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900/50 border border-white/10">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  <select 
+                    value={ledgerStatus}
+                    onChange={(e) => setLedgerStatus(e.target.value)}
+                    className="bg-transparent text-[10px] font-black uppercase tracking-widest text-slate-400 outline-none cursor-pointer hover:text-white transition-colors"
+                  >
+                    <option value="ALL">All Status</option>
+                    <option value="SUCCESS">Success</option>
+                    <option value="PENDING">Pending</option>
+                    <option value="FAILED">Failed</option>
+                  </select>
+                </div>
               </div>
             </div>
 
@@ -295,7 +329,7 @@ export default function FinanceDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {(payments || []).map((p) => (
+                  {filteredPayments.map((p) => (
                     <tr key={p.id} className="hover:bg-slate-50/30 transition-colors group">
                       <td className="px-8 py-6">
                         <div className="flex items-center gap-3">
@@ -304,7 +338,10 @@ export default function FinanceDashboard() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-8 py-6 text-sm font-black text-foreground">Scholar #{p.student_id}</td>
+                      <td className="px-8 py-6">
+                        <p className="text-sm font-black text-foreground">{(p as any).student_name || `Scholar #${p.student_id}`}</p>
+                        <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">ID: {p.student_id}</p>
+                      </td>
                       <td className="px-8 py-6 text-sm font-black text-primary">₹{p.amount.toLocaleString()}</td>
                       <td className="px-8 py-6 text-xs font-black uppercase tracking-widest text-muted-foreground">{p.payment_mode}</td>
                       <td className="px-8 py-6 text-xs font-bold text-muted-foreground">{new Date(p.created_at).toLocaleString()}</td>
@@ -318,6 +355,7 @@ export default function FinanceDashboard() {
                       </td>
                     </tr>
                   ))}
+
                 </tbody>
               </table>
             </div>
@@ -333,9 +371,61 @@ export default function FinanceDashboard() {
             className="grid lg:grid-cols-12 gap-10"
           >
             <div className="lg:col-span-12 premium-glass p-0 rounded-[3rem] shadow-xl overflow-hidden min-h-[500px]">
-              <div className="p-10 border-b border-glass-border">
-                <h3 className="text-3xl font-black text-foreground tracking-tighter mb-2">Defaulter Roster</h3>
-                <p className="text-sm font-bold text-muted-foreground uppercase tracking-widest">Active collections priority queue</p>
+              <div className="p-10 border-b border-glass-border flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div>
+                  <h3 className="text-3xl font-black text-foreground tracking-tighter mb-2">Defaulter Roster</h3>
+                  <p className="text-sm font-bold text-muted-foreground uppercase tracking-widest">Active collections priority queue</p>
+                </div>
+                
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-2">Class Level</label>
+                    <select 
+                      className="px-4 py-2 bg-slate-900/50 border border-white/10 rounded-xl text-xs font-bold text-white outline-none focus:ring-2 focus:ring-primary/20"
+                      value={filterGradeId || ''}
+                      onChange={(e) => {
+                        setFilterGradeId(e.target.value ? Number(e.target.value) : null);
+                        setFilterClassId(null);
+                      }}
+                    >
+                      <option value="">All Classes</option>
+                      {grades.map(g => (
+                        <option key={g.id} value={g.id}>{g.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-2">Section</label>
+                    <select 
+                      className="px-4 py-2 bg-slate-900/50 border border-white/10 rounded-xl text-xs font-bold text-white outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-30 disabled:cursor-not-allowed"
+                      value={filterClassId || ''}
+                      disabled={!filterGradeId}
+                      onChange={(e) => setFilterClassId(e.target.value ? Number(e.target.value) : null)}
+                    >
+                      <option value="">All Sections</option>
+                      {schoolClasses
+                        .filter(sc => sc.grade_id === filterGradeId)
+                        .map(sc => (
+                          <option key={sc.id} value={sc.id}>Section {sc.display_name?.split('-').pop() || sc.section?.name}</option>
+                        ))
+                      }
+                    </select>
+                  </div>
+                  
+                  {(filterGradeId || filterClassId) && (
+                    <button 
+                      onClick={() => {
+                        setFilterGradeId(null);
+                        setFilterClassId(null);
+                      }}
+                      className="mt-5 p-2 text-rose-500 hover:bg-rose-500/10 rounded-xl transition-all"
+                      title="Clear Filters"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full">
@@ -344,15 +434,46 @@ export default function FinanceDashboard() {
                         <th className="px-10 py-6 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Scholar Name</th>
                         <th className="px-10 py-6 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Cluster</th>
                         <th className="px-10 py-6 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Dues Magnitude</th>
+                        <th className="px-10 py-6 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Contact</th>
                         <th className="px-10 py-6 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Action</th>
                      </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {defaulters.map((d) => (
+                    {defaulters
+                      .filter(d => {
+                        const matchesGrade = !filterGradeId || d.grade_id === filterGradeId;
+                        const matchesClass = !filterClassId || d.class_id === filterClassId;
+                        return matchesGrade && matchesClass;
+                      })
+                      .map((d) => (
                       <tr key={d.student_id} className="hover:bg-slate-50/30 transition-colors">
                         <td className="px-10 py-6 font-black text-foreground">{d.student_name}</td>
                         <td className="px-10 py-6 text-sm font-bold text-muted-foreground">{d.class_name || 'N/A'}</td>
                         <td className="px-10 py-6 font-black text-rose-500">₹{d.total_due.toLocaleString()}</td>
+                        <td className="px-10 py-6">
+                           {d.phone ? (
+                             <div className="flex items-center gap-2">
+                               <a 
+                                 href={`tel:${d.phone}`}
+                                 className="p-2.5 bg-emerald-500/10 text-emerald-600 rounded-xl hover:bg-emerald-500 hover:text-white transition-all shadow-sm border border-emerald-500/20"
+                                 title="Call Parent"
+                               >
+                                 <Phone className="w-4 h-4" />
+                               </a>
+                               <a 
+                                 href={`https://wa.me/${d.phone.replace(/\D/g, '')}`}
+                                 target="_blank"
+                                 rel="noopener noreferrer"
+                                 className="p-2.5 bg-green-500/10 text-green-600 rounded-xl hover:bg-green-600 hover:text-white transition-all shadow-sm border border-green-500/20"
+                                 title="WhatsApp Parent"
+                                >
+                                 <MessageCircle className="w-4 h-4" />
+                               </a>
+                             </div>
+                           ) : (
+                             <span className="text-[10px] font-bold text-muted-foreground italic opacity-40">No Contact</span>
+                           )}
+                        </td>
                         <td className="px-10 py-6">
                            <button 
                              onClick={() => {

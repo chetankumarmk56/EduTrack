@@ -71,10 +71,14 @@ export default function TeacherAttendance() {
     setSaveStatus('idle');
   };
 
-  const filteredDB = classDirectory.filter(
-    (s: any) => activeAssignment && 
-         String(s.school_class?.id) === String(activeAssignment.school_class.id)
-  );
+  const filteredDB = useMemo(() => {
+    if (!activeAssignment) return [];
+    const list = classDirectory.filter(
+      (s: any) => String(s.school_class?.id) === String(activeAssignment.school_class.id)
+    );
+    // Standardized alphabetical sorting
+    return list.sort((a, b) => a.name.localeCompare(b.name));
+  }, [classDirectory, activeAssignment]);
 
   useEffect(() => {
      if (filteredDB.length > 0 && activeAssignment) {
@@ -302,9 +306,9 @@ export default function TeacherAttendance() {
                         key={student.id} 
                         className="group transition-all hover:bg-white/5"
                       >
-                        <td className="px-10 py-6 font-black text-xs opacity-30 tracking-[0.2em] group-hover:opacity-100 group-hover:text-primary transition-all">
-                          {student.id.toString().padStart(3, '0')}
-                        </td>
+                         <td className="px-10 py-6 font-black text-xs opacity-30 tracking-[0.2em] group-hover:opacity-100 group-hover:text-primary transition-all">
+                           #{ (idx + 1).toString().padStart(2, '0') }
+                         </td>
                         <td className="px-10 py-6">
                            <div className="flex items-center gap-5">
                               <div className={cn(

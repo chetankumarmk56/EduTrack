@@ -15,6 +15,7 @@ import { marksApi, type Exam } from '../../api/marksApi';
 
 interface ClassStudent {
   roll: number;
+  student_id: number;
   name: string;
   marks: { test: string | number; score: number }[];
 }
@@ -95,13 +96,18 @@ export default function TeacherDashboard() {
       
       const marksData = await fetchClassMarks(subjectName, schoolClassId, activeExamId);
       
-      setStudents(filteredDB.map(student => {
+      setStudents(filteredDB.map((student, idx) => {
         const marksRecords = marksData.filter((d: any) => d.student_id === student.id);
         const mappedMarks = marksRecords.map((m: any) => ({ 
           test: m.exam_id || m.test_name, 
           score: m.score 
         }));
-        return { roll: student.id, name: student.name, marks: mappedMarks };
+        return { 
+          roll: idx + 1, 
+          student_id: student.id, 
+          name: student.name, 
+          marks: mappedMarks 
+        };
       })); 
     } catch(err) {
       console.error("Failed to load marks:", err);
@@ -117,9 +123,11 @@ export default function TeacherDashboard() {
 
   const filteredDB = useMemo(() => {
     if (!activeAssignment) return [];
-    return classDirectory.filter(
+    const list = classDirectory.filter(
       (s: any) => s.school_class?.id === activeAssignment.school_class?.id
     );
+    // Standardized alphabetical sorting
+    return list.sort((a, b) => a.name.localeCompare(b.name));
   }, [classDirectory, activeAssignment]);
 
   // 1. Initial/Global Stats Fetch
@@ -139,12 +147,12 @@ export default function TeacherDashboard() {
     fetchMarksForActiveExam();
   }, [activeAssignment?.id, activeExamId, filteredDB.length]);
 
-  const handleScoreChange = (roll: number, newScore: number) => {
+  const handleScoreChange = (studentId: number, newScore: number) => {
     if (!activeExamId) return;
     const validatedScore = Math.max(0, Math.min(newScore, activeMaxScore));
     
     setStudents(prev => prev.map(s => {
-      if (s.roll === roll) {
+      if (s.student_id === studentId) {
         const testIndex = s.marks.findIndex(m => m.test === activeExamId);
         if (testIndex >= 0) {
           const newMarks = [...s.marks];
@@ -167,7 +175,7 @@ export default function TeacherDashboard() {
         student.marks.forEach(mark => {
             if (mark.test === activeExamId && mark.score !== undefined && mark.score !== null) {
                 batchPayload.push({
-                   student_id: student.roll,
+                   student_id: student.student_id,
                    subject: activeAssignment.subject_ref.name,
                    subject_id: activeAssignment.subject_id || activeAssignment.subject_ref?.id,
                    test_name: activeExam?.name,
@@ -468,7 +476,7 @@ export default function TeacherDashboard() {
                                     className="group transition-all hover:bg-white/5"
                                   >
                                     <td className="px-10 py-6">
-                                      <span className="text-xs font-black tabular-nums opacity-30 tracking-[0.2em] group-hover:opacity-100 group-hover:text-primary transition-all">{student.roll.toString().padStart(3, '0')}</span>
+                                      <span className="text-xs font-black tabular-nums opacity-30 tracking-[0.2em] group-hover:opacity-100 group-hover:text-primary transition-all">#{student.roll.toString().padStart(2, '0')}</span>
                                     </td>
                                     <td className="px-10 py-6">
                                       <div className="flex items-center gap-5">
@@ -493,7 +501,7 @@ export default function TeacherDashboard() {
                                           <input
                                             type="number"
                                             value={score || ''}
-                                            onChange={(e) => handleScoreChange(student.roll, Number(e.target.value))}
+                                            onChange={(e) => handleScoreChange(student.student_id, Number(e.target.value))}
                                             className={cn(
                                               "w-28 h-14 rounded-2xl bg-black border border-white/10 px-5 text-right font-black text-xl focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all tabular-nums aurora-glow-focus hover:border-primary/40",
                                               score >= (activeMaxScore * 0.9) ? "text-primary glow-text" : "text-foreground"

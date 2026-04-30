@@ -209,7 +209,7 @@ class AuthService:
                 "role": role,
                 "institution_id": institution_id,
                 "user": {
-                    "id": student.user_id or student.id,
+                    "id": student.id,
                     "student_id": student.id,
                     "name": student.name
                 }

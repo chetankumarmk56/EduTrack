@@ -95,7 +95,8 @@ if settings.ENVIRONMENT != "prod":
         "http://127.0.0.1:5173",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
-        "http://localhost:8000", # Allow backend to call itself if needed
+        "http://localhost:8000",
+        "http://localhost:8081",
     ])
 
 # Support for mobile/LAN development: Allow all subdomains of localhost if needed,

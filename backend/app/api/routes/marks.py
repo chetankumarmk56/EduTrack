@@ -66,6 +66,14 @@ async def get_student_marks(
 ):
     return await marks_service.get_marks(db, user.institution_id, student_id)
 
+@router.get("/{student_id}/rankings")
+async def get_student_rankings(
+    student_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(get_current_user)
+):
+    return await marks_service.get_student_rankings(db, user.institution_id, student_id)
+
 @router.post("/exams", response_model=schemas.ExamResponse)
 async def create_exam(
     exam: schemas.ExamCreate,

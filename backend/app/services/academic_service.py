@@ -5,6 +5,8 @@ from typing import List, Optional
 from app.models.academic import Grade, Section, SchoolClass, Subject
 from app.models.finance import StudentFee
 from app.schemas import academic as schemas
+from app.core.logger import logger
+
 
 class AcademicService:
     # --- Grade Methods ---
@@ -43,28 +45,78 @@ class AcademicService:
             setattr(db_grade, k, v)
 
         if fee_changed:
-            # Cascade to all SchoolClass mapping for this grade
+            # Cascade to all SchoolClass mappings for this grade
             classes_result = await db.execute(select(SchoolClass).where(SchoolClass.grade_id == grade_id))
             school_classes = classes_result.scalars().all()
+
+            from datetime import date
+            from app.models.finance import StudentFeeStatus
+            from app.models.directory import Student
+
             for sc in school_classes:
                 if 'tuition_fee' in update_data:
                     sc.tuition_fee = update_data['tuition_fee']
-                    sc.total_fee = sc.tuition_fee + sc.transport_fee + sc.other_fee
+                    sc.total_fee = sc.tuition_fee + (sc.transport_fee or 0.0) + (sc.other_fee or 0.0)
                 if 'fee_due_date' in update_data:
                     sc.fee_due_date = update_data['fee_due_date']
-                
-                from datetime import date
-                student_fees_res = await db.execute(select(StudentFee).where(StudentFee.class_id == sc.id))
+
+                new_fee = sc.total_fee
+                new_due_date = sc.fee_due_date
+
+                # Step 1: Update all EXISTING StudentFee records for this class
+                student_fees_res = await db.execute(
+                    select(StudentFee).where(StudentFee.class_id == sc.id)
+                )
                 student_fees = student_fees_res.scalars().all()
+                existing_student_ids = set()
+
                 for sf in student_fees:
+                    existing_student_ids.add(sf.student_id)
                     if 'tuition_fee' in update_data:
-                        # Re-calculate due amount based on new total
-                        # Prevent negative due amounts if new total is less than what they already paid
-                        sf.total_amount = sc.total_fee
+                        sf.total_amount = new_fee
                         sf.due_amount = max(0.0, sf.total_amount - sf.amount_paid)
-                    if 'fee_due_date' in update_data:
-                        sf.due_date = update_data['fee_due_date'] if update_data['fee_due_date'] else date.today()
-        
+                    if 'fee_due_date' in update_data and new_due_date:
+                        sf.due_date = new_due_date
+
+                    # Recalculate status
+                    if sf.due_amount <= 0 and sf.total_amount > 0:
+                        sf.status = StudentFeeStatus.PAID
+                    elif sf.amount_paid > 0:
+                        sf.status = StudentFeeStatus.PARTIAL
+                    else:
+                        sf.status = StudentFeeStatus.UNPAID
+
+                # Step 2: Create missing StudentFee records for students WITHOUT one
+                # This covers students enrolled when fee=0 and students enrolled before sync was added
+                if 'tuition_fee' in update_data and new_fee > 0:
+                    all_students_res = await db.execute(
+                        select(Student).where(
+                            Student.school_class_id == sc.id,
+                            Student.is_active == True
+                        )
+                    )
+                    all_students = all_students_res.scalars().all()
+
+                    for student in all_students:
+                        if student.id not in existing_student_ids:
+                            # No StudentFee record exists — create one with the new fee
+                            new_student_fee = StudentFee(
+                                student_id=student.id,
+                                class_id=sc.id,
+                                institution_id=institution_id,
+                                total_amount=new_fee,
+                                due_amount=new_fee,
+                                amount_paid=0.0,
+                                due_date=new_due_date if new_due_date else date.today(),
+                                status=StudentFeeStatus.UNPAID
+                            )
+                            db.add(new_student_fee)
+                            logger.info(
+                                f"FEE_CASCADE: Created missing StudentFee for Student {student.id} "
+                                f"in Class {sc.id} with amount ₹{new_fee}"
+                            )
+
+
         await db.commit()
         await db.refresh(db_grade)
         return db_grade

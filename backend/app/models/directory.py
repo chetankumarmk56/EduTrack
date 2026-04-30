@@ -70,6 +70,7 @@ class Teacher(Base, TimestampMixin):
     name = Column(String, index=True)
     email = Column(String) 
     phone = Column(String, nullable=True)
+    whatsapp = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
     plain_password = Column(String, nullable=True) 
     
