@@ -42,7 +42,7 @@ export const authService = {
   ): Promise<AuthResponse> => {
     const response = await apiClient.post<AuthResponse>(
       'directory/students/login',
-      { name, class_level: classLevel, section, dob, role: 'parent' },
+      { name, class_level: classLevel, section, dob, role: 'student' },
       { headers: { 'X-Institution-Id': institutionId } },
     );
     return response.data;

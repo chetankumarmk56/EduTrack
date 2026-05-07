@@ -4,7 +4,7 @@ export { Colors } from './Colors';
 // falls back to localhost for local development
 export const API_BASE_URL =
   (process.env.EXPO_PUBLIC_API_BASE_URL as string | undefined) ||
-  'http://localhost:8000/api';
+  'http://localhost:8000/api/';
 
 // Secure storage keys
 export const STORAGE_KEYS = {

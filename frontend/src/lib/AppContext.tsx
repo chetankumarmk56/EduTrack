@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useMemo, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo, useCallback, type ReactNode } from 'react';
 import { directoryApi } from '../api/directoryApi';
 import { marksApi } from '../api/marksApi';
 import { attendanceApi } from '../api/attendanceApi';
@@ -6,45 +6,62 @@ import { eventsApi } from '../api/eventsApi';
 import { financeApi } from '../api/financeApi';
 import { notificationApi } from '../api/notificationApi';
 import { useAuth } from './AuthContext';
+import type {
+  Student,
+  Teacher,
+  Grade,
+  Section,
+  Subject,
+  SchoolClass,
+  Mark,
+  Attendance,
+  Event,
+  Notification,
+  TeacherStats,
+  SubjectSummary,
+  ParentFeeItem,
+  AiAnalysisResult,
+} from '../types';
 
 interface AppContextType {
-  // Data State
-  students: any[];
-  classDirectory: any[]; // Alias for backward compatibility
-  teachers: any[];
-  teacherDirectory: any[]; // Alias for backward compatibility
-  grades: any[];
-  sections: any[];
-  subjects: any[];
-  schoolClasses: any[];
+  // Directory
+  students: Student[];
+  classDirectory: Student[];
+  teachers: Teacher[];
+  teacherDirectory: Teacher[];
+  grades: Grade[];
+  sections: Section[];
+  subjects: Subject[];
+  schoolClasses: SchoolClass[];
   refreshDirectory: (force?: boolean) => Promise<void>;
   refreshStudents: () => Promise<void>;
   refreshTeachers: () => Promise<void>;
-  
-  // Loading States
+
+  // Loading states
   isDirectoryLoading: boolean;
   isAcademicLoading: boolean;
   isEventsLoading: boolean;
-  
-  // Student Portal Data
-  studentProfile: any | null;
-  studentMarks: any[];
-  studentAttendance: any[];
-  studentEvents: any[];
-  events: any[];
+
+  // Student portal
+  studentProfile: Student | null;
+  studentMarks: Mark[];
+  studentAttendance: Attendance[];
+  studentEvents: Event[];
+  events: Event[];
   fetchStudentData: (studentId: number) => Promise<void>;
 
-  // Teacher Portal Data
-  classMarks: Record<string, any[]>;
-  fetchClassMarks: (subject: string, schoolClassId?: number, examId?: number) => Promise<any[]>;
-  fetchSubjectSummary: (subject: string, schoolClassId: number) => Promise<any>;
-  subjectSummaries: Record<string, any>;
-
-  aiAnalysis: any | null;
-  setAiAnalysis: (analysis: any | null) => void;
-  teacherStats: any | null;
+  // Teacher portal
+  classMarks: Record<string, Mark[]>;
+  fetchClassMarks: (subject: string, schoolClassId?: number, examId?: number) => Promise<Mark[]>;
+  fetchSubjectSummary: (subject: string, schoolClassId: number) => Promise<SubjectSummary | null>;
+  subjectSummaries: Record<string, SubjectSummary>;
+  aiAnalysis: AiAnalysisResult | null;
+  setAiAnalysis: (analysis: AiAnalysisResult | null) => void;
+  teacherStats: TeacherStats | null;
   fetchTeacherStats: () => Promise<void>;
   teacherSubject: string;
+
+  // Institution
   institutionId: number;
   setInstitutionId: (id: number) => void;
   institutionName: string;
@@ -52,11 +69,11 @@ interface AppContextType {
   activeAssignmentId: number | null;
   setActiveAssignmentId: (id: number | null) => void;
 
-  // Parent/Notification Data
-  parentFees: any[];
-  notifications: any[];
+  // Parent / notifications
+  parentFees: ParentFeeItem[];
+  notifications: Notification[];
   refreshParentFees: () => Promise<void>;
-  getParentFees: () => Promise<any[]>; // Lazy-load fees on-demand
+  getParentFees: () => Promise<ParentFeeItem[]>;
   refreshNotifications: () => Promise<void>;
   markNotificationRead: (id: number) => Promise<void>;
 }
@@ -65,67 +82,58 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const { authState, user } = useAuth();
-  
-  // Hydration from localStorage for instant UI
-  const [students, setStudents] = useState<any[]>(() => {
+
+  const [students, setStudents] = useState<Student[]>(() => {
     const saved = localStorage.getItem('edu_cache_students');
     return saved ? JSON.parse(saved) : [];
   });
-  const [teachers, setTeachers] = useState<any[]>(() => {
+  const [teachers, setTeachers] = useState<Teacher[]>(() => {
     const saved = localStorage.getItem('edu_cache_teachers');
     return saved ? JSON.parse(saved) : [];
   });
-  const [grades, setGrades] = useState<any[]>(() => {
+  const [grades, setGrades] = useState<Grade[]>(() => {
     const saved = localStorage.getItem('edu_cache_grades');
     return saved ? JSON.parse(saved) : [];
   });
-  const [sections, setSections] = useState<any[]>(() => {
+  const [sections, setSections] = useState<Section[]>(() => {
     const saved = localStorage.getItem('edu_cache_sections');
     return saved ? JSON.parse(saved) : [];
   });
-  const [subjects, setSubjects] = useState<any[]>(() => {
+  const [subjects, setSubjects] = useState<Subject[]>(() => {
     const saved = localStorage.getItem('edu_cache_subjects');
     return saved ? JSON.parse(saved) : [];
   });
-  const [schoolClasses, setSchoolClasses] = useState<any[]>(() => {
+  const [schoolClasses, setSchoolClasses] = useState<SchoolClass[]>(() => {
     const saved = localStorage.getItem('edu_cache_school_classes');
     return saved ? JSON.parse(saved) : [];
   });
-  const [events, setEvents] = useState<any[]>(() => {
+  const [events, setEvents] = useState<Event[]>(() => {
     const saved = localStorage.getItem('edu_cache_events');
     return saved ? JSON.parse(saved) : [];
   });
-  const [lastFetched, setLastFetched] = useState<number>(() => {
-    const saved = localStorage.getItem('edu_cache_last_fetch');
-    return saved ? Number(saved) : 0;
-  });
-
-  // Granular Loading
-  const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
+const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
   const [isAcademicLoading, setIsAcademicLoading] = useState(false);
   const [isEventsLoading, setIsEventsLoading] = useState(false);
-  
-  // Marks state for teachers
-  const [classMarks, setClassMarks] = useState<Record<string, any[]>>({});
 
-  // Student specific
-  const [studentProfile, setStudentProfile] = useState<any | null>(() => {
+  const [classMarks, setClassMarks] = useState<Record<string, Mark[]>>({});
+
+  const [studentProfile, setStudentProfile] = useState<Student | null>(() => {
     const saved = localStorage.getItem('edu_cache_student_profile');
     return saved ? JSON.parse(saved) : null;
   });
-  const [studentMarks, setStudentMarks] = useState<any[]>(() => {
+  const [studentMarks, setStudentMarks] = useState<Mark[]>(() => {
     const saved = localStorage.getItem('edu_cache_student_marks');
     return saved ? JSON.parse(saved) : [];
   });
-  const [studentAttendance, setStudentAttendance] = useState<any[]>(() => {
+  const [studentAttendance, setStudentAttendance] = useState<Attendance[]>(() => {
     const saved = localStorage.getItem('edu_cache_student_attendance');
     return saved ? JSON.parse(saved) : [];
   });
-  const [studentEvents, setStudentEvents] = useState<any[]>([]);
+  const [studentEvents, setStudentEvents] = useState<Event[]>([]);
 
-  const [aiAnalysis, setAiAnalysis] = useState<any | null>(null);
-  const [teacherStats, setTeacherStats] = useState<any | null>(null);
-  const [subjectSummaries, setSubjectSummaries] = useState<Record<string, any>>({});
+  const [aiAnalysis, setAiAnalysis] = useState<AiAnalysisResult | null>(null);
+  const [teacherStats, setTeacherStats] = useState<TeacherStats | null>(null);
+  const [subjectSummaries, setSubjectSummaries] = useState<Record<string, SubjectSummary>>({});
 
   const fetchTeacherStats = async () => {
     try {
@@ -137,7 +145,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Institution
   const [institutionId, setInstitutionId] = useState<number>(() => {
     const saved = localStorage.getItem('edu_institution_id');
     return saved ? Number(saved) : 1;
@@ -146,14 +153,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return localStorage.getItem('edu_institution_name') || 'EduTrack Academy';
   });
 
-  // Active Assignment Persistence
   const [activeAssignmentId, setActiveAssignmentId] = useState<number | null>(() => {
     const saved = localStorage.getItem('edu_active_assignment_id');
     return saved ? Number(saved) : null;
   });
 
-  const [parentFees, setParentFees] = useState<any[]>([]);
-  const [notifications, setNotifications] = useState<any[]>([]);
+  const [parentFees, setParentFees] = useState<ParentFeeItem[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
 
   useEffect(() => {
     if (activeAssignmentId) {
@@ -163,46 +169,56 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [activeAssignmentId]);
 
-  const refreshDirectory = async (force: boolean = false) => {
+  const refreshEvents = useCallback(async () => {
+    setIsEventsLoading(true);
+    try {
+      const eventsData: Event[] = await eventsApi.getEvents();
+      setEvents(eventsData);
+      localStorage.setItem('edu_cache_events', JSON.stringify(eventsData));
+    } catch (err) {
+      console.error("Events Fetch Error:", err);
+    } finally {
+      setIsEventsLoading(false);
+    }
+  }, []);
+
+  const refreshDirectory = useCallback(async (force: boolean = false) => {
     const now = Date.now();
-    // Use a slightly longer cache time for the initialization context (5 mins)
-    if (!force && lastFetched && (now - lastFetched < 300000) && (students.length > 0)) {
-      // Ensure events are at least attempted if they are missing from cache
-      if (events.length === 0) refreshEvents();
+    const cachedFetch = Number(localStorage.getItem('edu_cache_last_fetch') || '0');
+    const hasCachedStudents = Boolean(localStorage.getItem('edu_cache_students'));
+    if (!force && cachedFetch && (now - cachedFetch < 300000) && hasCachedStudents) {
+      const cachedEvents = localStorage.getItem('edu_cache_events');
+      if (!cachedEvents || cachedEvents === '[]') refreshEvents();
       return;
     }
 
-    // Only show full-page loading if we have absolutely no data
-    const isInitialLoad = students.length === 0;
+    const cachedStudentsRaw = localStorage.getItem('edu_cache_students');
+    const isInitialLoad = !cachedStudentsRaw || cachedStudentsRaw === '[]';
     if (isInitialLoad) {
       setIsDirectoryLoading(true);
       setIsAcademicLoading(true);
     }
-    
+
     try {
       const { systemApi } = await import('../api/systemApi');
       const data = await systemApi.getInitialize();
-      
-      setLastFetched(now);
+
       localStorage.setItem('edu_cache_last_fetch', String(now));
 
-      // 1. Academic Hydration & Persistence
       if (data.academic) {
         setGrades(data.academic.grades || []);
         setSections(data.academic.sections || []);
         setSubjects(data.academic.subjects || []);
         setSchoolClasses(data.academic.school_classes || []);
-        
         localStorage.setItem('edu_cache_grades', JSON.stringify(data.academic.grades || []));
         localStorage.setItem('edu_cache_sections', JSON.stringify(data.academic.sections || []));
         localStorage.setItem('edu_cache_subjects', JSON.stringify(data.academic.subjects || []));
         localStorage.setItem('edu_cache_school_classes', JSON.stringify(data.academic.school_classes || []));
       }
-      
-      // 2. Directory Hydration & Persistence
+
       if (data.directory) {
-        const s = data.directory.students || [];
-        const t = data.directory.teachers || [];
+        const s: Student[] = data.directory.students || [];
+        const t: Teacher[] = data.directory.teachers || [];
         setStudents(s);
         setTeachers(t);
         localStorage.setItem('edu_cache_students', JSON.stringify(s));
@@ -211,35 +227,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setStudents(data.students);
         localStorage.setItem('edu_cache_students', JSON.stringify(data.students));
       }
-      
-      // 3. Self-Record Hydration
+
       if (data.teacher_details) {
-        const t_info = data.teacher_details;
+        const t_info: Teacher = data.teacher_details;
         setTeachers(prev => {
-          const exists = prev.find(t => t.id === t_info.id);
-          if (exists) return prev;
-          const newList = [...prev, t_info];
+          const newList = prev.some(t => t.id === t_info.id)
+            ? prev.map(t => t.id === t_info.id ? t_info : t)
+            : [...prev, t_info];
           localStorage.setItem('edu_cache_teachers', JSON.stringify(newList));
           return newList;
         });
       }
 
-      // 4. Statistics Hydration
       if (data.stats) {
         setTeacherStats(data.stats);
       }
-      
+
       await refreshEvents();
-      
+
     } catch (err) {
       console.error("System Initialization Failed:", err);
     } finally {
       setIsDirectoryLoading(false);
       setIsAcademicLoading(false);
     }
-  };
+  }, [refreshEvents]);
 
-  const refreshStudents = async () => {
+  const refreshStudents = useCallback(async () => {
     setIsDirectoryLoading(true);
     try {
       const data = await directoryApi.getStudents();
@@ -249,9 +263,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsDirectoryLoading(false);
     }
-  };
+  }, []);
 
-  const refreshTeachers = async () => {
+  const refreshTeachers = useCallback(async () => {
     setIsDirectoryLoading(true);
     try {
       const data = await directoryApi.getTeachers();
@@ -261,24 +275,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsDirectoryLoading(false);
     }
-  };
-
-  const refreshEvents = async () => {
-    setIsEventsLoading(true);
-    try {
-      const eventsData = await eventsApi.getEvents();
-      setEvents(eventsData);
-      localStorage.setItem('edu_cache_events', JSON.stringify(eventsData));
-    } catch (err) {
-      console.error("Events Fetch Error:", err);
-    } finally {
-      setIsEventsLoading(false);
-    }
-  };
+  }, []);
 
   const refreshParentFees = async () => {
     try {
-      const data = await financeApi.getParentFees();
+      const data: ParentFeeItem[] = await financeApi.getParentFees();
       setParentFees(data);
     } catch (err) {
       console.error("Parent Fees Fetch Error:", err);
@@ -287,7 +288,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const refreshNotifications = async () => {
     try {
-      const data = await notificationApi.getNotifications();
+      const data: Notification[] = await notificationApi.getNotifications();
       setNotifications(data);
     } catch (err) {
       console.error("Notifications Fetch Error:", err);
@@ -305,24 +306,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const [currentlyFetchingMarks, setCurrentlyFetchingMarks] = useState<string | null>(null);
 
-  const fetchClassMarks = async (subject: string, schoolClassId?: number, examId?: number) => {
+  const fetchClassMarks = async (subject: string, schoolClassId?: number, examId?: number): Promise<Mark[]> => {
     const cacheKey = `${subject}_${schoolClassId || 'all'}_${examId || 'all'}`;
-    
-    // 1. Instant Cache Return: If we already have this data, return it immediately
+
     if (classMarks[cacheKey]) {
-      // Still trigger a background refresh to ensure consistency, but return cache first
-      marksApi.getClassMarks(subject, schoolClassId, examId).then(data => {
-         setClassMarks(prev => ({ ...prev, [cacheKey]: data }));
+      marksApi.getClassMarks(subject, schoolClassId, examId).then((data: Mark[]) => {
+        setClassMarks(prev => ({ ...prev, [cacheKey]: data }));
       });
       return classMarks[cacheKey];
     }
 
-    // Prevent concurrent requests for the same key
     if (currentlyFetchingMarks === cacheKey) return [];
-    
+
     setCurrentlyFetchingMarks(cacheKey);
     try {
-      const data = await marksApi.getClassMarks(subject, schoolClassId, examId);
+      const data: Mark[] = await marksApi.getClassMarks(subject, schoolClassId, examId);
       setClassMarks(prev => ({ ...prev, [cacheKey]: data }));
       return data;
     } catch (err) {
@@ -333,12 +331,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const fetchSubjectSummary = async (subject: string, schoolClassId: number) => {
+  const fetchSubjectSummary = async (subject: string, schoolClassId: number): Promise<SubjectSummary | null> => {
     const key = `${subject}_${schoolClassId}`;
     if (subjectSummaries[key]) return subjectSummaries[key];
-    
+
     try {
-      const data = await marksApi.getSubjectSummary(subject, schoolClassId);
+      const data: SubjectSummary = await marksApi.getSubjectSummary(subject, schoolClassId);
       setSubjectSummaries(prev => ({ ...prev, [key]: data }));
       return data;
     } catch (err) {
@@ -355,39 +353,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (authState === 'authenticated') {
-      // Critical path: Load directory data first
       refreshDirectory();
-      
-      // Non-blocking: Load role-specific data
-      if (user?.role === 'student' || user?.role === 'parent') {
-         directoryApi.getMyProfile().then(profile => {
-            setStudentProfile(profile);
-            localStorage.setItem('edu_cache_student_profile', JSON.stringify(profile));
-            fetchStudentData(profile.id);
-            // NOTE: Parent fees will load on-demand when accessed, not on mount
-         }).catch(() => {
-            if (user?.id) fetchStudentData(user.id);
-         });
 
-         // Load assigned teachers for students/parents to populate the performance cards
-         directoryApi.getMyTeachers().then(tList => {
-            setTeachers(tList);
-            localStorage.setItem('edu_cache_teachers', JSON.stringify(tList));
-         }).catch(err => console.error("Failed to load student teachers:", err));
+      if (user?.role === 'student' || user?.role === 'parent') {
+        directoryApi.getMyProfile().then((profile: Student) => {
+          setStudentProfile(profile);
+          localStorage.setItem('edu_cache_student_profile', JSON.stringify(profile));
+          fetchStudentData(profile.id);
+        }).catch(() => {
+          if (user?.id) fetchStudentData(user.id);
+        });
+
+        directoryApi.getMyTeachers().then((tList: Teacher[]) => {
+          setTeachers(tList);
+          localStorage.setItem('edu_cache_teachers', JSON.stringify(tList));
+        }).catch(err => console.error("Failed to load student teachers:", err));
       }
-      
-      // OPTIMIZATION: Defer non-critical notifications to load after UI renders
-      // This prevents blocking the initial page render
+
       const notificationTimer = setTimeout(() => {
         refreshNotifications();
-      }, 500); // Load notifications after 500ms (after initial paint)
-      
+      }, 500);
+
       return () => clearTimeout(notificationTimer);
     }
   }, [authState]);
 
-  // OPTIMIZATION: Lazy-load parent fees only when actually accessed (not on mount)
-  const getParentFees = async () => {
+  const getParentFees = async (): Promise<ParentFeeItem[]> => {
     if (parentFees.length === 0) {
       await refreshParentFees();
     }
@@ -404,7 +395,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setStudentMarks(m);
       setStudentAttendance(a);
       setStudentEvents(e);
-      
       localStorage.setItem('edu_cache_student_marks', JSON.stringify(m));
       localStorage.setItem('edu_cache_student_attendance', JSON.stringify(a));
     } catch (err) {
@@ -413,39 +403,48 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AppContext.Provider value={{ 
-      students, 
-      classDirectory: students, 
-      teachers, 
-      teacherDirectory: teachers, 
-      grades, 
-      sections, 
+    <AppContext.Provider value={{
+      students,
+      classDirectory: students,
+      teachers,
+      teacherDirectory: teachers,
+      grades,
+      sections,
       subjects,
-      schoolClasses, 
+      schoolClasses,
       refreshDirectory,
       refreshStudents,
       refreshTeachers,
       isDirectoryLoading,
       isAcademicLoading,
       isEventsLoading,
-      studentProfile, 
-      studentMarks, 
-      studentAttendance, 
-      studentEvents, 
+      studentProfile,
+      studentMarks,
+      studentAttendance,
+      studentEvents,
       events,
-      fetchStudentData, 
+      fetchStudentData,
       classMarks,
       fetchClassMarks,
       teacherSubject,
-      aiAnalysis, setAiAnalysis,
-      teacherStats, fetchTeacherStats,
-      institutionId, setInstitutionId,
-      institutionName, setInstitutionName,
-      activeAssignmentId, setActiveAssignmentId,
-      fetchSubjectSummary, subjectSummaries,
-      parentFees, notifications,
-      refreshParentFees, getParentFees, refreshNotifications,
-      markNotificationRead
+      aiAnalysis,
+      setAiAnalysis,
+      teacherStats,
+      fetchTeacherStats,
+      institutionId,
+      setInstitutionId,
+      institutionName,
+      setInstitutionName,
+      activeAssignmentId,
+      setActiveAssignmentId,
+      fetchSubjectSummary,
+      subjectSummaries,
+      parentFees,
+      notifications,
+      refreshParentFees,
+      getParentFees,
+      refreshNotifications,
+      markNotificationRead,
     }}>
       {children}
     </AppContext.Provider>

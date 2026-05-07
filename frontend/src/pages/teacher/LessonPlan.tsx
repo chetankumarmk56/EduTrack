@@ -287,7 +287,7 @@ export default function LessonPlan() {
 
             {/* Timeline List */}
             <div className="grid gap-6">
-              {aiAnalysis.lesson_plan.map((day: LessonDay, i: number) => (
+              {(aiAnalysis.lesson_plan as LessonDay[]).map((day: LessonDay, i: number) => (
                 <StaggerItem key={i} className="group flex gap-8">
                   <div className="hidden sm:flex flex-col items-center">
                     <div className="h-20 w-20 rounded-[1.5rem] bg-muted/40 border border-white/5 flex items-center justify-center text-primary font-black text-2xl shadow-premium relative group-hover:border-primary/50 group-hover:aurora-glow transition-all duration-500">

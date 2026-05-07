@@ -1,1 +1,0 @@
-# Academic organization endpoints

@@ -7,25 +7,26 @@ import { View } from 'react-native';
 import { Colors } from '../constants/Colors';
 
 /**
- * Guards all screens inside (tabs) — redirects unauthenticated users to /login.
+ * Guards all screens inside (parent) and (teacher) — redirects unauthenticated users to /login.
  * Prevents logged-in users from seeing the /login screen.
  */
 function AuthGuard() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const segments = useSegments();
   const router = useRouter();
 
   useEffect(() => {
     if (isLoading) return;
 
-    const inTabsGroup = segments[0] === '(drawer)';
+    const inParentGroup = segments[0] === '(parent)';
+    const inTeacherGroup = segments[0] === '(teacher)';
     const inAiScreen = segments[0] === 'ai-questions';
-    const inProtectedRoute = inTabsGroup || inAiScreen;
+    const inProtectedRoute = inParentGroup || inTeacherGroup || inAiScreen;
 
     if (!isAuthenticated && inProtectedRoute) {
       router.replace('/login');
     } else if (isAuthenticated && segments[0] === 'login') {
-      router.replace('/dashboard');
+      router.replace(user?.role === 'teacher' ? '/(teacher)/dashboard' : '/(parent)/dashboard');
     }
   }, [isAuthenticated, isLoading, segments]);
 
@@ -46,7 +47,8 @@ export default function RootLayout() {
         >
           <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="login" options={{ headerShown: false, animation: 'fade' }} />
-          <Stack.Screen name="(drawer)" options={{ headerShown: false }} />
+          <Stack.Screen name="(parent)" options={{ headerShown: false }} />
+          <Stack.Screen name="(teacher)" options={{ headerShown: false }} />
           <Stack.Screen
             name="ai-questions"
             options={{

@@ -55,7 +55,7 @@ export default function QuestionBank() {
     } catch (err) { console.error(err); }
   };
 
-  const questions: Question[] = useMemo(() => aiAnalysis?.question_bank || [], [aiAnalysis]);
+  const questions: Question[] = useMemo(() => (aiAnalysis?.question_bank || []) as Question[], [aiAnalysis]);
   
   const handleEditQuestion = (index: number, field: keyof Question, value: any) => {
     const updated = [...questions];

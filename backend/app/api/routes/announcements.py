@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
 import os
 
@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
 
-from app.core.database import get_db
+from app.core.database import get_db, AsyncSessionLocal
 from app.core.dependencies import get_current_active_user, UserContext
 from app.schemas.communication import AnnouncementResponse, AnnouncementCreate, AnnouncementUpdate
 from app.services.announcement_service import announcement_service
@@ -129,21 +129,31 @@ async def get_announcements_for_parent(
 @router.post("/", response_model=AnnouncementResponse)
 async def create_announcement(
     data: AnnouncementCreate,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(get_current_active_user)
 ):
     """Create a new announcement (Teachers only)."""
     if user.role != "teacher":
         raise HTTPException(status_code=403, detail="Only teachers can create announcements")
-    
+
     teacher_result = await db.execute(select(Teacher).where(Teacher.user_id == user.id))
     teacher = teacher_result.scalars().first()
     if not teacher:
         raise HTTPException(status_code=403, detail="Teacher profile not found")
-        
-    return await announcement_service.create_announcement(
-        db, user.institution_id, teacher.id, data
+
+    result = await announcement_service.create_announcement(
+        db, user.institution_id, user.id, data
     )
+
+    # Notify target parents in the background so the response is instant
+    announcement_id = result.id
+    async def _notify():
+        async with AsyncSessionLocal() as session:
+            await announcement_service.trigger_announcement_notifications(session, announcement_id)
+
+    background_tasks.add_task(_notify)
+    return result
 
 @router.post("/read")
 async def mark_announcement_as_read(
@@ -187,11 +197,8 @@ async def delete_announcement(
     if user.role != "teacher":
         raise HTTPException(status_code=403, detail="Only teachers can delete announcements")
         
-    teacher_result = await db.execute(select(Teacher).where(Teacher.user_id == user.id))
-    teacher = teacher_result.scalars().first()
-    
     success = await announcement_service.delete_announcement(
-        db, announcement_id, teacher.id if teacher else None
+        db, announcement_id, user.id
     )
     if not success:
         raise HTTPException(status_code=404, detail="Announcement not found or access denied")

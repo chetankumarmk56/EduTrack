@@ -65,7 +65,7 @@ export default function Academics() {
       if (activeStudent?.id && classId && (marks || []).length > 0) {
          const subjects = Array.from(new Set(marks.map((m: any) => m.subject_ref?.name || m.subject).filter(Boolean)));
          subjects.forEach((subj: any) => {
-            fetchSubjectSummary(subj, classId);
+            fetchSubjectSummary(subj, Number(classId));
          });
       }
    }, [activeStudent?.id, studentClass?.id, activeStudent?.class_level, (marks || []).length]);

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Megaphone, User, Users,
-  ChevronRight, Sparkles, ShieldAlert,
+  ChevronRight, Sparkles,
   Bookmark, CheckCircle2, Paperclip,
   RefreshCw, AlertCircle, FileText,
   File, X, Download, Eye, Zap
@@ -163,11 +163,10 @@ export default function ParentAnnouncements() {
     }
   };
 
-  const sections = useMemo(() => ({
-    urgent: announcements.filter(a => a.priority === 'HIGH'),
-    recent: announcements.filter(a => a.priority !== 'HIGH').slice(0, 5),
-    all: announcements.filter(a => a.priority !== 'HIGH')
-  }), [announcements]);
+  const sorted = useMemo(() =>
+    [...announcements].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+    [announcements]
+  );
 
   const unreadCount = announcements.filter(a => !a.is_read).length;
 
@@ -226,48 +225,28 @@ export default function ParentAnnouncements() {
         {/* Strategic Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           
-          {/* Left Column: Urgent & Feed */}
-          <div className="lg:col-span-8 space-y-12">
-            
-            {/* Urgent Horizontal Scroller */}
-            {sections.urgent.length > 0 && (
-              <div className="space-y-6">
-                <div className="flex items-center gap-3">
-                  <ShieldAlert className="w-5 h-5 text-rose-500" />
-                  <h2 className="text-sm font-black uppercase tracking-[0.2em] text-slate-400">Critical Priority</h2>
-                </div>
-                <div className="flex flex-col gap-4">
-                  {sections.urgent.map((a) => (
-                    <AnnouncementCard key={a.id} a={a} onClick={() => handleOpen(a)} isUrgent />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Standard Stream */}
-            <div className="space-y-6">
-               <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Megaphone className="w-5 h-5 text-primary" />
-                    <h2 className="text-sm font-black uppercase tracking-[0.2em] text-slate-400">Active Stream</h2>
-                  </div>
-               </div>
-               
-               <StaggerContainer className="flex flex-col gap-4">
-                  {sections.all.length === 0 ? (
-                    <div className="py-24 flex flex-col items-center justify-center premium-glass rounded-[3rem] border-dashed border-primary/20 opacity-40">
-                      <Bookmark className="w-12 h-12 mb-4" />
-                      <p className="text-xs font-black uppercase tracking-widest">Signal Silence</p>
-                    </div>
-                  ) : (
-                    sections.all.map((a) => (
-                      <StaggerItem key={a.id}>
-                        <AnnouncementCard a={a} onClick={() => handleOpen(a)} />
-                      </StaggerItem>
-                    ))
-                  )}
-               </StaggerContainer>
+          {/* Left Column: Chronological Feed */}
+          <div className="lg:col-span-8 space-y-6">
+            <div className="flex items-center gap-3">
+              <Megaphone className="w-5 h-5 text-primary" />
+              <h2 className="text-sm font-black uppercase tracking-[0.2em] text-slate-400">All Announcements</h2>
+              <span className="ml-auto text-[10px] font-black uppercase tracking-widest text-slate-400">Newest First</span>
             </div>
+
+            <StaggerContainer className="flex flex-col gap-4">
+              {sorted.length === 0 ? (
+                <div className="py-24 flex flex-col items-center justify-center premium-glass rounded-[3rem] border-dashed border-primary/20 opacity-40">
+                  <Bookmark className="w-12 h-12 mb-4" />
+                  <p className="text-xs font-black uppercase tracking-widest">No Announcements Yet</p>
+                </div>
+              ) : (
+                sorted.map((a) => (
+                  <StaggerItem key={a.id}>
+                    <AnnouncementCard a={a} onClick={() => handleOpen(a)} isUrgent={a.priority === 'HIGH'} />
+                  </StaggerItem>
+                ))
+              )}
+            </StaggerContainer>
           </div>
 
           {/* Right Column: Statistics & Highlights */}

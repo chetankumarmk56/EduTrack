@@ -1,52 +1,54 @@
+const tintColorLight = '#2563eb';
+const tintColorDark = '#3b82f6';
+
 export const Colors = {
-  primary: '#4f46e5',
-  primaryLight: '#6366f1',
-  primaryDark: '#3730a3',
-  secondary: '#7c3aed',
-  accent: '#06b6d4',
+  // Primary Palette (Neon Bluish)
+  primary: '#2563eb',       // Royal Blue
+  secondary: '#38bdf8',     // Sky Blue Neon
+  accent: '#06b6d4',        // Cyan Neon
+  
+  // Semantic Colors
+  success: '#10b981',       // Emerald
+  warning: '#f59e0b',       // Amber
+  danger: '#ef4444',        // Red
+  info: '#3b82f6',          // Blue
 
-  background: '#0f0f1a',
-  surface: '#1a1a2e',
-  surfaceElevated: '#22223a',
-  card: '#1e1e35',
-  border: '#2d2d4a',
-  borderLight: '#3d3d5c',
-
-  text: '#f1f1f5',
-  textSecondary: '#9494b8',
-  textMuted: '#5c5c8a',
-  textInverse: '#0f0f1a',
-
-  success: '#10b981',
-  successLight: '#d1fae5',
-  warning: '#f59e0b',
-  warningLight: '#fef3c7',
-  danger: '#ef4444',
-  dangerLight: '#fee2e2',
-  info: '#3b82f6',
-
+  // Backgrounds & Surfaces (Bright Mode)
+  background: '#ffffff',    // Pure White
+  surface: '#f8fafc',       // Slate 50 (Very light gray)
+  surfaceElevated: '#f1f5f9', // Slate 100
+  card: '#ffffff',
+  
+  // Text (High Contrast)
+  text: '#0f172a',          // Slate 900 (Deep navy)
+  textSecondary: '#475569', // Slate 600
+  textMuted: '#94a3b8',     // Slate 400
   white: '#ffffff',
   black: '#000000',
-
-  gradientStart: '#4f46e5',
-  gradientEnd: '#7c3aed',
-
-  tabBarBackground: '#12122a',
-  tabBarBorder: '#2a2a48',
-  tabBarActive: '#6366f1',
-  tabBarInactive: '#5c5c8a',
-
-  // Priority colors
-  priorityHigh: '#ef4444',
-  priorityMedium: '#f59e0b',
-  priorityLow: '#4f46e5',
-
-  // Card overlays
-  overlay10: 'rgba(79, 70, 229, 0.10)',
-  overlay20: 'rgba(79, 70, 229, 0.20)',
-  whiteOverlay10: 'rgba(255, 255, 255, 0.10)',
-  whiteOverlay20: 'rgba(255, 255, 255, 0.20)',
-  blackOverlay40: 'rgba(0, 0, 0, 0.40)',
+  
+  // Borders & Dividers
+  border: '#e2e8f0',        // Slate 200
+  divider: '#f1f5f9',       // Slate 100
+  
+  // Special (Neon Shadows)
+  neonBlue: 'rgba(37, 99, 235, 0.15)',
+  neonCyan: 'rgba(6, 182, 212, 0.15)',
+  shadow: 'rgba(15, 23, 42, 0.08)',
+  
+  light: {
+    text: '#11181C',
+    background: '#fff',
+    tint: tintColorLight,
+    icon: '#687076',
+    tabIconDefault: '#687076',
+    tabIconSelected: tintColorLight,
+  },
+  dark: {
+    text: '#ECEDEE',
+    background: '#151718',
+    tint: tintColorDark,
+    icon: '#9BA1A6',
+    tabIconDefault: '#9BA1A6',
+    tabIconSelected: tintColorDark,
+  },
 };
-
-export type ColorKey = keyof typeof Colors;

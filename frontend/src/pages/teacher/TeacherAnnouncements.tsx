@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Megaphone, Plus, Send, Trash2, X,
@@ -6,6 +6,7 @@ import {
   FileText, ImageIcon, Film, File,
   Loader2, AlertCircle, RefreshCw,
   Paperclip, CheckCircle2, Clock,
+  Search, CalendarDays, Filter,
 } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
 import { useApp } from '../../lib/AppContext';
@@ -54,21 +55,48 @@ export default function TeacherAnnouncements() {
   const [formError, setFormError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Search & filter state
+  const [search, setSearch]               = useState('');
+  const [filterDate, setFilterDate]       = useState('');
+  const [filterPriority, setFilterPriority] = useState<'ALL' | 'LOW' | 'MEDIUM' | 'HIGH'>('ALL');
+  const [filterType, setFilterType]       = useState<'ALL' | 'CLASS' | 'STUDENT'>('ALL');
+
+  const isFiltering = search || filterDate || filterPriority !== 'ALL' || filterType !== 'ALL';
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    return announcements.filter(a => {
+      if (q && !a.title.toLowerCase().includes(q) && !a.message.toLowerCase().includes(q)) return false;
+      if (filterDate && !a.created_at.startsWith(filterDate)) return false;
+      if (filterPriority !== 'ALL' && a.priority !== filterPriority) return false;
+      if (filterType !== 'ALL' && a.type !== filterType) return false;
+      return true;
+    });
+  }, [announcements, search, filterDate, filterPriority, filterType]);
+
+  const clearFilters = () => { setSearch(''); setFilterDate(''); setFilterPriority('ALL'); setFilterType('ALL'); };
+
   // Resolve teacher from directory
   const currentTeacher = teacherDirectory?.find((t: any) => t.user_id === user?.id);
   const teacherId       = currentTeacher?.id;
   const assignments     = currentTeacher?.assignments || [];
 
+  // API serialises the class under `school_class` (TeacherAssignmentResponse).
+  // The frontend type calls it `classroom`, so support both + the bare `school_class_id` fallback.
+  const getClassId = (a: any): number | undefined =>
+    a.school_class?.id ?? a.classroom?.id ?? a.school_class_id;
+  const getClassName = (a: any): string =>
+    a.school_class?.display_name ?? a.classroom?.display_name ?? `Class #${getClassId(a)}`;
+
   // Unique classes this teacher is assigned to
   const assignedClasses = assignments.reduce((acc: any[], a: any) => {
-    if (!acc.find((x: any) => x.school_class_id === a.school_class_id)) {
-      acc.push(a);
-    }
+    const id = getClassId(a);
+    if (id && !acc.find((x: any) => getClassId(x) === id)) acc.push(a);
     return acc;
   }, []);
 
   // Students in assigned classes
-  const assignedClassIds = assignments.map((a: any) => a.school_class_id);
+  const assignedClassIds = assignedClasses.map((a: any) => getClassId(a)).filter(Boolean);
   const availableStudents = (students || []).filter((s: any) =>
     assignedClassIds.includes(s.school_class_id)
   );
@@ -196,6 +224,100 @@ export default function TeacherAnnouncements() {
         </div>
       )}
 
+      {/* Search & Filter Bar */}
+      {!isLoading && !error && announcements.length > 0 && (
+        <div className="obsidian-card p-5 flex flex-col gap-4">
+          {/* Top row: text search + date + clear */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary opacity-50 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search by title or message..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="input-obsidian h-12 pl-11 w-full"
+              />
+              {search && (
+                <button onClick={() => setSearch('')} className="absolute right-4 top-1/2 -translate-y-1/2 text-text-secondary opacity-50 hover:opacity-100 transition-opacity">
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            <div className="relative">
+              <CalendarDays className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary opacity-50 pointer-events-none" />
+              <input
+                type="date"
+                value={filterDate}
+                onChange={e => setFilterDate(e.target.value)}
+                className="input-obsidian h-12 pl-11 w-full sm:w-48 [color-scheme:dark]"
+              />
+            </div>
+
+            {isFiltering && (
+              <button
+                onClick={clearFilters}
+                className="h-12 px-5 rounded-2xl bg-white/5 border border-white/10 text-text-secondary text-xs font-black uppercase tracking-widest hover:bg-rose-500/10 hover:border-rose-500/20 hover:text-rose-400 transition-all flex items-center gap-2 shrink-0"
+              >
+                <X className="w-3.5 h-3.5" /> Clear
+              </button>
+            )}
+          </div>
+
+          {/* Bottom row: pill filters */}
+          <div className="flex flex-wrap gap-3">
+            <div className="flex items-center gap-1.5">
+              <Filter className="w-3.5 h-3.5 text-text-secondary opacity-40" />
+              <span className="text-[10px] font-black uppercase tracking-widest text-text-secondary opacity-40">Priority</span>
+            </div>
+            {(['ALL', 'LOW', 'MEDIUM', 'HIGH'] as const).map(p => (
+              <button
+                key={p}
+                onClick={() => setFilterPriority(p)}
+                className={cn(
+                  'px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all',
+                  filterPriority === p
+                    ? p === 'HIGH'   ? 'bg-rose-500/10 border-rose-500/40 text-rose-400'
+                      : p === 'MEDIUM' ? 'bg-amber-500/10 border-amber-500/40 text-amber-400'
+                      : p === 'LOW'    ? 'bg-brand-indigo/10 border-brand-indigo/40 text-brand-indigo'
+                      : 'bg-white/10 border-white/20 text-white'
+                    : 'bg-white/5 border-white/5 text-text-secondary hover:bg-white/10'
+                )}
+              >{p === 'ALL' ? 'All' : p}</button>
+            ))}
+
+            <div className="w-px bg-white/10 mx-1" />
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-black uppercase tracking-widest text-text-secondary opacity-40">Type</span>
+            </div>
+            {(['ALL', 'CLASS', 'STUDENT'] as const).map(t => (
+              <button
+                key={t}
+                onClick={() => setFilterType(t)}
+                className={cn(
+                  'px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all flex items-center gap-1.5',
+                  filterType === t
+                    ? 'bg-brand-indigo/10 border-brand-indigo/40 text-brand-indigo'
+                    : 'bg-white/5 border-white/5 text-text-secondary hover:bg-white/10'
+                )}
+              >
+                {t === 'CLASS' && <Users className="w-3 h-3" />}
+                {t === 'STUDENT' && <User className="w-3 h-3" />}
+                {t === 'ALL' ? 'All' : t === 'CLASS' ? 'Class-Wide' : 'Individual'}
+              </button>
+            ))}
+
+            {isFiltering && (
+              <span className="ml-auto text-[10px] font-black text-text-secondary opacity-50 self-center">
+                {filtered.length} of {announcements.length} shown
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Announcement List */}
       <div className="flex flex-col gap-6">
         {error ? (
@@ -220,9 +342,18 @@ export default function TeacherAnnouncements() {
             <p className="text-lg font-black uppercase tracking-widest">No Announcements Yet</p>
             <p className="text-sm text-text-secondary mt-2">Create your first announcement to reach parents instantly.</p>
           </div>
+        ) : filtered.length === 0 ? (
+          <div className="py-20 flex flex-col items-center justify-center obsidian-card border-dashed border-white/10 opacity-60 gap-4">
+            <Search className="w-12 h-12 text-text-secondary opacity-30" />
+            <p className="text-base font-black uppercase tracking-widest">No Matches Found</p>
+            <p className="text-sm text-text-secondary">Try adjusting your search or filters.</p>
+            <button onClick={clearFilters} className="mt-2 px-5 py-2 rounded-xl bg-brand-indigo/10 border border-brand-indigo/20 text-brand-indigo text-xs font-black uppercase tracking-widest hover:bg-brand-indigo/20 transition-all">
+              Clear Filters
+            </button>
+          </div>
         ) : (
           <AnimatePresence mode="popLayout">
-            {announcements.map((a) => {
+            {filtered.map((a) => {
               const style = PRIORITY_STYLES[a.priority as keyof typeof PRIORITY_STYLES] || PRIORITY_STYLES.low;
               return (
                 <motion.div
@@ -285,8 +416,8 @@ export default function TeacherAnnouncements() {
 
                   <button
                     onClick={() => handleDelete(a.id)}
-                    className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-500 opacity-0 group-hover:opacity-100 transition-all shrink-0"
-                    title="Delete"
+                    className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-500 opacity-40 hover:opacity-100 transition-all shrink-0"
+                    title="Delete announcement"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -383,8 +514,8 @@ export default function TeacherAnnouncements() {
                       >
                         <option value="">Select a class...</option>
                         {assignedClasses.map((a: any) => (
-                          <option key={a.school_class_id} value={a.school_class_id}>
-                            {a.school_class?.display_name || `Class #${a.school_class_id}`}
+                          <option key={getClassId(a)} value={getClassId(a)}>
+                            {getClassName(a)}
                           </option>
                         ))}
                       </select>

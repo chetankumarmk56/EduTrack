@@ -1,14 +1,16 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, useInView } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../lib/AppContext';
 import { useAuth } from '../lib/AuthContext';
 import {
    Activity, Calendar, ArrowRight, Clock,
    MapPin, Target, ShieldCheck,
-   BookOpen, GraduationCap
+   BookOpen, GraduationCap, Megaphone
 } from 'lucide-react';
 import { StaggerItem } from '../components/ui/PageWrapper';
 import { cn } from '../lib/utils';
+import { announcementApi } from '../api/announcementApi';
 
 // Animated counter component with smooth easing
 function AnimatedCounter({ value, suffix = '', className = '' }: { value: number; suffix?: string; className?: string }) {
@@ -39,6 +41,7 @@ function AnimatedCounter({ value, suffix = '', className = '' }: { value: number
 
 export default function Dashboard() {
    const { user } = useAuth();
+   const navigate = useNavigate();
    const {
       classDirectory,
       teacherDirectory,
@@ -50,11 +53,20 @@ export default function Dashboard() {
       parentFees
    } = useApp();
 
+   const [unreadCount, setUnreadCount] = useState(0);
+
    useEffect(() => {
       if (studentProfile?.id && (rawMarks || []).length === 0) {
          fetchStudentData(studentProfile.id);
       }
    }, [studentProfile?.id]);
+
+   useEffect(() => {
+      if (user?.role !== 'parent' && user?.role !== 'student') return;
+      announcementApi.getMyAnnouncements()
+        .then(data => setUnreadCount(data.filter((a: any) => !a.is_read).length))
+        .catch(() => {});
+   }, [user?.role]);
 
    const activeStudent = studentProfile || classDirectory.find((s: any) => s.user_id === user?.id || s.id === user?.id);
    const studentClass = activeStudent?.school_class || activeStudent?.classroom;
@@ -148,7 +160,8 @@ export default function Dashboard() {
                      <div className="flex flex-wrap gap-7 w-full lg:w-auto">
                         <motion.div
                            whileHover={{ y: -8, scale: 1.02 }}
-                           className="flex-1 lg:flex-none flex items-center gap-7 p-9 rounded-[3.5rem] bg-indigo-600 text-white shadow-2xl shadow-indigo-500/30 border border-white/10"
+                           onClick={() => navigate('/parent/academics')}
+                           className="flex-1 lg:flex-none flex items-center gap-7 p-9 rounded-[3.5rem] bg-indigo-600 text-white shadow-2xl shadow-indigo-500/30 border border-white/10 cursor-pointer"
                         >
                            <div className="h-20 w-20 rounded-[2.2rem] bg-white/20 backdrop-blur-xl flex items-center justify-center border border-white/20 shadow-inner">
                               <Target className="w-10 h-10" />
@@ -161,7 +174,8 @@ export default function Dashboard() {
 
                         <motion.div
                            whileHover={{ y: -8, scale: 1.02 }}
-                           className="flex-1 lg:flex-none flex items-center gap-7 p-9 rounded-[3.5rem] bg-white border border-white shadow-2xl crystal-glow"
+                           onClick={() => navigate('/parent/attendance')}
+                           className="flex-1 lg:flex-none flex items-center gap-7 p-9 rounded-[3.5rem] bg-white border border-white shadow-2xl crystal-glow cursor-pointer"
                         >
                            <div className="h-20 w-20 rounded-[2.2rem] bg-violet-600 flex items-center justify-center text-white shadow-xl shadow-violet-500/20">
                               <Activity className="w-10 h-10" />
@@ -171,6 +185,32 @@ export default function Dashboard() {
                               <p className="text-6xl font-black text-foreground tracking-tighter leading-none"><AnimatedCounter value={attendanceCount} suffix="%" /></p>
                            </div>
                         </motion.div>
+
+                        {(user?.role === 'parent' || user?.role === 'student') && (
+                           <motion.div
+                              whileHover={{ y: -8, scale: 1.02 }}
+                              onClick={() => navigate('/parent/announcements')}
+                              className="flex-1 lg:flex-none flex items-center gap-7 p-9 rounded-[3.5rem] bg-white border border-white shadow-2xl crystal-glow cursor-pointer relative"
+                           >
+                              <div className="relative">
+                                 <div className="h-20 w-20 rounded-[2.2rem] bg-rose-500/10 flex items-center justify-center text-rose-500 shadow-xl shadow-rose-500/10">
+                                    <Megaphone className="w-10 h-10" />
+                                 </div>
+                                 {unreadCount > 0 && (
+                                    <span className="absolute -top-2 -right-2 h-7 w-7 rounded-full bg-rose-500 text-white text-[11px] font-black flex items-center justify-center shadow-lg shadow-rose-500/40 animate-pulse">
+                                       {unreadCount > 9 ? '9+' : unreadCount}
+                                    </span>
+                                 )}
+                              </div>
+                              <div>
+                                 <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground mb-1">Announcements</p>
+                                 {unreadCount > 0
+                                    ? <p className="text-4xl font-black text-rose-500 tracking-tighter leading-none">{unreadCount} <span className="text-xl">Unread</span></p>
+                                    : <p className="text-2xl font-black text-emerald-500 tracking-tighter leading-none">All Read</p>
+                                 }
+                              </div>
+                           </motion.div>
+                        )}
                      </div>
 
                   </div>
@@ -217,7 +257,7 @@ export default function Dashboard() {
                                     </div>
                                     <div className="flex items-center gap-3 text-[11px] font-bold text-muted-foreground/60">
                                        <Calendar className="w-4 h-4" />
-                                       Deadline: {new Date(fee.due_date).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
+                                       Deadline: {fee.due_date ? new Date(fee.due_date).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
                                     </div>
                                  </div>
                               );

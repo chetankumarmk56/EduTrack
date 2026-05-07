@@ -1,13 +1,7 @@
 import client from './client';
+import type { Notification } from '../types';
 
-export interface Notification {
-  id: number;
-  title: string;
-  message: string;
-  type: string;
-  is_read: boolean;
-  created_at: string;
-}
+export type { Notification };
 
 export const notificationApi = {
   getNotifications: async (unreadOnly: boolean = false) => {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, ActivityIndicator, Text, StyleSheet } from 'react-native';
+import { View, ActivityIndicator, Text, StyleSheet, StyleProp, ViewStyle } from 'react-native';
 import { Colors } from '../../constants/Colors';
 
 interface LoadingScreenProps {
@@ -56,6 +56,7 @@ interface ProgressBarProps {
   color?: string;
   height?: number;
   backgroundColor?: string;
+  style?: StyleProp<ViewStyle>;
 }
 
 export function ProgressBar({
@@ -63,10 +64,11 @@ export function ProgressBar({
   color = Colors.primary,
   height = 8,
   backgroundColor = Colors.border,
+  style,
 }: ProgressBarProps) {
   const clamped = Math.min(100, Math.max(0, value));
   return (
-    <View style={[styles.progressBg, { height, backgroundColor, borderRadius: height / 2 }]}>
+    <View style={[styles.progressBg, { height, backgroundColor, borderRadius: height / 2 }, style]}>
       <View
         style={[
           styles.progressFill,
