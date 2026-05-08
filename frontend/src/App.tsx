@@ -40,6 +40,7 @@ import AdminEvents from './pages/admin/AdminEvents';
 import AdminClasses from './pages/admin/AdminClasses';
 import AdminTransport from './pages/admin/AdminTransport';
 import FinanceDashboard from './pages/admin/FinanceDashboard.tsx';
+import AdminProfile from './pages/admin/AdminProfile';
 // Admin Announcement import removed (stale).
 
 // Super Admin Imports
@@ -47,6 +48,7 @@ import SuperAdminLayout from './components/layout/SuperAdminLayout';
 import SuperAdminLogin from './pages/superadmin/SuperAdminLogin';
 import SuperAdminDashboard from './pages/superadmin/SuperAdminDashboard';
 import SuperAdminCredentials from './pages/superadmin/SuperAdminCredentials';
+import SuperAdminProfile from './pages/superadmin/SuperAdminProfile';
 import { Toaster } from 'react-hot-toast';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
@@ -138,6 +140,7 @@ function App() {
               <Route path="events" element={<AdminEvents />} />
               <Route path="transport" element={<AdminTransport />} />
               <Route path="finance" element={<FinanceDashboard />} />
+              <Route path="profile" element={<AdminProfile />} />
             </Route>
 
             {/* Super Admin Routes */}
@@ -150,6 +153,7 @@ function App() {
               <Route index element={<Navigate to="/superadmin/dashboard" replace />} />
               <Route path="dashboard" element={<SuperAdminDashboard />} />
               <Route path="admins" element={<SuperAdminCredentials />} />
+              <Route path="profile" element={<SuperAdminProfile />} />
             </Route>
 
             {/* Catch-all */}

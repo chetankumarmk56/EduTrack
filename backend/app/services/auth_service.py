@@ -6,7 +6,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 from app.models.core import User, Institution
-from app.core.security import verify_password, create_access_token, create_refresh_token
+from app.core.security import verify_password, create_access_token, create_refresh_token, get_password_hash
 from app.core.logger import logger
 from typing import Optional
 
@@ -216,5 +216,67 @@ class AuthService:
             }
         
         return None
+
+    # Roles permitted to change their own password through the self-service endpoint.
+    # Parents are intentionally excluded.
+    CHANGE_PASSWORD_ALLOWED_ROLES = frozenset({"super_admin", "admin", "teacher", "finance"})
+
+    @staticmethod
+    async def change_password(
+        db: AsyncSession,
+        user_id: int,
+        role: str,
+        current_password: str,
+        new_password: str,
+    ) -> None:
+        """
+        Self-service password change. The caller is responsible for sourcing
+        `user_id` and `role` from a verified token (never from the request body).
+
+        Raises HTTPException with 400/401/403 on failure; returns None on success.
+        Never returns or logs password material.
+        """
+        if role not in AuthService.CHANGE_PASSWORD_ALLOWED_ROLES:
+            logger.warning(f"CHANGE_PASSWORD_FORBIDDEN: user_id={user_id} role={role}")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Your account is not permitted to change passwords through this endpoint.",
+            )
+
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalars().first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication context is no longer valid.",
+            )
+
+        if not verify_password(current_password, user.password_hash):
+            logger.warning(f"CHANGE_PASSWORD_BAD_CURRENT: user_id={user.id}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Current password is incorrect.",
+            )
+
+        # Defense-in-depth reuse check against the existing hash.
+        if verify_password(new_password, user.password_hash):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="New password must be different from the current password.",
+            )
+
+        user.password_hash = get_password_hash(new_password)
+        try:
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            logger.exception(f"CHANGE_PASSWORD_DB_ERROR: user_id={user.id}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Could not update password. Please try again.",
+            )
+
+        logger.info(f"CHANGE_PASSWORD_SUCCESS: user_id={user.id} role={user.role}")
+
 
 auth_service = AuthService()

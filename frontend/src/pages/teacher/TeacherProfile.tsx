@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Mail, Phone, BookOpen, Clock, Users, Briefcase, GraduationCap, Building } from 'lucide-react';
 import { useApp } from '../../lib/AppContext';
 import { useAuth } from '../../lib/AuthContext';
+import ChangePasswordCard from '../../components/account/ChangePasswordCard';
 
 export default function TeacherProfile() {
   const { user } = useAuth();
@@ -161,6 +162,14 @@ export default function TeacherProfile() {
                 })
               )}
             </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+          >
+            <ChangePasswordCard />
           </motion.div>
         </div>
       </div>

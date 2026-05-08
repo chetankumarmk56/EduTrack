@@ -32,4 +32,12 @@ export const authApi = {
     const response = await client.get<User>('auth/me');
     return response.data;
   },
+
+  changePassword: async (currentPassword: string, newPassword: string) => {
+    const response = await client.post<{ message: string }>('auth/change-password', {
+      current_password: currentPassword,
+      new_password: newPassword,
+    });
+    return response.data;
+  },
 };

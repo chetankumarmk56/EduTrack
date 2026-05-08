@@ -35,7 +35,8 @@ export default function TopNav({ onMenuClick }: TopNavProps) {
 
   const handleProfileClick = () => {
     if (isTeacher) navigate('/teacher/profile');
-    else if (isAdmin) return; // No profile for admin
+    else if (user?.role === 'super_admin') navigate('/superadmin/profile');
+    else if (isAdmin) navigate('/admin/profile');
     else navigate('/parent/profile');
   };
 

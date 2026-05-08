@@ -5,7 +5,7 @@ from app.core.database import get_db
 from app.core.dependencies import get_current_user, UserContext
 from app.core.limiter import limiter  # ✅ NEW: Rate limiter
 from app.services.auth_service import auth_service
-from app.schemas.auth import Token
+from app.schemas.auth import Token, ChangePasswordRequest, ChangePasswordResponse
 from app.core.logger import logger
 
 router = APIRouter(
@@ -180,3 +180,26 @@ async def read_users_me(current_user: UserContext = Depends(get_current_user)):
     Returns the decoded UserContext profile of the current authenticated user securely.
     """
     return current_user
+
+
+@router.post("/change-password", response_model=ChangePasswordResponse)
+@limiter.limit("5/minute")
+async def change_password(
+    request: Request,
+    payload: ChangePasswordRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserContext = Depends(get_current_user),
+):
+    """
+    Authenticated password change. User identity is taken from the JWT —
+    the request body never carries a user_id. All business logic lives in
+    AuthService.change_password; this handler is a thin HTTP adapter.
+    """
+    await auth_service.change_password(
+        db=db,
+        user_id=current_user.id,
+        role=current_user.role,
+        current_password=payload.current_password,
+        new_password=payload.new_password,
+    )
+    return ChangePasswordResponse(message="Password updated successfully")

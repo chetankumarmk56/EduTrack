@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, ConfigDict
+from pydantic import BaseModel, EmailStr, ConfigDict, Field, field_validator, model_validator
 from typing import Optional
 
 class Token(BaseModel):
@@ -17,3 +17,29 @@ class TokenPayload(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(..., min_length=1, max_length=256)
+    new_password: str = Field(..., min_length=8, max_length=256)
+
+    @field_validator("new_password")
+    @classmethod
+    def _new_password_complexity(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("New password must be at least 8 characters long.")
+        if not any(c.isalpha() for c in v):
+            raise ValueError("New password must include at least one letter.")
+        if not any(c.isdigit() for c in v):
+            raise ValueError("New password must include at least one number.")
+        return v
+
+    @model_validator(mode="after")
+    def _new_must_differ_from_current(self) -> "ChangePasswordRequest":
+        if self.current_password == self.new_password:
+            raise ValueError("New password must be different from the current password.")
+        return self
+
+
+class ChangePasswordResponse(BaseModel):
+    message: str
