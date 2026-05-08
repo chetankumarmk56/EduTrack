@@ -173,9 +173,22 @@ def seed_db():
 def run_migrations():
     from alembic import command
     from alembic.config import Config
+    from sqlalchemy import inspect
+    from app.core.database import sync_engine
+
     here = os.path.dirname(os.path.abspath(__file__))
     cfg = Config(os.path.join(here, "alembic.ini"))
     cfg.set_main_option("script_location", os.path.join(here, "alembic"))
+
+    # If the DB was built outside of alembic (legacy schema from Base.metadata.create_all),
+    # tables exist but alembic_version does not. Stamp it at the pre-head merge point
+    # so upgrade head only applies migrations newer than the existing schema.
+    inspector = inspect(sync_engine)
+    existing = set(inspector.get_table_names())
+    if "alembic_version" not in existing and "institutions" in existing:
+        print("[migrations] Legacy schema detected — stamping at c9f8a1b2e3d4 before upgrade.")
+        command.stamp(cfg, "c9f8a1b2e3d4")
+
     command.upgrade(cfg, "head")
 
 if __name__ == "__main__":
