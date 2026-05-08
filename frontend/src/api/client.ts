@@ -2,6 +2,7 @@ import axios from 'axios';
 import type { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import toast from 'react-hot-toast';
 import { getErrorMessage } from '../lib/errorHandler';
+import { getCurrentPortalRole } from '../lib/portalRole';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/';
 
@@ -30,16 +31,6 @@ const getRequestSignature = (config: InternalAxiosRequestConfig): string | null 
   const params = new URLSearchParams(config.params || {}).toString();
   const key = params ? `${config.url}?${params}` : config.url;
   return key || null;
-};
-
-// Helper to determine the current portal's role context based on URL
-// This MUST match the logic in AuthContext.tsx exactly
-const getCurrentPortalRole = () => {
-  const path = window.location.pathname;
-  if (path.startsWith('/superadmin')) return 'super_admin';
-  if (path.startsWith('/admin') || path.includes('admin-login')) return 'admin';
-  if (path.startsWith('/teacher') || path.includes('teacher-login')) return 'teacher';
-  return 'parent';
 };
 
 // Queue to handle multiple simultaneous requests during token refresh

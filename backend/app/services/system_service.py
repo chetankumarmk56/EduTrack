@@ -1,4 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from typing import Dict, Any
 import asyncio
 
@@ -8,6 +9,7 @@ from app.services.teacher_service import teacher_service
 from app.services.student_service import student_service
 from app.core.dependencies import UserContext
 from app.core.database import AsyncSessionLocal
+from app.models.core import Institution
 
 class SystemService:
     @staticmethod
@@ -34,12 +36,20 @@ class SystemService:
             async with AsyncSessionLocal() as session:
                 return await academic_service.get_school_classes(session, user.institution_id)
 
+        async def fetch_institution_name():
+            async with AsyncSessionLocal() as session:
+                result = await session.execute(
+                    select(Institution.name).where(Institution.id == user.institution_id)
+                )
+                return result.scalar()
+
         # Execute academic metadata queries in parallel
-        grades, sections, subjects, school_classes = await asyncio.gather(
+        grades, sections, subjects, school_classes, institution_name = await asyncio.gather(
             fetch_grades(),
             fetch_sections(),
             fetch_subjects(),
-            fetch_classes()
+            fetch_classes(),
+            fetch_institution_name(),
         )
 
         context = {
@@ -54,7 +64,8 @@ class SystemService:
                 "role": user.role,
                 "name": user.name
             },
-            "institution_id": user.institution_id
+            "institution_id": user.institution_id,
+            "institution_name": institution_name,
         }
 
         # Handle Role-Specific Data in parallel

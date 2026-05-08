@@ -170,5 +170,14 @@ def seed_db():
     finally:
         db.close()
 
+def run_migrations():
+    from alembic import command
+    from alembic.config import Config
+    here = os.path.dirname(os.path.abspath(__file__))
+    cfg = Config(os.path.join(here, "alembic.ini"))
+    cfg.set_main_option("script_location", os.path.join(here, "alembic"))
+    command.upgrade(cfg, "head")
+
 if __name__ == "__main__":
+    run_migrations()
     seed_db()

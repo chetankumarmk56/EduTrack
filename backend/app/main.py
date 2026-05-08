@@ -133,12 +133,13 @@ async def global_exception_handler(request: Request, exc: Exception):
     import traceback
     error_msg = traceback.format_exc()
     logger.critical(f"UNHANDLED SYSTEM EXCEPTION on {request.url.path}: {error_msg}")
+    is_prod = settings.ENVIRONMENT == "prod"
     return JSONResponse(
         status_code=500,
         content={
-            "detail": "An unexpected system error occurred. Our team has been notified.", 
-            "error_type": type(exc).__name__,
-            "internal_error": str(exc) if settings.ENVIRONMENT != "prod" else None
+            "detail": "An unexpected system error occurred. Our team has been notified.",
+            "error_type": None if is_prod else type(exc).__name__,
+            "internal_error": None if is_prod else str(exc),
         }
     )
 

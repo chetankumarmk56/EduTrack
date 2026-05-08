@@ -135,6 +135,80 @@ class FeeServiceMixin:
             breakdown=breakdown,
         )
 
+    async def get_students_dues_bulk(
+        self, db: AsyncSession, institution_id: int, student_ids: List[int]
+    ) -> List[StudentDuesResponse]:
+        """
+        Bulk variant of get_student_dues. Two queries total regardless of N.
+        Preserves input order; skips students not found in this institution.
+        """
+        from datetime import date as date_type
+
+        if not student_ids:
+            return []
+
+        student_result = await db.execute(
+            select(Student).where(
+                Student.id.in_(student_ids),
+                Student.institution_id == institution_id,
+            )
+        )
+        students_by_id = {s.id: s for s in student_result.scalars().all()}
+
+        fee_result = await db.execute(
+            select(StudentFee).where(
+                StudentFee.student_id.in_(student_ids),
+                StudentFee.institution_id == institution_id,
+            )
+        )
+        fees_by_student: dict[int, list[StudentFee]] = {}
+        for fee in fee_result.scalars().all():
+            fees_by_student.setdefault(fee.student_id, []).append(fee)
+
+        today = date_type.today()
+        responses: List[StudentDuesResponse] = []
+
+        for sid in student_ids:
+            student = students_by_id.get(sid)
+            if not student:
+                continue
+
+            fees = fees_by_student.get(sid, [])
+            total_due = 0.0
+            total_paid = 0.0
+            breakdown: List[CategoryWiseDue] = []
+            due_date = None
+
+            for fee in fees:
+                total_due += fee.due_amount
+                total_paid += fee.amount_paid
+                if fee.due_date and (due_date is None or fee.due_date < due_date):
+                    due_date = fee.due_date
+                if fee.total_amount > 0:
+                    breakdown.append(
+                        CategoryWiseDue(
+                            fee_type="TUITION",
+                            total=fee.total_amount,
+                            paid=fee.amount_paid,
+                            due=fee.due_amount,
+                        )
+                    )
+
+            is_overdue = bool(due_date and due_date < today and total_due > 0)
+            responses.append(
+                StudentDuesResponse(
+                    student_id=sid,
+                    student_name=student.name,
+                    total_due=total_due,
+                    total_paid=total_paid,
+                    due_date=due_date,
+                    is_overdue=is_overdue,
+                    breakdown=breakdown,
+                )
+            )
+
+        return responses
+
     async def get_student_payments(
         self,
         db: AsyncSession,

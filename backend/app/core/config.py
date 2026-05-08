@@ -79,11 +79,28 @@ class Settings(BaseSettings):
         # Validate SECRET_KEY length at runtime
         if len(self.SECRET_KEY) < 32:
             raise ValueError("SECRET_KEY must be at least 32 characters long. Generate with: python -c 'import secrets; print(secrets.token_urlsafe(32))'")
-        
+
         # Handle aliases manual override if provided in env
         if self.JWT_SECRET:
             self.SECRET_KEY = self.JWT_SECRET
         if self.JWT_ALGORITHM:
             self.ALGORITHM = self.JWT_ALGORITHM
+
+        # Production hardening: fail fast if critical credentials are placeholders
+        if self.ENVIRONMENT == "prod":
+            placeholder_values = {
+                "RAZORPAY_KEY_ID": ("rzp_test_placeholder", self.RAZORPAY_KEY_ID),
+                "RAZORPAY_KEY_SECRET": ("placeholder_secret", self.RAZORPAY_KEY_SECRET),
+                "RAZORPAY_WEBHOOK_SECRET": ("placeholder_webhook_secret", self.RAZORPAY_WEBHOOK_SECRET),
+            }
+            unset = [name for name, (placeholder, value) in placeholder_values.items() if not value or value == placeholder]
+            if unset:
+                raise ValueError(
+                    f"Production startup blocked: the following Razorpay credentials are unset or use placeholder values: {unset}. "
+                    "Set them via environment variables before starting in production."
+                )
+
+            # Force secure cookies in production (overrides any .env override)
+            self.COOKIE_SECURE = True
 
 settings = Settings()

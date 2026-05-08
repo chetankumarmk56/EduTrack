@@ -83,12 +83,10 @@ async def get_my_dues(
                 )
             )
             children = children_res.scalars().all()
-            results = []
-            for child in children:
-                dues = await finance_service.get_student_dues(db, user.institution_id, child.id)
-                if dues:
-                    results.append(dues)
-            return results
+            child_ids = [c.id for c in children]
+            return await finance_service.get_students_dues_bulk(
+                db, user.institution_id, child_ids
+            )
 
     # Student path (role='student' OR role='parent' with no Parent record)
     student_res = await db.execute(

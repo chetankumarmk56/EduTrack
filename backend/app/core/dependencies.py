@@ -48,7 +48,12 @@ async def get_current_user(
             )
             
         user_id = int(user_id_val)
-        institution_id = int(inst_val) if inst_val else 1
+        if not inst_val:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token: missing institution context",
+            )
+        institution_id = int(inst_val)
         
         # Unified Identity Fetch
         result = await db.execute(select(User).where(User.id == user_id))

@@ -20,9 +20,12 @@ router = APIRouter(
 @router.get("/download")
 async def download_announcement_file(file_path: str):
     """
-    Publicly accessible but secure download handler.
-    Forces download of files stored in static/uploads.
-    Accepts both full URLs (http://...) and relative paths (/static/uploads/...).
+    Public-by-design download handler. Mirrors the existing /static/uploads/
+    route, which is also unauthenticated; gating only this URL would not
+    improve security since the same files are reachable via /static.
+    Path traversal is blocked via the abspath check below. Filenames are
+    server-generated (UUID-like), so unguessable in practice. A signed-URL
+    or move to Cloudinary is the proper hardening path; that is out of scope.
     """
     from urllib.parse import urlparse
 

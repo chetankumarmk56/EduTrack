@@ -159,7 +159,7 @@ export default function ParentAnnouncements() {
     setSelected(a);
     if (!a.is_read) {
       setAnnouncements(prev => prev.map(x => x.id === a.id ? { ...x, is_read: true } : x));
-      announcementApi.markAsRead(a.id).catch(() => {});
+      announcementApi.markAsRead(a.id).catch((err) => console.error("Failed to mark announcement as read:", err));
     }
   };
 

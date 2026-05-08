@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useMemo, useRef, type R
 import { useLocation } from 'react-router-dom';
 import { authApi } from '../api/authApi';
 import { type UserRole } from '../types';
+import { getCurrentPortalRole } from './portalRole';
 
 export interface AuthUser {
   id: number;
@@ -22,15 +23,6 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-// Helper to determine the current portal's role context based on URL
-// Moved outside so it can be used in both the initial state and the reactive hook
-const getCurrentPortalRole = (pathname: string): UserRole | 'parent' => {
-  if (pathname.startsWith('/superadmin')) return 'super_admin';
-  if (pathname.startsWith('/admin') || pathname.includes('admin-login')) return 'admin';
-  if (pathname.startsWith('/teacher') || pathname.includes('teacher-login')) return 'teacher';
-  return 'parent';
-};
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const location = useLocation();

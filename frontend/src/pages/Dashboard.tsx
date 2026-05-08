@@ -65,7 +65,7 @@ export default function Dashboard() {
       if (user?.role !== 'parent' && user?.role !== 'student') return;
       announcementApi.getMyAnnouncements()
         .then(data => setUnreadCount(data.filter((a: any) => !a.is_read).length))
-        .catch(() => {});
+        .catch((err) => console.error("Failed to load announcements for unread count:", err));
    }, [user?.role]);
 
    const activeStudent = studentProfile || classDirectory.find((s: any) => s.user_id === user?.id || s.id === user?.id);

@@ -130,7 +130,13 @@ async def refresh_access_token(
         # Extract identity from JWT (the only trusted source)
         user_id = int(payload.get("sub", 0))
         user_role = payload.get("role")
-        institution_id = int(payload.get("institution_id", 1))
+        raw_inst_id = payload.get("institution_id")
+        if not raw_inst_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token: missing institution context",
+            )
+        institution_id = int(raw_inst_id)
         user_name = payload.get("name")
         
         # Validate role consistency between token and request

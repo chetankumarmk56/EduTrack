@@ -205,6 +205,10 @@ const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
 
       localStorage.setItem('edu_cache_last_fetch', String(now));
 
+      if (data.institution_name) {
+        localStorage.setItem('edu_institution_name', data.institution_name);
+      }
+
       if (data.academic) {
         setGrades(data.academic.grades || []);
         setSections(data.academic.sections || []);
@@ -277,32 +281,32 @@ const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
     }
   }, []);
 
-  const refreshParentFees = async () => {
+  const refreshParentFees = useCallback(async () => {
     try {
       const data: ParentFeeItem[] = await financeApi.getParentFees();
       setParentFees(data);
     } catch (err) {
       console.error("Parent Fees Fetch Error:", err);
     }
-  };
+  }, []);
 
-  const refreshNotifications = async () => {
+  const refreshNotifications = useCallback(async () => {
     try {
       const data: Notification[] = await notificationApi.getNotifications();
       setNotifications(data);
     } catch (err) {
       console.error("Notifications Fetch Error:", err);
     }
-  };
+  }, []);
 
-  const markNotificationRead = async (id: number) => {
+  const markNotificationRead = useCallback(async (id: number) => {
     try {
       await notificationApi.markAsRead(id);
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
     } catch (err) {
       console.error("Mark Read Error:", err);
     }
-  };
+  }, []);
 
   const [currentlyFetchingMarks, setCurrentlyFetchingMarks] = useState<string | null>(null);
 

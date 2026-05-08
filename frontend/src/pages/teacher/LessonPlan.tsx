@@ -1,13 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '../../lib/AppContext';
-import { 
-  Calendar, Sparkles, CheckCircle2, AlertCircle, Download, 
-  Loader2, Play, UploadCloud, Clock, Share2, 
+import {
+  Calendar, Sparkles, CheckCircle2, AlertCircle, Download,
+  Loader2, Play, UploadCloud, Clock, Share2,
   BookOpen, ChevronRight, Wand2, Zap, Settings
 } from 'lucide-react';
 import { StaggerContainer, StaggerItem } from '../../components/ui/PageWrapper';
 import { aiApi } from '../../api/aiApi';
+import { lessonPlanService } from '../../services/lessonPlanService';
 
 interface LessonDay {
   date: string;
@@ -17,36 +18,74 @@ interface LessonDay {
   duration_hours: number;
 }
 
+const STORAGE_KEY = 'edu_cache_lesson_plan_v1';
+
 export default function LessonPlan() {
   const { aiAnalysis, setAiAnalysis, teacherSubject } = useApp();
   const [file, setFile] = useState<File | null>(null);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [hoursPerDay, setHoursPerDay] = useState('2');
+  const [classesPerWeek, setClassesPerWeek] = useState('5');
+  const [hoursPerClass, setHoursPerClass] = useState('1');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isGeneratingPPT, setIsGeneratingPPT] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (aiAnalysis) return;
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) setAiAnalysis(JSON.parse(saved));
+    } catch {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  }, []);
+
+  const validateInputs = (): string | null => {
+    if (!file) return 'Please upload a syllabus file.';
+    if (!startDate || !endDate) return 'Please provide both start and end dates.';
+    if (new Date(endDate) < new Date(startDate)) return 'End date must be on or after start date.';
+    const cpw = Number(classesPerWeek);
+    if (!Number.isFinite(cpw) || cpw < 1 || cpw > 7) return 'Classes per week must be between 1 and 7.';
+    const hpc = Number(hoursPerClass);
+    if (!Number.isFinite(hpc) || hpc <= 0) return 'Hours per class must be greater than 0.';
+    return null;
+  };
 
   const handleUpload = async () => {
-    if (!file || !startDate || !endDate) {
-      alert("Please provide the PDF and the full timeline.");
+    setErrorMsg(null);
+    const validationError = validateInputs();
+    if (validationError) {
+      setErrorMsg(validationError);
       return;
     }
 
     setIsAnalyzing(true);
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('start_date', startDate);
-    formData.append('end_date', endDate);
-    formData.append('hours_per_day', hoursPerDay);
-
     try {
-      const data = await aiApi.analyzeCurriculum(formData);
-      setAiAnalysis(data);
+      const result = await lessonPlanService.generatePlan({
+        file: file as File,
+        startDate,
+        endDate,
+        classesPerWeek: Number(classesPerWeek),
+        hoursPerClass: Number(hoursPerClass),
+      });
+      setAiAnalysis(result);
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(result));
+      } catch {
+        // storage quota — non-fatal
+      }
     } catch (err) {
-      console.error(err);
+      const msg = err instanceof Error ? err.message : 'Failed to generate lesson plan.';
+      setErrorMsg(msg);
     } finally {
       setIsAnalyzing(false);
     }
+  };
+
+  const handleReset = () => {
+    setAiAnalysis(null);
+    localStorage.removeItem(STORAGE_KEY);
   };
 
   const handleDownloadPPT = async () => {
@@ -191,25 +230,47 @@ export default function LessonPlan() {
                   </div>
                 </div>
 
-                <div className="space-y-5 mb-14 relative z-10">
-                  <div className="flex items-center justify-between ml-2">
-                    <label className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/60">Intensity Velocity</label>
-                    <span className="text-2xl font-black text-primary aurora-glow tabular-nums">{hoursPerDay}h<span className="text-xs opacity-40 ml-1">/day</span></span>
+                <div className="grid sm:grid-cols-2 gap-8 mb-12 relative z-10">
+                  <div className="space-y-4">
+                    <label className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/60 ml-2">Sessions / Week</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={7}
+                      step={1}
+                      value={classesPerWeek}
+                      onChange={(e) => setClassesPerWeek(e.target.value)}
+                      className="w-full h-16 px-6 rounded-2xl border border-white/5 bg-black/40 focus:ring-2 focus:ring-primary/50 outline-none font-black text-sm transition-all hover:border-primary/30"
+                    />
                   </div>
-                  <div className="relative h-14 flex items-center bg-black/40 px-6 rounded-2xl border border-white/5">
-                    <input 
-                      type="range" 
-                      min="0.5" 
-                      max="12" 
-                      step="0.5" 
-                      value={hoursPerDay}
-                      onChange={(e) => setHoursPerDay(e.target.value)}
-                      className="w-full h-1.5 bg-muted/40 rounded-full appearance-none cursor-pointer accent-primary"
+                  <div className="space-y-4">
+                    <label className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/60 ml-2">Hours / Session</label>
+                    <input
+                      type="number"
+                      min={0.5}
+                      step={0.5}
+                      value={hoursPerClass}
+                      onChange={(e) => setHoursPerClass(e.target.value)}
+                      className="w-full h-16 px-6 rounded-2xl border border-white/5 bg-black/40 focus:ring-2 focus:ring-primary/50 outline-none font-black text-sm transition-all hover:border-primary/30"
                     />
                   </div>
                 </div>
 
-                <button 
+                <AnimatePresence>
+                  {errorMsg && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      className="mb-8 flex items-start gap-4 bg-red-500/10 border border-red-500/30 rounded-2xl p-5 text-sm text-red-300 font-bold relative z-10"
+                    >
+                      <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
+                      <span>{errorMsg}</span>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <button
                   disabled={isAnalyzing || !file}
                   onClick={handleUpload}
                   className="w-full group relative h-18 aurora-gradient disabled:bg-muted text-white rounded-2xl font-black text-base uppercase tracking-[0.2em] shadow-2xl shadow-primary/20 flex items-center justify-center gap-4 transition-all hover:translate-y-[-4px] active:translate-y-0 aurora-glow aurora-pulse aurora-border-trace"
@@ -274,14 +335,16 @@ export default function LessonPlan() {
                   <Share2 className="w-5 h-5 inline mr-3" />
                   Broadcast
                 </button>
-                <button 
-                  onClick={handleDownloadPPT}
-                  disabled={isGeneratingPPT}
-                  className="flex-1 md:flex-none h-16 px-10 aurora-gradient text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-2xl aurora-glow transition-all"
-                >
-                  {isGeneratingPPT ? <Loader2 className="w-5 h-5 animate-spin mr-3" /> : <Download className="w-5 h-5 inline mr-3" />}
-                  Export Deck
-                </button>
+                {Array.isArray(aiAnalysis.suggested_ppt_slides) && (aiAnalysis.suggested_ppt_slides as unknown[]).length > 0 && (
+                  <button
+                    onClick={handleDownloadPPT}
+                    disabled={isGeneratingPPT}
+                    className="flex-1 md:flex-none h-16 px-10 aurora-gradient text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-2xl aurora-glow transition-all"
+                  >
+                    {isGeneratingPPT ? <Loader2 className="w-5 h-5 animate-spin mr-3" /> : <Download className="w-5 h-5 inline mr-3" />}
+                    Export Deck
+                  </button>
+                )}
               </div>
             </div>
 
@@ -345,8 +408,8 @@ export default function LessonPlan() {
             </div>
 
             <div className="flex justify-center pt-24">
-              <button 
-                onClick={() => setAiAnalysis(null)}
+              <button
+                onClick={handleReset}
                 className="group flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.4em] text-muted-foreground/40 hover:text-primary transition-all aurora-glow-hover"
               >
                 <div className="flex items-center gap-3 border border-white/10 px-8 py-4 rounded-2xl group-hover:border-primary/30 group-hover:bg-primary/5 transition-all">
