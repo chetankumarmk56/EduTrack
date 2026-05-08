@@ -27,15 +27,18 @@ _connect_args = {"ssl": "require"} if _ssl_required else {}
 
 
 # SQLAlchemy async engine
-engine = create_async_engine(
-    DATABASE_URL,
-    pool_pre_ping=True,
-    pool_size=getattr(settings, "DATABASE_POOL_SIZE", 25),
-    max_overflow=getattr(settings, "DATABASE_MAX_OVERFLOW", 15),
-    pool_recycle=3600,
-    echo=False,
-    connect_args=_connect_args,
-)
+# SQLite uses NullPool and rejects pool_size/max_overflow — only pass those for non-sqlite.
+_engine_kwargs = {
+    "pool_pre_ping": True,
+    "echo": False,
+    "connect_args": _connect_args,
+}
+if not DATABASE_URL.startswith("sqlite"):
+    _engine_kwargs["pool_size"] = getattr(settings, "DATABASE_POOL_SIZE", 25)
+    _engine_kwargs["max_overflow"] = getattr(settings, "DATABASE_MAX_OVERFLOW", 15)
+    _engine_kwargs["pool_recycle"] = 3600
+
+engine = create_async_engine(DATABASE_URL, **_engine_kwargs)
 
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,
