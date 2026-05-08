@@ -31,4 +31,5 @@ export interface LessonPlanResult {
   warning_message: string;
   suggested_ppt_slides: unknown[];
   document_name: string;
+  [key: string]: unknown;
 }

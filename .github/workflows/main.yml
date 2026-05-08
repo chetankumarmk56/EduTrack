@@ -22,7 +22,7 @@ jobs:
           cd backend
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install flake8 pytest pytest-asyncio
+          pip install flake8 pytest pytest-asyncio aiosqlite
 
       - name: Lint with flake8
         run: |
