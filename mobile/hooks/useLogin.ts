@@ -33,6 +33,9 @@ export function useLogin() {
     );
   };
 
+  const isMobileRole = (role: string | undefined) =>
+    role === 'parent' || role === 'student' || role === 'teacher';
+
   const handleStudentLogin = async () => {
     setApiError(null);
     if (!studentName.trim() || !classLevel.trim() || !section.trim() || !dob || !institutionId) {
@@ -47,10 +50,14 @@ export function useLogin() {
     try {
       await clearStaleSession();
       const data = await authService.loginStudent(studentName.trim(), classLevel.trim(), section.trim().toUpperCase(), dobString, institutionId.trim());
+      if (!isMobileRole(data.role)) {
+        setApiError('This account type is not supported in the mobile app. Please use the website.');
+        return;
+      }
       await login(data.access_token, { ...data.user, role: data.role, institution_id: data.institution_id }, String(data.institution_id));
-      router.replace(data.role === 'teacher' ? '/(teacher)/dashboard' : '/(parent)/dashboard');
+      router.replace('/(parent)/dashboard');
     } catch (err: any) {
-      setApiError(err?.message || 'Student login failed');
+      setApiError(err?.message || 'Login failed');
     } finally {
       setLoading(false);
     }
@@ -67,8 +74,12 @@ export function useLogin() {
     try {
       await clearStaleSession();
       const data = await authService.loginTeacher(email.trim(), password, teacherInstId.trim());
+      if (data.role !== 'teacher') {
+        setApiError('This account type is not supported in the mobile app. Please use the website.');
+        return;
+      }
       await login(data.access_token, { ...data.user, role: data.role, institution_id: data.institution_id }, String(data.institution_id));
-      router.replace(data.role === 'teacher' ? '/(teacher)/dashboard' : '/(parent)/dashboard');
+      router.replace('/(teacher)/dashboard');
     } catch (err: any) {
       setApiError(err?.message || 'Teacher login failed');
     } finally {

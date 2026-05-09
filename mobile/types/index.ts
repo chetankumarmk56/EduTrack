@@ -27,6 +27,9 @@ export interface StudentDues {
   student_id: number;
   student_name: string;
   total_due: number;
+  total_paid?: number;
+  due_date?: string | null;
+  is_overdue?: boolean;
   breakdown: {
     fee_type: string;
     total: number;
@@ -101,26 +104,49 @@ export interface StudentProfile {
   user_id?: number;
 }
 
+export interface TeacherAssignment {
+  id: number;
+  school_class?: {
+    id?: number;
+    display_name?: string;
+    grade?: { level?: number; name?: string };
+    section?: { name?: string };
+  };
+  subject_ref?: { id?: number; name?: string; code?: string };
+}
+
 export interface Teacher {
   id: number;
+  user_id?: number;
   name: string;
-  email: string;
+  email?: string;
+  phone?: string | null;
+  whatsapp?: string | null;
+  is_active?: boolean;
   subjects?: string[];
   role?: string;
-  phone?: string;
-  whatsapp?: string;
   class_id?: number;
+  assignments?: TeacherAssignment[];
 }
 
 export interface SchoolEvent {
   id: number;
   title: string;
   description?: string;
+  // Backend EventResponse uses `date` and `type`. Mobile keeps `event_date`/`event_type`
+  // aliases for backward-compat (set by services/eventsService.normalizeEvent).
+  date?: string;
+  end_date?: string;
+  type?: string;
+  category?: string;
+  time?: string;
+  location?: string;
+  visibility?: { parents?: boolean; teachers?: boolean; students?: boolean };
   event_date: string;
   event_type: 'exam' | 'meeting' | 'holiday' | 'sports' | 'activity';
   class_id?: number;
-  institution_id: number;
-  created_at: string;
+  institution_id?: number;
+  created_at?: string;
 }
 
 export interface Payment {
@@ -151,4 +177,43 @@ export interface AIQuestion {
   options?: string[];
   answer?: string;
   type?: string;
+}
+
+// ---------- Timetable ----------
+
+export type SchedulePeriodType = 'class_period' | 'break' | 'lunch' | 'assembly';
+
+export interface SchedulePeriod {
+  id: number;
+  name: string;
+  period_type: SchedulePeriodType;
+  order: number;
+  start_time: string; // "HH:MM:SS"
+  end_time: string;
+}
+
+export interface TimetableSlot {
+  id: number;
+  school_class_id: number;
+  schedule_period_id: number;
+  day_of_week: number; // 0=Mon ... 6=Sun
+  subject_id?: number | null;
+  teacher_id?: number | null;
+  room?: string | null; // legacy
+  subject?: { id: number; name: string; code?: string } | null;
+  teacher?: { id: number; name: string } | null;
+  school_class?: { id: number; display_name?: string; room_number?: string } | null;
+}
+
+export interface ClassTimetable {
+  school_class_id: number;
+  school_class?: { id: number; display_name?: string; room_number?: string };
+  periods: SchedulePeriod[];
+  slots: TimetableSlot[];
+}
+
+export interface TeacherTimetable {
+  teacher_id: number;
+  periods: SchedulePeriod[];
+  slots: TimetableSlot[];
 }

@@ -7,6 +7,7 @@ from app.models.event import Event
 from app.models.communication import Announcement
 from app.models.transport import Bus, Route, Stop, StudentTransport, BusLocation, NotificationLog
 from app.models.finance import FeeStructure, Payment, PaymentAllocation
+from app.models.timetable import SchedulePeriod, TimetableSlot
 from app.core.database import Base
 
 # Grouped export list for easy project-wide access
@@ -17,5 +18,6 @@ __all__ = [
     "Attendance", "Mark", "Exam",
     "Event", "Announcement", "Base",
     "Bus", "Route", "Stop", "StudentTransport", "BusLocation", "NotificationLog",
-    "FeeStructure", "Payment", "PaymentAllocation"
+    "FeeStructure", "Payment", "PaymentAllocation",
+    "SchedulePeriod", "TimetableSlot",
 ]

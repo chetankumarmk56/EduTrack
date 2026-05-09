@@ -19,52 +19,35 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Upgrade schema - Add compound indexes for hot query paths."""
-    # Attendance batch queries: (student_id, institution_id, subject, date)
-    op.create_index(
-        'ix_attendance_student_institution_subject_date',
-        'attendance',
-        ['student_id', 'institution_id', 'subject', 'date'],
-        unique=False
+    """Upgrade schema - Add compound indexes for hot query paths.
+
+    Uses IF NOT EXISTS so the migration is safe to run on databases where
+    these indexes were already created out-of-band (e.g. via metadata.create_all).
+    """
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_attendance_student_institution_subject_date "
+        "ON attendance (student_id, institution_id, subject, date)"
     )
-    
-    # Attendance queries by class: (school_class_id, date, institution_id)
-    op.create_index(
-        'ix_attendance_class_date_institution',
-        'attendance',
-        ['school_class_id', 'date', 'institution_id'],
-        unique=False
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_attendance_class_date_institution "
+        "ON attendance (school_class_id, date, institution_id)"
     )
-    
-    # Marks queries: (student_id, institution_id, test_name, subject)
-    op.create_index(
-        'ix_marks_student_institution_test_subject',
-        'marks',
-        ['student_id', 'institution_id', 'test_name', 'subject'],
-        unique=False
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_marks_student_institution_test_subject "
+        "ON marks (student_id, institution_id, test_name, subject)"
     )
-    
-    # Marks queries by exam: (exam_id, institution_id, student_id)
-    op.create_index(
-        'ix_marks_exam_institution_student',
-        'marks',
-        ['exam_id', 'institution_id', 'student_id'],
-        unique=False
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_marks_exam_institution_student "
+        "ON marks (exam_id, institution_id, student_id)"
     )
-    
-    # Student queries by institution: (institution_id, student_id)
-    op.create_index(
-        'ix_students_institution_id_student_id',
-        'students',
-        ['institution_id', 'student_id'],
-        unique=False
-    )
+    # Note: the original migration tried to index students(institution_id, student_id),
+    # but students has no student_id column (just `id`). That index was always broken
+    # and is omitted here.
 
 
 def downgrade() -> None:
     """Downgrade schema - Drop compound indexes."""
-    op.drop_index('ix_students_institution_id_student_id', table_name='students')
-    op.drop_index('ix_marks_exam_institution_student', table_name='marks')
-    op.drop_index('ix_marks_student_institution_test_subject', table_name='marks')
-    op.drop_index('ix_attendance_class_date_institution', table_name='attendance')
-    op.drop_index('ix_attendance_student_institution_subject_date', table_name='attendance')
+    op.execute('DROP INDEX IF EXISTS ix_marks_exam_institution_student')
+    op.execute('DROP INDEX IF EXISTS ix_marks_student_institution_test_subject')
+    op.execute('DROP INDEX IF EXISTS ix_attendance_class_date_institution')
+    op.execute('DROP INDEX IF EXISTS ix_attendance_student_institution_subject_date')

@@ -34,7 +34,7 @@ function CustomDrawerContent(props: any) {
           </View>
           <View style={styles.userInfo}>
             <Text style={styles.userName} numberOfLines={1}>{user?.name || 'User'}</Text>
-            <Text style={styles.userRole}>{user?.role?.toUpperCase() || 'STUDENT'}</Text>
+            <Text style={styles.userRole}>PARENT</Text>
           </View>
         </TouchableOpacity>
 
@@ -132,6 +132,14 @@ export default function DrawerLayout() {
           drawerLabel: 'Attendance',
           title: 'Attendance',
           drawerIcon: ({ color, size }) => <Ionicons name="calendar-outline" size={size} color={color} />,
+        }}
+      />
+      <Drawer.Screen
+        name="timetable"
+        options={{
+          drawerLabel: 'Timetable',
+          title: 'Class Schedule',
+          drawerIcon: ({ color, size }) => <Ionicons name="time-outline" size={size} color={color} />,
         }}
       />
       <Drawer.Screen

@@ -9,3 +9,4 @@ export * from './directoryService';
 export * from './eventsService';
 export * from './dashboardService';
 export * from './aiService';
+export * from './timetableService';

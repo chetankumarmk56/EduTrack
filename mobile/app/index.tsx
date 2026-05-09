@@ -35,16 +35,16 @@ export default function LandingScreen() {
         <Animated.View entering={FadeInDown.delay(400)} style={styles.selectionArea}>
           <Text style={styles.prompt}>Choose your portal to continue</Text>
           
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.portalCard, styles.parentCard]}
-            onPress={() => router.push({ pathname: '/login', params: { mode: 'student' } })}
+            onPress={() => router.push({ pathname: '/login', params: { mode: 'parent' } })}
             activeOpacity={0.9}
           >
             <View style={styles.iconCircle}>
               <Ionicons name="people" size={32} color={Colors.primary} />
             </View>
             <View style={styles.cardInfo}>
-              <Text style={styles.portalTitle}>Student / Parent</Text>
+              <Text style={styles.portalTitle}>Parent Portal</Text>
               <Text style={styles.portalSub}>View marks, attendance, and pay fees</Text>
             </View>
             <Ionicons name="chevron-forward" size={24} color={Colors.textMuted} />

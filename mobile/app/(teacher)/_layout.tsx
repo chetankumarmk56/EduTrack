@@ -106,6 +106,14 @@ export default function TeacherLayout() {
         }}
       />
       <Drawer.Screen
+        name="timetable"
+        options={{
+          drawerLabel: 'Timetable',
+          title: 'My Schedule',
+          drawerIcon: ({ color, size }) => <Ionicons name="time-outline" size={size} color={color} />,
+        }}
+      />
+      <Drawer.Screen
         name="marks"
         options={{
           drawerLabel: 'Grading',

@@ -36,6 +36,7 @@ from app.api.routes.documents import router as documents_router
 from app.api.routes.parents import router as parents_router
 from app.api.routes.reports import router as reports_router
 from app.api.routes.system import router as system_router
+from app.api.routes.timetable import router as timetable_router
 
 # Initialize Logging
 logger = setup_logging()
@@ -211,6 +212,7 @@ app.include_router(documents_router)
 app.include_router(parents_router)
 app.include_router(reports_router)
 app.include_router(system_router)
+app.include_router(timetable_router)
 
 @app.get("/")
 async def read_root():

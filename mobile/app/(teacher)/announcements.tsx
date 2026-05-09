@@ -1,12 +1,41 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, TextInput, RefreshControl, Modal } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
+  TextInput,
+  RefreshControl,
+  Modal,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { announcementService, directoryService, type Announcement } from '../../services';
 import { Colors } from '../../constants/Colors';
-import { Card, SectionHeader } from '../../components/ui/Card';
 import { LoadingScreen, EmptyState } from '../../components/ui/Feedback';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown, SlideInUp } from 'react-native-reanimated';
+
+// ─── helpers ────────────────────────────────────────────────────────────────
+
+function priorityColor(priority?: string) {
+  switch (priority?.toUpperCase()) {
+    case 'HIGH':   return Colors.danger;
+    case 'MEDIUM': return Colors.warning;
+    default:       return Colors.success;
+  }
+}
+
+function priorityBg(priority?: string) {
+  switch (priority?.toUpperCase()) {
+    case 'HIGH':   return 'rgba(239,68,68,0.12)';
+    case 'MEDIUM': return 'rgba(245,158,11,0.12)';
+    default:       return 'rgba(16,185,129,0.12)';
+  }
+}
+
+// ─── component ──────────────────────────────────────────────────────────────
 
 export default function TeacherAnnouncements() {
   const [loading, setLoading] = useState(true);
@@ -26,15 +55,14 @@ export default function TeacherAnnouncements() {
     try {
       const [annData, profile] = await Promise.all([
         announcementService.getMyAnnouncements(),
-        directoryService.getMyProfile()
+        directoryService.getMyProfile(),
       ]);
       setAnnouncements(annData);
-      
+
       const assignments = profile.assignments || [];
       const uniqueClasses = Array.from(new Set(assignments.map((a: any) => a.school_class_id)))
         .map(id => assignments.find((a: any) => a.school_class_id === id).school_class);
       setClasses(uniqueClasses);
-      
     } catch (error) {
       console.error('Failed to load announcements:', error);
     } finally {
@@ -58,9 +86,9 @@ export default function TeacherAnnouncements() {
         message: content,
         priority: priority.toUpperCase(),
         class_id: selectedClassId || (classes.length > 0 ? classes[0].id : null),
-        type: 'CLASS'
+        type: 'CLASS',
       });
-      
+
       Alert.alert('Success', 'Announcement posted!');
       setIsModalVisible(false);
       setTitle('');
@@ -78,109 +106,227 @@ export default function TeacherAnnouncements() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <ScrollView 
+      <ScrollView
         contentContainerStyle={styles.scroll}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => { setRefreshing(true); loadData(); }}
+            tintColor={Colors.success}
+          />
+        }
       >
+        {/* ── header ── */}
         <View style={styles.headerRow}>
-          <SectionHeader title="My Broadcasts" />
-          <TouchableOpacity style={styles.newBtn} onPress={() => setIsModalVisible(true)}>
-            <Ionicons name="add-circle" size={20} color={Colors.white} />
+          <View style={styles.headerLeft}>
+            <Text style={styles.headerTitle}>Broadcasts</Text>
+            {announcements.length > 0 && (
+              <View style={styles.countBadge}>
+                <Text style={styles.countBadgeText}>{announcements.length}</Text>
+              </View>
+            )}
+          </View>
+          <TouchableOpacity
+            style={styles.newBtn}
+            onPress={() => setIsModalVisible(true)}
+            activeOpacity={0.82}
+          >
+            <Ionicons name="megaphone-outline" size={16} color={Colors.white} />
             <Text style={styles.newBtnText}>New Post</Text>
           </TouchableOpacity>
         </View>
 
+        {/* ── list ── */}
         {announcements.length === 0 ? (
-          <EmptyState 
-            title="No Announcements" 
-            subtitle="You haven't posted any updates yet." 
-            icon={<Ionicons name="megaphone-outline" size={48} color={Colors.textMuted} />} 
+          <EmptyState
+            title="No Announcements"
+            subtitle="You haven't posted any updates yet."
+            icon={<Ionicons name="megaphone-outline" size={48} color={Colors.textMuted} />}
           />
         ) : (
           <View style={styles.list}>
-            {announcements.map((ann, i) => (
-              <Animated.View key={ann.id} entering={FadeInDown.delay(i * 100)}>
-                <Card style={styles.annCard}>
-                  <View style={styles.annHeader}>
-                    <View style={[
-                      styles.priorityBadge,
-                      { backgroundColor: ann.priority?.toUpperCase() === 'HIGH' ? Colors.danger : ann.priority?.toUpperCase() === 'MEDIUM' ? Colors.warning : Colors.success }
-                    ]}>
-                      <Text style={styles.priorityText}>{ann.priority?.toUpperCase()}</Text>
-                    </View>
-                    <Text style={styles.annDate}>{new Date(ann.created_at).toLocaleDateString()}</Text>
-                  </View>
-                  <Text style={styles.annTitle}>{ann.title}</Text>
-                  <Text style={styles.annContent} numberOfLines={3}>{ann.message}</Text>
-                  <View style={styles.annFooter}>
-                    <View style={styles.targetBox}>
-                      <Ionicons name="people" size={14} color={Colors.textMuted} />
-                      <Text style={styles.targetText}>
-                        {ann.school_class ? `${ann.school_class.grade.name}-${ann.school_class.section.name}` : 'General'}
+            {announcements.map((ann, i) => {
+              const pColor = priorityColor(ann.priority);
+              const pBg    = priorityBg(ann.priority);
+              return (
+                <Animated.View key={ann.id} entering={FadeInDown.delay(i * 80).springify()}>
+                  <View style={styles.card}>
+                    {/* left accent border */}
+                    <View style={[styles.cardAccent, { backgroundColor: pColor }]} />
+
+                    {/* card body */}
+                    <View style={styles.cardBody}>
+                      {/* top row: priority pill + date */}
+                      <View style={styles.cardTopRow}>
+                        <View style={[styles.priorityPill, { backgroundColor: pBg }]}>
+                          <Text style={[styles.priorityPillText, { color: pColor }]}>
+                            {ann.priority?.toUpperCase() ?? 'LOW'}
+                          </Text>
+                        </View>
+                        <Text style={styles.dateText}>
+                          {new Date(ann.created_at).toLocaleDateString(undefined, {
+                            month: 'short', day: 'numeric', year: 'numeric',
+                          })}
+                        </Text>
+                      </View>
+
+                      {/* title */}
+                      <Text style={styles.annTitle}>{ann.title}</Text>
+
+                      {/* content preview */}
+                      <Text style={styles.annContent} numberOfLines={3}>
+                        {ann.message}
                       </Text>
+
+                      {/* footer divider */}
+                      <View style={styles.cardDivider} />
+
+                      {/* bottom row: class chip */}
+                      <View style={styles.cardBottomRow}>
+                        <View style={styles.classChip}>
+                          <Ionicons name="people" size={13} color={Colors.success} />
+                          <Text style={styles.classChipText}>
+                            {ann.school_class
+                              ? `${ann.school_class.grade.name}-${ann.school_class.section.name}`
+                              : 'General'}
+                          </Text>
+                        </View>
+                      </View>
                     </View>
                   </View>
-                </Card>
-              </Animated.View>
-            ))}
+                </Animated.View>
+              );
+            })}
           </View>
         )}
       </ScrollView>
 
-      {/* New Announcement Modal */}
+      {/* ── new announcement modal ── */}
       <Modal visible={isModalVisible} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
-          <Animated.View entering={SlideInUp} style={styles.modalContent}>
-            <View style={styles.modalHeader}>
+          <Animated.View entering={SlideInUp.springify()} style={styles.modalSheet}>
+            {/* handle bar */}
+            <View style={styles.handleBar} />
+
+            {/* modal title row */}
+            <View style={styles.modalTitleRow}>
+              <View style={styles.megaphoneCircle}>
+                <Ionicons name="megaphone-outline" size={20} color={Colors.white} />
+              </View>
               <Text style={styles.modalTitle}>New Broadcast</Text>
-              <TouchableOpacity onPress={() => setIsModalVisible(false)}>
-                <Ionicons name="close" size={28} color={Colors.text} />
+              <TouchableOpacity
+                style={styles.closeBtn}
+                onPress={() => setIsModalVisible(false)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="close" size={22} color={Colors.textSecondary} />
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalForm}>
-              <Text style={styles.label}>Title</Text>
-              <TextInput style={styles.input} placeholder="Headline..." value={title} onChangeText={setTitle} />
-
-              <Text style={styles.label}>Content</Text>
-              <TextInput 
-                style={[styles.input, styles.textArea]} 
-                placeholder="Important updates..." 
-                value={content} 
-                onChangeText={setContent} 
-                multiline 
-                numberOfLines={4} 
+            <ScrollView
+              style={styles.modalForm}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              {/* title input */}
+              <Text style={styles.fieldLabel}>TITLE</Text>
+              <TextInput
+                style={styles.inputField}
+                placeholder="Announcement headline..."
+                placeholderTextColor={Colors.textMuted}
+                value={title}
+                onChangeText={setTitle}
               />
 
-              <Text style={styles.label}>Target Class</Text>
+              {/* content input */}
+              <Text style={styles.fieldLabel}>CONTENT</Text>
+              <TextInput
+                style={[styles.inputField, styles.textArea]}
+                placeholder="Share important updates with your class..."
+                placeholderTextColor={Colors.textMuted}
+                value={content}
+                onChangeText={setContent}
+                multiline
+                numberOfLines={4}
+                textAlignVertical="top"
+              />
+
+              {/* target class */}
+              <Text style={styles.fieldLabel}>TARGET CLASS</Text>
               <View style={styles.chipRow}>
-                {classes.map(c => (
-                  <TouchableOpacity 
-                    key={c.id} 
-                    style={[styles.chip, selectedClassId === c.id && styles.selectedChip]} 
-                    onPress={() => setSelectedClassId(c.id)}
-                  >
-                    <Text style={[styles.chipText, selectedClassId === c.id && styles.whiteText]}>{c.grade.name}-{c.section.name}</Text>
-                  </TouchableOpacity>
-                ))}
+                {classes.map(c => {
+                  const isSelected = selectedClassId === c.id;
+                  return (
+                    <TouchableOpacity
+                      key={c.id}
+                      style={[styles.classChipBtn, isSelected && styles.classChipBtnSelected]}
+                      onPress={() => setSelectedClassId(c.id)}
+                      activeOpacity={0.75}
+                    >
+                      <Text
+                        style={[
+                          styles.classChipBtnText,
+                          isSelected && styles.classChipBtnTextSelected,
+                        ]}
+                      >
+                        {c.grade.name}-{c.section.name}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
 
-              <Text style={styles.label}>Priority</Text>
-              <View style={styles.chipRow}>
-                {(['low', 'medium', 'high'] as const).map(p => (
-                  <TouchableOpacity 
-                    key={p} 
-                    style={[styles.chip, priority === p && styles.selectedChip]} 
-                    onPress={() => setPriority(p)}
-                  >
-                    <Text style={[styles.chipText, priority === p && styles.whiteText]}>{p.toUpperCase()}</Text>
-                  </TouchableOpacity>
-                ))}
+              {/* priority */}
+              <Text style={styles.fieldLabel}>PRIORITY</Text>
+              <View style={styles.priorityRow}>
+                {(['high', 'medium', 'low'] as const).map(p => {
+                  const isSelected = priority === p;
+                  const color =
+                    p === 'high' ? Colors.danger :
+                    p === 'medium' ? Colors.warning :
+                    Colors.success;
+                  return (
+                    <TouchableOpacity
+                      key={p}
+                      style={[
+                        styles.priorityBtn,
+                        isSelected
+                          ? { backgroundColor: color, borderColor: color }
+                          : styles.priorityBtnUnselected,
+                      ]}
+                      onPress={() => setPriority(p)}
+                      activeOpacity={0.78}
+                    >
+                      <Text
+                        style={[
+                          styles.priorityBtnText,
+                          isSelected ? styles.priorityBtnTextSelected : { color: Colors.textMuted },
+                        ]}
+                      >
+                        {p.toUpperCase()}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
+
+              {/* bottom spacer so submit btn clears keyboard */}
+              <View style={{ height: 24 }} />
             </ScrollView>
 
-            <TouchableOpacity style={[styles.submitBtn, submitting && styles.disabled]} onPress={handleCreate} disabled={submitting}>
-              <Text style={styles.submitText}>{submitting ? 'Posting...' : 'Post Announcement'}</Text>
+            {/* submit button */}
+            <TouchableOpacity
+              style={[styles.submitBtn, submitting && styles.submitBtnDisabled]}
+              onPress={handleCreate}
+              disabled={submitting}
+              activeOpacity={0.85}
+            >
+              {!submitting && (
+                <Ionicons name="send" size={18} color={Colors.white} style={{ marginRight: 8 }} />
+              )}
+              <Text style={styles.submitText}>
+                {submitting ? 'Posting...' : 'Post Announcement'}
+              </Text>
             </TouchableOpacity>
           </Animated.View>
         </View>
@@ -189,37 +335,306 @@ export default function TeacherAnnouncements() {
   );
 }
 
+// ─── styles ─────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Colors.background },
-  scroll: { padding: 20 },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  newBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.primary, paddingHorizontal: 15, paddingVertical: 8, borderRadius: 12, gap: 8 },
-  newBtnText: { color: Colors.white, fontWeight: '800', fontSize: 12 },
-  list: { gap: 15 },
-  annCard: { padding: 20 },
-  annHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  priorityBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-  priorityText: { color: Colors.white, fontSize: 10, fontWeight: '900' },
-  annDate: { fontSize: 12, color: Colors.textMuted, fontWeight: '600' },
-  annTitle: { fontSize: 18, fontWeight: '900', color: Colors.text, marginBottom: 8 },
-  annContent: { fontSize: 14, color: Colors.textSecondary, lineHeight: 20 },
-  annFooter: { marginTop: 15, paddingTop: 15, borderTopWidth: 1, borderTopColor: Colors.border },
-  targetBox: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  targetText: { fontSize: 12, color: Colors.textMuted, fontWeight: '700' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: Colors.background, borderTopLeftRadius: 32, borderTopRightRadius: 32, height: '80%', padding: 25 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 },
-  modalTitle: { fontSize: 24, fontWeight: '900', color: Colors.text },
-  modalForm: { flex: 1 },
-  label: { fontSize: 14, fontWeight: '800', color: Colors.text, marginBottom: 8, marginTop: 15 },
-  input: { backgroundColor: Colors.surface, borderRadius: 16, padding: 15, borderWidth: 1, borderColor: Colors.border, fontSize: 16, color: Colors.text },
-  textArea: { height: 120, textAlignVertical: 'top' },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  chip: { paddingHorizontal: 15, paddingVertical: 8, borderRadius: 10, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border },
-  selectedChip: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  chipText: { fontSize: 13, fontWeight: '700', color: Colors.textMuted },
-  whiteText: { color: Colors.white },
-  submitBtn: { backgroundColor: Colors.primary, padding: 18, borderRadius: 20, alignItems: 'center', marginTop: 20 },
-  disabled: { opacity: 0.6 },
-  submitText: { color: Colors.white, fontSize: 18, fontWeight: '900' },
+  safe: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+  scroll: {
+    padding: 20,
+    paddingBottom: 40,
+  },
+
+  // ── header ──
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  headerTitle: {
+    fontSize: 26,
+    fontWeight: '900',
+    color: Colors.text,
+    letterSpacing: -0.5,
+  },
+  countBadge: {
+    backgroundColor: Colors.success,
+    borderRadius: 20,
+    minWidth: 26,
+    height: 26,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 7,
+  },
+  countBadgeText: {
+    color: Colors.white,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  newBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    backgroundColor: Colors.success,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 50,
+    shadowColor: Colors.success,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.28,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  newBtnText: {
+    color: Colors.white,
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+
+  // ── list ──
+  list: {
+    gap: 14,
+  },
+
+  // ── card ──
+  card: {
+    flexDirection: 'row',
+    backgroundColor: Colors.card,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  cardAccent: {
+    width: 4,
+    borderRadius: 0,
+  },
+  cardBody: {
+    flex: 1,
+    padding: 16,
+  },
+  cardTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  priorityPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 20,
+  },
+  priorityPillText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  dateText: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    fontWeight: '600',
+  },
+  annTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: Colors.text,
+    marginBottom: 6,
+    letterSpacing: -0.2,
+  },
+  annContent: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    lineHeight: 21,
+  },
+  cardDivider: {
+    height: 1,
+    backgroundColor: Colors.border,
+    marginVertical: 12,
+  },
+  cardBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  classChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(16,185,129,0.1)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  classChipText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.success,
+  },
+
+  // ── modal ──
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15,23,42,0.55)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    backgroundColor: Colors.background,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    maxHeight: '88%',
+    paddingHorizontal: 24,
+    paddingBottom: 34,
+    paddingTop: 12,
+  },
+  handleBar: {
+    width: 40,
+    height: 4,
+    borderRadius: 4,
+    backgroundColor: Colors.border,
+    alignSelf: 'center',
+    marginBottom: 20,
+  },
+  modalTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 24,
+  },
+  megaphoneCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.success,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: Colors.success,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  modalTitle: {
+    flex: 1,
+    fontSize: 22,
+    fontWeight: '900',
+    color: Colors.text,
+    letterSpacing: -0.3,
+  },
+  closeBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: Colors.surfaceElevated,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalForm: {
+    flex: 1,
+  },
+  fieldLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: Colors.textMuted,
+    letterSpacing: 1,
+    marginTop: 18,
+    marginBottom: 8,
+  },
+  inputField: {
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    fontSize: 15,
+    color: Colors.text,
+  },
+  textArea: {
+    minHeight: 100,
+    textAlignVertical: 'top',
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 9,
+  },
+  classChipBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: Colors.surface,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+  },
+  classChipBtnSelected: {
+    backgroundColor: Colors.success,
+    borderColor: Colors.success,
+  },
+  classChipBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.textMuted,
+  },
+  classChipBtnTextSelected: {
+    color: Colors.white,
+  },
+  priorityRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  priorityBtn: {
+    flex: 1,
+    paddingVertical: 11,
+    borderRadius: 12,
+    alignItems: 'center',
+    borderWidth: 1.5,
+  },
+  priorityBtnUnselected: {
+    backgroundColor: Colors.surface,
+    borderColor: Colors.border,
+  },
+  priorityBtnText: {
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  priorityBtnTextSelected: {
+    color: Colors.white,
+  },
+  submitBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.success,
+    height: 56,
+    borderRadius: 18,
+    marginTop: 8,
+    shadowColor: Colors.success,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.32,
+    shadowRadius: 14,
+    elevation: 6,
+  },
+  submitBtnDisabled: {
+    opacity: 0.6,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  submitText: {
+    color: Colors.white,
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: 0.2,
+  },
 });

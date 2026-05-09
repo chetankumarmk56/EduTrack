@@ -40,6 +40,7 @@ export interface Subject {
 export interface SchoolClass {
   id: number;
   display_name?: string;
+  room_number?: string;
   grade_id: number;
   section_id: number;
   grade?: Grade;
@@ -226,4 +227,43 @@ export interface DocumentResponse {
   size?: number;
   created_at?: string;
   url?: string;
+}
+
+// ---------- Timetable ----------
+
+export type SchedulePeriodType = 'class_period' | 'break' | 'lunch' | 'assembly';
+
+export interface SchedulePeriod {
+  id: number;
+  name: string;
+  period_type: SchedulePeriodType;
+  order: number;
+  start_time: string;  // "HH:MM:SS"
+  end_time: string;
+}
+
+export interface TimetableSlot {
+  id: number;
+  school_class_id: number;
+  schedule_period_id: number;
+  day_of_week: number;     // 0=Mon ... 6=Sun
+  subject_id?: number | null;
+  teacher_id?: number | null;
+  room?: string | null;    // legacy per-slot override (no longer set from UI)
+  subject?: { id: number; name: string; code?: string } | null;
+  teacher?: { id: number; name: string } | null;
+  school_class?: { id: number; display_name?: string; room_number?: string } | null;
+}
+
+export interface ClassTimetable {
+  school_class_id: number;
+  school_class?: { id: number; display_name?: string; room_number?: string };
+  periods: SchedulePeriod[];
+  slots: TimetableSlot[];
+}
+
+export interface TeacherTimetable {
+  teacher_id: number;
+  periods: SchedulePeriod[];
+  slots: TimetableSlot[];
 }

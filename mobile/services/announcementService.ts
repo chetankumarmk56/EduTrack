@@ -34,4 +34,17 @@ export const announcementService = {
     const res = await apiClient.post('/announcements/', data);
     return res.data;
   },
+
+  /**
+   * Mark an announcement as read for the current parent/student.
+   * Backend auto-resolves parent_id from the auth token when omitted.
+   */
+  markAsRead: async (announcementId: string | number) => {
+    try {
+      await apiClient.post('/announcements/read', { announcement_id: announcementId });
+    } catch (e) {
+      // best-effort — don't break the UI if the read receipt fails
+      console.warn('[announcementService] markAsRead failed', e);
+    }
+  },
 };

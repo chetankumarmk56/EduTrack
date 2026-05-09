@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../hooks/useAuth';
 import { Colors } from '../../constants/Colors';
-import { Card } from '../../components/ui/Card';
 import { neonShadows } from '@/styles/neonStyles';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
@@ -50,29 +49,55 @@ export default function TeacherDashboard() {
     { label: 'Today Attendance', value: stats?.attendance_rate || '0%', icon: 'checkmark-circle-outline', color: Colors.warning },
   ];
 
+  const classCount = profile?.assignments?.length || 0;
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <ScrollView 
-        contentContainerStyle={styles.scroll} 
+      {/* Background Blobs */}
+      <View style={styles.bgBlob1} />
+      <View style={styles.bgBlob2} />
+
+      <ScrollView
+        contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={Colors.success}
+          />
+        }
       >
-        {/* Header */}
-        <Animated.View entering={FadeInUp} style={styles.header}>
-          <View>
-            <Text style={styles.welcome}>Welcome Back,</Text>
-            <Text style={styles.name}>{user?.name || 'Professor'}</Text>
-          </View>
-          <View style={styles.dateBox}>
-            <Text style={styles.dateText}>{new Date().toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' })}</Text>
+        {/* Hero Header Card */}
+        <Animated.View entering={FadeInUp.delay(0)} style={styles.heroCard}>
+          <View style={styles.heroTopBorder} />
+          <View style={styles.heroContent}>
+            <View style={styles.heroLeft}>
+              <View style={styles.heroIconCircle}>
+                <Ionicons name="school" size={26} color={Colors.success} />
+              </View>
+              <View style={styles.heroTextBlock}>
+                <Text style={styles.heroWelcome}>Welcome Back,</Text>
+                <Text style={styles.heroName}>{user?.name || 'Professor'}</Text>
+              </View>
+            </View>
+            <View style={styles.datePill}>
+              <Text style={styles.datePillText}>
+                {new Date().toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' })}
+              </Text>
+            </View>
           </View>
         </Animated.View>
 
-        {/* Stats Grid */}
-        <View style={styles.statsGrid}>
+        {/* Stats Row */}
+        <View style={styles.statsRow}>
           {displayStats.map((s, i) => (
-            <Animated.View key={i} entering={FadeInDown.delay(i * 100)} style={styles.statCard}>
-              <View style={[styles.statIconBox, { backgroundColor: `${s.color}15` }]}>
+            <Animated.View
+              key={i}
+              entering={FadeInDown.delay(100 + i * 80)}
+              style={[styles.statCard, { borderBottomColor: s.color }]}
+            >
+              <View style={[styles.statIconCircle, { backgroundColor: `${s.color}18` }]}>
                 <Ionicons name={s.icon as any} size={20} color={s.color} />
               </View>
               <Text style={styles.statValue}>{s.value}</Text>
@@ -82,79 +107,395 @@ export default function TeacherDashboard() {
         </View>
 
         {/* Quick Actions */}
-        <Text style={styles.sectionTitle}>Quick Actions</Text>
-        <View style={styles.actionGrid}>
-          <TouchableOpacity 
-            style={[styles.actionBtn, { borderColor: Colors.success }]}
-            onPress={() => router.push('/(teacher)/attendance')}
-          >
-            <Ionicons name="checkbox-outline" size={32} color={Colors.success} />
-            <Text style={styles.actionText}>Take Attendance</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.actionBtn, { borderColor: Colors.primary }]}
-            onPress={() => router.push('/(teacher)/marks')}
-          >
-            <Ionicons name="create-outline" size={32} color={Colors.primary} />
-            <Text style={styles.actionText}>Enter Marks</Text>
-          </TouchableOpacity>
-        </View>
+        <Animated.View entering={FadeInDown.delay(350)} style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>Quick Actions</Text>
+        </Animated.View>
 
-        {/* Assignments Preview */}
-        <Text style={styles.sectionTitle}>My Current Classes</Text>
-        <Card style={styles.scheduleCard}>
-          {profile?.assignments?.length > 0 ? profile.assignments.map((item: any, i: number) => (
-            <TouchableOpacity 
-              key={i} 
-              style={[styles.scheduleItem, i > 0 && styles.divider]}
-              onPress={() => router.push({ pathname: '/(teacher)/attendance', params: { classId: item.school_class_id } })}
-            >
-              <View style={styles.timeLine}>
-                <Text style={styles.timeText}>{item.subject_ref.code || 'SUB'}</Text>
-                <View style={[styles.dot, { backgroundColor: Colors.primary }]} />
-              </View>
-              <View style={styles.classInfo}>
-                <Text style={styles.className}>{item.school_class.grade.name}-{item.school_class.section.name}</Text>
-                <Text style={styles.subjectName}>{item.subject_ref.name}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
-            </TouchableOpacity>
-          )) : (
-            <View style={{ padding: 20, alignItems: 'center' }}>
-              <Text style={{ color: Colors.textMuted }}>No active assignments found.</Text>
+        <Animated.View entering={FadeInDown.delay(400)} style={styles.actionGrid}>
+          {/* Attendance Action */}
+          <TouchableOpacity
+            style={[styles.actionCard, styles.actionCardGreen]}
+            onPress={() => router.push('/(teacher)/attendance')}
+            activeOpacity={0.88}
+          >
+            <View style={styles.actionIconWrap}>
+              <Ionicons name="checkbox-outline" size={32} color={Colors.white} />
+            </View>
+            <Text style={styles.actionTitle}>Take Attendance</Text>
+            <Text style={styles.actionSub}>Mark today's class</Text>
+          </TouchableOpacity>
+
+          {/* Marks Action */}
+          <TouchableOpacity
+            style={[styles.actionCard, styles.actionCardBlue]}
+            onPress={() => router.push('/(teacher)/marks')}
+            activeOpacity={0.88}
+          >
+            <View style={styles.actionIconWrap}>
+              <Ionicons name="create-outline" size={32} color={Colors.white} />
+            </View>
+            <Text style={styles.actionTitle}>Enter Marks</Text>
+            <Text style={styles.actionSub}>Update student scores</Text>
+          </TouchableOpacity>
+        </Animated.View>
+
+        {/* My Classes Section */}
+        <Animated.View entering={FadeInDown.delay(480)} style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>My Current Classes</Text>
+          {classCount > 0 && (
+            <View style={styles.countBadge}>
+              <Text style={styles.countBadgeText}>{classCount}</Text>
             </View>
           )}
-        </Card>
+        </Animated.View>
 
+        {profile?.assignments?.length > 0 ? (
+          profile.assignments.map((item: any, i: number) => (
+            <Animated.View key={i} entering={FadeInDown.delay(520 + i * 60)}>
+              <TouchableOpacity
+                style={styles.classCard}
+                onPress={() =>
+                  router.push({ pathname: '/(teacher)/attendance', params: { classId: item.school_class_id } })
+                }
+                activeOpacity={0.85}
+              >
+                {/* Subject Code Pill */}
+                <View style={styles.subjectCodePill}>
+                  <Text style={styles.subjectCodeText}>{item.subject_ref.code || 'SUB'}</Text>
+                </View>
+
+                {/* Class Info */}
+                <View style={styles.classInfoBlock}>
+                  <Text style={styles.classNameText}>
+                    {item.school_class.grade.name}-{item.school_class.section.name}
+                  </Text>
+                  <Text style={styles.subjectNameText}>{item.subject_ref.name}</Text>
+                </View>
+
+                {/* Arrow */}
+                <View style={styles.classArrowCircle}>
+                  <Ionicons name="chevron-forward" size={16} color={Colors.success} />
+                </View>
+              </TouchableOpacity>
+            </Animated.View>
+          ))
+        ) : (
+          <Animated.View entering={FadeInDown.delay(520)} style={styles.emptyCard}>
+            <View style={styles.emptyIconCircle}>
+              <Ionicons name="calendar-outline" size={28} color={Colors.textMuted} />
+            </View>
+            <Text style={styles.emptyText}>No active assignments found.</Text>
+          </Animated.View>
+        )}
+
+        <View style={styles.bottomSpacer} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Colors.background },
-  scroll: { padding: 20, gap: 20 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  welcome: { fontSize: 14, color: Colors.textSecondary, fontWeight: '600' },
-  name: { fontSize: 28, fontWeight: '900', color: Colors.text, letterSpacing: -1 },
-  dateBox: { backgroundColor: Colors.surfaceElevated, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
-  dateText: { fontSize: 12, fontWeight: '700', color: Colors.primary },
-  statsGrid: { flexDirection: 'row', gap: 12 },
-  statCard: { flex: 1, backgroundColor: Colors.surface, padding: 15, borderRadius: 20, borderWidth: 1, borderColor: Colors.border, ...neonShadows.blue },
-  statIconBox: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
-  statValue: { fontSize: 18, fontWeight: '900', color: Colors.text },
-  statLabel: { fontSize: 9, color: Colors.textMuted, fontWeight: '700', textTransform: 'uppercase', marginTop: 2 },
-  sectionTitle: { fontSize: 18, fontWeight: '800', color: Colors.text, marginTop: 10 },
-  actionGrid: { flexDirection: 'row', gap: 15 },
-  actionBtn: { flex: 1, height: 120, backgroundColor: Colors.surface, borderRadius: 24, borderWidth: 2, alignItems: 'center', justifyContent: 'center', gap: 10, ...neonShadows.blue },
-  actionText: { fontSize: 14, fontWeight: '800', color: Colors.text },
-  scheduleCard: { padding: 0, overflow: 'hidden' },
-  scheduleItem: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 15 },
-  timeLine: { alignItems: 'center', width: 70 },
-  timeText: { fontSize: 12, fontWeight: '700', color: Colors.textMuted },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.success, marginTop: 4 },
-  classInfo: { flex: 1 },
-  className: { fontSize: 16, fontWeight: '800', color: Colors.text },
-  subjectName: { fontSize: 13, color: Colors.textSecondary, fontWeight: '500' },
-  divider: { borderTopWidth: 1, borderTopColor: Colors.divider },
+  safe: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+
+  // Background Blobs
+  bgBlob1: {
+    position: 'absolute',
+    top: -80,
+    right: -80,
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    backgroundColor: `${Colors.success}0d`,
+  },
+  bgBlob2: {
+    position: 'absolute',
+    bottom: 60,
+    left: -60,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: `${Colors.success}08`,
+  },
+
+  scroll: {
+    padding: 20,
+    gap: 14,
+  },
+
+  // Hero Header
+  heroCard: {
+    backgroundColor: `${Colors.success}08`,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: `${Colors.success}22`,
+    overflow: 'hidden',
+    marginBottom: 6,
+    ...neonShadows.emerald,
+  },
+  heroTopBorder: {
+    height: 3,
+    backgroundColor: Colors.success,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+  },
+  heroContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 18,
+    paddingTop: 16,
+  },
+  heroLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 13,
+    flex: 1,
+  },
+  heroIconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 18,
+    backgroundColor: `${Colors.success}15`,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: `${Colors.success}30`,
+  },
+  heroTextBlock: {
+    flex: 1,
+  },
+  heroWelcome: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.textSecondary,
+    letterSpacing: 0.3,
+  },
+  heroName: {
+    fontSize: 26,
+    fontWeight: '900',
+    color: Colors.text,
+    letterSpacing: -0.8,
+    marginTop: 1,
+  },
+  datePill: {
+    backgroundColor: `${Colors.success}18`,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: `${Colors.success}30`,
+  },
+  datePillText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: Colors.success,
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+
+  // Stats Row
+  statsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 4,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: Colors.surface,
+    padding: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderBottomWidth: 3,
+    alignItems: 'flex-start',
+    gap: 6,
+    ...neonShadows.emerald,
+  },
+  statIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: Colors.text,
+    letterSpacing: -0.5,
+  },
+  statLabel: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: Colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    lineHeight: 11,
+  },
+
+  // Section Header
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 6,
+    marginBottom: 2,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: Colors.text,
+    letterSpacing: -0.3,
+  },
+  countBadge: {
+    backgroundColor: `${Colors.success}18`,
+    borderWidth: 1,
+    borderColor: `${Colors.success}30`,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 20,
+  },
+  countBadgeText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: Colors.success,
+  },
+
+  // Quick Action Cards
+  actionGrid: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 4,
+  },
+  actionCard: {
+    flex: 1,
+    height: 138,
+    borderRadius: 24,
+    padding: 18,
+    justifyContent: 'space-between',
+  },
+  actionCardGreen: {
+    backgroundColor: Colors.success,
+    shadowColor: Colors.success,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.35,
+    shadowRadius: 18,
+    elevation: 12,
+  },
+  actionCardBlue: {
+    backgroundColor: Colors.primary,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.35,
+    shadowRadius: 18,
+    elevation: 12,
+  },
+  actionIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: Colors.white,
+    letterSpacing: -0.2,
+    marginTop: 2,
+  },
+  actionSub: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.75)',
+    letterSpacing: 0.1,
+    marginTop: 1,
+  },
+
+  // Class Cards
+  classCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surface,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 16,
+    gap: 14,
+    marginBottom: 10,
+    ...neonShadows.emerald,
+  },
+  subjectCodePill: {
+    backgroundColor: `${Colors.success}15`,
+    borderWidth: 1,
+    borderColor: `${Colors.success}28`,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 12,
+    minWidth: 54,
+    alignItems: 'center',
+  },
+  subjectCodeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: Colors.success,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  classInfoBlock: {
+    flex: 1,
+  },
+  classNameText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: Colors.text,
+    letterSpacing: -0.3,
+  },
+  subjectNameText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  classArrowCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: `${Colors.success}12`,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Empty State
+  emptyCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 32,
+    alignItems: 'center',
+    gap: 12,
+  },
+  emptyIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 18,
+    backgroundColor: Colors.surfaceElevated,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.textMuted,
+  },
+
+  bottomSpacer: {
+    height: 20,
+  },
 });

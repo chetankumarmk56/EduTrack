@@ -19,8 +19,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Upgrade schema."""
-    op.add_column('teachers', sa.Column('whatsapp', sa.String(), nullable=True))
+    """Upgrade schema. Idempotent — safe to run on DBs where the column was
+    already added via metadata.create_all()."""
+    op.execute("ALTER TABLE teachers ADD COLUMN IF NOT EXISTS whatsapp VARCHAR")
 
 
 def downgrade() -> None:

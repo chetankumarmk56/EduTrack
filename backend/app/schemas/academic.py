@@ -53,6 +53,7 @@ class SubjectResponse(SubjectBase):
 
 class SchoolClassBase(BaseModel):
     display_name: Optional[str] = None
+    room_number: Optional[str] = None
     tuition_fee: float = 0.0
     transport_fee: float = 0.0
     other_fee: float = 0.0
@@ -65,6 +66,7 @@ class SchoolClassCreate(SchoolClassBase):
 
 class SchoolClassUpdate(BaseModel):
     display_name: Optional[str] = None
+    room_number: Optional[str] = None
     grade_id: Optional[int] = None
     section_id: Optional[int] = None
     tuition_fee: Optional[float] = None

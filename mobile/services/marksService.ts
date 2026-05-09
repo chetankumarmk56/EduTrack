@@ -26,10 +26,36 @@ export const marksService = {
   },
 
   /**
-   * Get subject summary with average scores
+   * Get subject-level class summary stats (avg/max/min/count of raw scores)
+   * for a specific section. Used for "you vs class" comparison.
    */
-  getSubjectSummary: async (studentId: number, subject: string): Promise<any> => {
-    const res = await apiClient.get(`marks/subject/${subject}/summary?student_id=${studentId}`);
+  getSubjectSummary: async (subject: string, schoolClassId: number): Promise<{
+    subject: string;
+    school_class_id: number;
+    average: number;
+    max: number;
+    min: number;
+    count: number;
+  }> => {
+    const res = await apiClient.get(
+      `marks/subject/${encodeURIComponent(subject)}/summary?school_class_id=${schoolClassId}`,
+    );
+    return res.data;
+  },
+
+  /**
+   * Get student rankings within their section (class_rank) and entire grade level (grade_rank).
+   */
+  getRankings: async (studentId: number): Promise<{
+    class_rank: number | null;
+    class_total: number;
+    grade_rank: number | null;
+    grade_total: number;
+    percentage: number;
+    class_leaderboard?: { student_id: number; name: string; percentage: number; rank: number }[];
+    grade_leaderboard?: { student_id: number; name: string; percentage: number; rank: number }[];
+  } | null> => {
+    const res = await apiClient.get(`marks/${studentId}/rankings`);
     return res.data;
   },
 

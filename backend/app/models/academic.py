@@ -69,6 +69,9 @@ class SchoolClass(Base, TimestampMixin):
     # Optional alias: e.g., "10-A"
     display_name = Column(String, nullable=True)
 
+    # Dedicated classroom shared across the whole weekly timetable
+    room_number = Column(String, nullable=True)
+
     # Fee Structure per Class
     tuition_fee = Column(Float, nullable=False, default=0.0)
     transport_fee = Column(Float, default=0.0)

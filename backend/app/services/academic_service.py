@@ -299,8 +299,12 @@ class AcademicService:
 
     @staticmethod
     async def update_school_class(db: AsyncSession, institution_id: int, class_id: int, class_in: schemas.SchoolClassUpdate):
+        # Eager-load grade & section so the response serializer can read them
+        # without triggering a lazy load (which fails in async context).
         result = await db.execute(
-            select(SchoolClass).where(SchoolClass.id == class_id, SchoolClass.institution_id == institution_id)
+            select(SchoolClass)
+            .options(selectinload(SchoolClass.grade), selectinload(SchoolClass.section))
+            .where(SchoolClass.id == class_id, SchoolClass.institution_id == institution_id)
         )
         db_class = result.scalars().first()
         if not db_class:

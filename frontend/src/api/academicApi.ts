@@ -17,6 +17,16 @@ export interface SchoolClassCreate {
   grade_id: number;
   section_id: number;
   display_name?: string;
+  room_number?: string;
+}
+
+export interface SchoolClassUpdate {
+  display_name?: string;
+  room_number?: string;
+  tuition_fee?: number;
+  transport_fee?: number;
+  other_fee?: number;
+  fee_due_date?: string;
 }
 
 export interface SubjectCreate {
@@ -104,6 +114,11 @@ export const academicApi = {
 
   createSchoolClass: async (data: SchoolClassCreate) => {
     const response = await client.post<SchoolClass>('academic/school-classes', data);
+    return response.data;
+  },
+
+  updateSchoolClass: async (id: number, data: SchoolClassUpdate) => {
+    const response = await client.put<SchoolClass>(`academic/school-classes/${id}`, data);
     return response.data;
   },
 

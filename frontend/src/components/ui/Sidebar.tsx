@@ -3,7 +3,7 @@ import {
   LayoutDashboard, GraduationCap, CalendarDays,
   Bell, LogOut, Users,
   ChevronRight, Shield, Book, PenTool, BookOpen, Building2, Phone, Globe, CreditCard,
-  MapPin
+  MapPin, CalendarRange
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { cn } from '../../lib/utils';
@@ -14,6 +14,7 @@ const parentNavItems = [
   { name: 'Dashboard', path: '/parent/dashboard', icon: LayoutDashboard },
   { name: 'Academics', path: '/parent/academics', icon: GraduationCap },
   { name: 'Attendance', path: '/parent/attendance', icon: CalendarDays },
+  { name: 'Timetable', path: '/parent/timetable', icon: CalendarRange },
   { name: 'Events', path: '/parent/events', icon: Bell },
   { name: 'Teachers', path: '/parent/teachers', icon: Users },
   { name: 'Bus Tracking', path: '/parent/bus-tracking', icon: MapPin },
@@ -24,6 +25,7 @@ const parentNavItems = [
 const teacherNavItems = [
   { name: 'Marks Entry', path: '/teacher/dashboard', icon: LayoutDashboard },
   { name: 'Attendance', path: '/teacher/attendance', icon: CalendarDays },
+  { name: 'Timetable', path: '/teacher/timetable', icon: CalendarRange },
   { name: 'Events', path: '/teacher/events', icon: Bell },
   { name: 'Contact List', path: '/teacher/contacts', icon: Phone },
   { name: 'Lesson Plan', path: '/teacher/lesson-plan', icon: Book },
@@ -36,6 +38,7 @@ const adminNavItems = [
   { name: 'Student Roster', path: '/admin/directory', icon: Users },
   { name: 'Teacher Directory', path: '/admin/teachers', icon: BookOpen },
   { name: 'Academic Setup', path: '/admin/classes', icon: Building2 },
+  { name: 'Timetable', path: '/admin/timetable', icon: CalendarRange },
   { name: 'Event Directory', path: '/admin/events', icon: Bell },
   { name: 'Bus Logistics', path: '/admin/transport', icon: MapPin },
   { name: 'Finance Terminal', path: '/admin/finance', icon: CreditCard },
