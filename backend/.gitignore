@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtualenvs
+venv/
+.venv/
+env/
+ENV/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Logs & PIDs
+*.log
+*.pid
+
+# User uploads (runtime artifacts — never commit)
+static/uploads/
+
+# Test artefacts
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Alembic SQLite scratch (if any)
+*.db
+*.sqlite
+*.sqlite3
