@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Plus, Trash2, X, Pencil, Clock, CalendarRange, Users, MapPin,
+  Plus, Trash2, X, Pencil, Clock, CalendarRange, Users, MapPin, BookOpen,
 } from 'lucide-react';
 import { timetableApi } from '../../api/timetableApi';
 import { academicApi } from '../../api/academicApi';

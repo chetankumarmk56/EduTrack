@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  CalendarRange, Clock, BookOpen, Sparkles,
+  CalendarRange, Clock, BookOpen,
   MapPin, User, ChevronRight, Hourglass, GraduationCap,
   CalendarDays, LayoutGrid, ListOrdered,
 } from 'lucide-react';
