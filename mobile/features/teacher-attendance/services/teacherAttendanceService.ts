@@ -43,17 +43,17 @@ export interface PaginatedLeaveResponse {
 
 export const teacherAttendanceService = {
   getTodayStatus: async (): Promise<TeacherAttendanceRecord | null> => {
-    const res = await apiClient.get('/api/teacher-attendance/my/today');
+    const res = await apiClient.get('teacher-attendance/my/today');
     return res.data;
   },
 
   checkIn: async (remarks?: string): Promise<TeacherAttendanceRecord> => {
-    const res = await apiClient.post('/api/teacher-attendance/my/check-in', { remarks });
+    const res = await apiClient.post('teacher-attendance/my/check-in', { remarks });
     return res.data;
   },
 
   checkOut: async (remarks?: string): Promise<TeacherAttendanceRecord> => {
-    const res = await apiClient.post('/api/teacher-attendance/my/check-out', { remarks });
+    const res = await apiClient.post('teacher-attendance/my/check-out', { remarks });
     return res.data;
   },
 
@@ -61,7 +61,7 @@ export const teacherAttendanceService = {
     skip?: number;
     limit?: number;
   }): Promise<PaginatedAttendanceResponse> => {
-    const res = await apiClient.get('/api/teacher-attendance/my/history', { params });
+    const res = await apiClient.get('teacher-attendance/my/history', { params });
     return res.data;
   },
 
@@ -71,7 +71,7 @@ export const teacherAttendanceService = {
     end_date: string;
     reason: string;
   }): Promise<TeacherLeaveRecord> => {
-    const res = await apiClient.post('/api/teacher-attendance/my/leave', data);
+    const res = await apiClient.post('teacher-attendance/my/leave', data);
     return res.data;
   },
 
@@ -79,12 +79,12 @@ export const teacherAttendanceService = {
     skip?: number;
     limit?: number;
   }): Promise<PaginatedLeaveResponse> => {
-    const res = await apiClient.get('/api/teacher-attendance/my/leave', { params });
+    const res = await apiClient.get('teacher-attendance/my/leave', { params });
     return res.data;
   },
 
   cancelLeave: async (leaveId: number): Promise<TeacherLeaveRecord> => {
-    const res = await apiClient.post(`/api/teacher-attendance/my/leave/${leaveId}/cancel`);
+    const res = await apiClient.post(`teacher-attendance/my/leave/${leaveId}/cancel`);
     return res.data;
   },
 };

@@ -15,7 +15,7 @@ import { announcementService, directoryService, type Announcement } from '../../
 import { Colors } from '@/shared/constants/Colors';
 import { LoadingScreen, EmptyState } from '@/shared/components/ui/Feedback';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { FadeInDown, SlideInUp } from 'react-native-reanimated';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -61,7 +61,8 @@ export default function TeacherAnnouncements() {
 
       const assignments = profile.assignments || [];
       const uniqueClasses = Array.from(new Set(assignments.map((a: any) => a.school_class_id)))
-        .map(id => assignments.find((a: any) => a.school_class_id === id).school_class);
+        .map((id) => assignments.find((a: any) => a.school_class_id === id)?.school_class)
+        .filter((sc: any) => sc && sc.id); // drop nulls from unloaded relations
       setClasses(uniqueClasses);
     } catch (error) {
       console.error('Failed to load announcements:', error);
@@ -79,13 +80,26 @@ export default function TeacherAnnouncements() {
       return;
     }
 
+    // Resolve class_id: explicit selection wins; otherwise fall back to the
+    // teacher's first assigned class. If they have *no* assignments, refuse
+    // to submit — backend would 400 with "class_id is required".
+    const resolvedClassId =
+      selectedClassId ?? (classes.length > 0 ? classes[0].id : null);
+    if (resolvedClassId == null) {
+      Alert.alert(
+        'No class selected',
+        "You're not assigned to any class yet, so we can't post an announcement. Ask the admin to assign you to a class first.",
+      );
+      return;
+    }
+
     setSubmitting(true);
     try {
       await announcementService.createAnnouncement({
         title,
         message: content,
         priority: priority.toUpperCase(),
-        class_id: selectedClassId || (classes.length > 0 ? classes[0].id : null),
+        class_id: resolvedClassId,
         type: 'CLASS',
       });
 
@@ -95,8 +109,14 @@ export default function TeacherAnnouncements() {
       setContent('');
       setSelectedClassId(null);
       loadData();
-    } catch (error) {
-      Alert.alert('Error', 'Failed to post announcement.');
+    } catch (error: any) {
+      const detail =
+        error?.response?.data?.detail ||
+        (Array.isArray(error?.response?.data?.detail) &&
+          error.response.data.detail.map((e: any) => e.msg).join(', ')) ||
+        error?.message ||
+        'Failed to post announcement.';
+      Alert.alert('Could not post announcement', String(detail));
     } finally {
       setSubmitting(false);
     }
@@ -203,8 +223,12 @@ export default function TeacherAnnouncements() {
 
       {/* ── new announcement modal ── */}
       <Modal visible={isModalVisible} animationType="slide" transparent>
+        {/* Plain View instead of Animated.View — the native Modal already
+            slides the layer up from the bottom. Stacking a reanimated
+            entering={SlideInUp.springify()} on top of that under the New
+            Architecture freezes mid-animation and the sheet never paints. */}
         <View style={styles.modalOverlay}>
-          <Animated.View entering={SlideInUp.springify()} style={styles.modalSheet}>
+          <View style={styles.modalSheet}>
             {/* handle bar */}
             <View style={styles.handleBar} />
 
@@ -254,26 +278,35 @@ export default function TeacherAnnouncements() {
               {/* target class */}
               <Text style={styles.fieldLabel}>TARGET CLASS</Text>
               <View style={styles.chipRow}>
-                {classes.map(c => {
-                  const isSelected = selectedClassId === c.id;
-                  return (
-                    <TouchableOpacity
-                      key={c.id}
-                      style={[styles.classChipBtn, isSelected && styles.classChipBtnSelected]}
-                      onPress={() => setSelectedClassId(c.id)}
-                      activeOpacity={0.75}
-                    >
-                      <Text
-                        style={[
-                          styles.classChipBtnText,
-                          isSelected && styles.classChipBtnTextSelected,
-                        ]}
+                {classes
+                  .filter((c: any) => c && c.id)
+                  .map((c: any) => {
+                    const isSelected = selectedClassId === c.id;
+                    // Defensive: a missing grade or section relation used to
+                    // throw `c.grade is undefined`, which crashed render of
+                    // the modal mid-animation and looked like a hang.
+                    const label =
+                      c.display_name ||
+                      [c.grade?.name, c.section?.name].filter(Boolean).join('-') ||
+                      `Class #${c.id}`;
+                    return (
+                      <TouchableOpacity
+                        key={c.id}
+                        style={[styles.classChipBtn, isSelected && styles.classChipBtnSelected]}
+                        onPress={() => setSelectedClassId(c.id)}
+                        activeOpacity={0.75}
                       >
-                        {c.grade.name}-{c.section.name}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
+                        <Text
+                          style={[
+                            styles.classChipBtnText,
+                            isSelected && styles.classChipBtnTextSelected,
+                          ]}
+                        >
+                          {label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
               </View>
 
               {/* priority */}
@@ -328,7 +361,7 @@ export default function TeacherAnnouncements() {
                 {submitting ? 'Posting...' : 'Post Announcement'}
               </Text>
             </TouchableOpacity>
-          </Animated.View>
+          </View>
         </View>
       </Modal>
     </SafeAreaView>

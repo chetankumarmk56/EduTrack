@@ -2,6 +2,7 @@
 import json
 from datetime import datetime, timezone
 from typing import Optional, List, Tuple
+from zoneinfo import ZoneInfo
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_
 from sqlalchemy.orm import selectinload
@@ -13,12 +14,19 @@ from app.models.directory import Teacher
 from app.models.core import User
 
 
+# School-local timezone. `datetime.now()` without a tz returns *server-local*
+# time — on Render that's UTC, which produced "10:28" stamps for India users
+# checking in at 15:58 IST. Pinning to Asia/Kolkata keeps stored time strings
+# meaningful regardless of where the backend runs.
+_SCHOOL_TZ = ZoneInfo("Asia/Kolkata")
+
+
 def _today() -> str:
-    return datetime.now().strftime("%Y-%m-%d")
+    return datetime.now(_SCHOOL_TZ).strftime("%Y-%m-%d")
 
 
 def _now_time() -> str:
-    return datetime.now().strftime("%H:%M")
+    return datetime.now(_SCHOOL_TZ).strftime("%H:%M")
 
 
 def _enrich_attendance(row: TeacherAttendance, teacher_name: str = "") -> dict:

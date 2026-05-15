@@ -135,8 +135,16 @@ export default function TeacherMarks() {
       await marksService.recordBatch(marks);
       Alert.alert('Success', 'Marks recorded successfully!');
       loadExistingMarks(selectedExamId); // Refresh after save
-    } catch (error) {
-      Alert.alert('Error', 'Failed to record marks.');
+    } catch (error: any) {
+      // Surface the backend's validation detail (e.g. "Score exceeds
+      // max_score", "Exam not found") so the teacher can actually fix it.
+      const detail =
+        error?.response?.data?.detail ||
+        (Array.isArray(error?.response?.data?.detail) &&
+          error.response.data.detail.map((e: any) => e.msg).join(', ')) ||
+        error?.message ||
+        'Failed to record marks.';
+      Alert.alert('Could not save marks', String(detail));
     } finally {
       setSubmitting(false);
     }

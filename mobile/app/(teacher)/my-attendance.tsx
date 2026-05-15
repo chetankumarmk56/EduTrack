@@ -80,6 +80,12 @@ export default function MyAttendanceScreen() {
       const res = await teacherAttendanceService.getMyHistory({ skip: historyPage * PAGE_SIZE, limit: PAGE_SIZE });
       setHistory(res.items);
       setHistoryTotal(res.total);
+    } catch (e) {
+      // Treat fetch failure as "no records yet" so the screen renders an
+      // empty state instead of throwing an Uncaught (in promise) error.
+      console.warn('[my-attendance] history fetch failed', e);
+      setHistory([]);
+      setHistoryTotal(0);
     } finally {
       setHistoryLoading(false);
     }
@@ -91,6 +97,10 @@ export default function MyAttendanceScreen() {
       const res = await teacherAttendanceService.getMyLeaves({ skip: leavePage * PAGE_SIZE, limit: PAGE_SIZE });
       setLeaves(res.items);
       setLeavesTotal(res.total);
+    } catch (e) {
+      console.warn('[my-attendance] leave fetch failed', e);
+      setLeaves([]);
+      setLeavesTotal(0);
     } finally {
       setLeaveLoading(false);
     }
