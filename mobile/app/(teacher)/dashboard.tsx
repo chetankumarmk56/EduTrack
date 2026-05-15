@@ -11,7 +11,7 @@ import { dashboardService, directoryService } from '../../services';
 import { LoadingScreen } from '@/shared/components/ui/Feedback';
 
 export default function TeacherDashboard() {
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -34,9 +34,20 @@ export default function TeacherDashboard() {
     }
   };
 
-  useEffect(() => { loadData(); }, []);
+  // Re-fetch when authentication state flips. Without this guard, signing out
+  // on the Profile screen re-triggers loadData() during the (teacher)→/login
+  // transition (the drawer screens stay mounted briefly), firing the two
+  // requests without a token and producing spurious 401s in the log.
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setLoading(false);
+      return;
+    }
+    loadData();
+  }, [isAuthenticated]);
 
   const onRefresh = () => {
+    if (!isAuthenticated) return;
     setRefreshing(true);
     loadData();
   };

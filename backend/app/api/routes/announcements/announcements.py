@@ -168,6 +168,9 @@ async def mark_announcement_as_read(
     announcement_id = data.get("announcement_id")
     parent_id = data.get("parent_id")
     
+    if not announcement_id:
+        raise HTTPException(status_code=400, detail="Missing announcement_id")
+
     # Auto-resolve parent_id from token if not provided (Performance optimization)
     if not parent_id and user.role in ["student", "parent"]:
         from app.models.directory import Parent, Student
@@ -183,9 +186,14 @@ async def mark_announcement_as_read(
             if db_student:
                 parent_id = db_student.parent_id
 
-    if not announcement_id or not parent_id:
-        raise HTTPException(status_code=400, detail="Missing announcement_id or resolvable parent_id")
-        
+    if not parent_id:
+        # Student-only logins (no Parent table record and no Student.parent_id)
+        # can't have their reads written into AnnouncementRead since the FK
+        # requires a real parent. Treat as a successful no-op so the client
+        # doesn't have to special-case this branch and the log stays clean.
+        # Parents and parent-linked students still get their reads tracked.
+        return {"message": "Acknowledged (no parent record to track read)"}
+
     await announcement_service.mark_as_read(db, announcement_id, parent_id)
     return {"message": "Marked as read"}
 

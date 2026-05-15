@@ -137,24 +137,38 @@ apiClient.interceptors.response.use(
       return apiClient(config as AxiosRequestConfig);
     }
 
-    // ── At this point we're giving up: log it. ──────────────────────────────
+    // ── At this point we're giving up. ──────────────────────────────────────
     const status = error?.response?.status ?? '???';
     const fullURL = getFullURL(config.baseURL, config.url);
 
-    console.error(`[API ERROR] ${status} ${method.toUpperCase()} ${config.url}`, {
-      fullURL,
-      data,
-      statusText: error?.response?.statusText || 'no response',
-      attempts: retryCount + 1,
-    });
+    // A 401 on a request that *had no Authorization header* means the request
+    // fired during a logout race (e.g. a drawer screen's useEffect rerunning
+    // while the redirect to /login is in flight). The user is already on
+    // their way out — there's no real "session expired" event to report and
+    // storage is already empty. Demote the log and skip the rebroadcast.
+    const requestUrl: string = config.url || '';
+    const isLoginRequest = requestUrl.includes('/login');
+    const hadAuthHeader = !!(config.headers as any)?.Authorization;
+    const isLogoutRace = error?.response?.status === 401 && !hadAuthHeader;
+
+    if (isLogoutRace) {
+      console.warn(
+        `[API] 401 with no token — ignoring (logout race): ${method.toUpperCase()} ${config.url}`,
+      );
+    } else {
+      console.error(`[API ERROR] ${status} ${method.toUpperCase()} ${config.url}`, {
+        fullURL,
+        data,
+        statusText: error?.response?.statusText || 'no response',
+        attempts: retryCount + 1,
+      });
+    }
 
     // ── Auto-logout on 401 ──────────────────────────────────────────────────
     // Skip for login endpoints — a 401 there means "wrong credentials",
-    // not "session expired". Without this guard, a failed login attempt would
-    // wipe storage and trigger a misleading "Session expired" warning.
-    const requestUrl: string = config.url || '';
-    const isLoginRequest = requestUrl.includes('/login');
-    if (error?.response?.status === 401 && !isLoginRequest) {
+    // not "session expired". Skip for the logout race too — broadcasting
+    // would just trigger a redundant "Session expired" warning.
+    if (error?.response?.status === 401 && !isLoginRequest && !isLogoutRace) {
       console.warn('[API] 401 Unauthorized — clearing session and broadcasting logout');
       await Promise.all(
         Object.values(STORAGE_KEYS).map((k) => Storage.deleteItem(k)),
