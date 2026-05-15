@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  LogIn, LogOut, CalendarDays, ClipboardList, Plus, X,
-  CheckCircle2, AlertCircle, Clock, Loader2, ChevronLeft, ChevronRight,
+  LogIn, LogOut, Plus, X,
+  CheckCircle2, AlertCircle, Loader2, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import { teacherAttendanceApi, type TeacherAttendanceRecord, type TeacherLeaveRecord } from '@/features/teacher-attendance/api';

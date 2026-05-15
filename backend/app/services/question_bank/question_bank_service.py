@@ -10,6 +10,7 @@ file formats, the LLM provider, and PDF rendering.
 """
 from __future__ import annotations
 
+import io
 import uuid
 from typing import List, Tuple
 

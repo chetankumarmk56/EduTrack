@@ -71,14 +71,18 @@ const titleCase = (s: string) =>
 const fmtINR = (n: number) =>
   `₹${(n ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
-const stripEmpty = <T extends Record<string, unknown>>(obj: T): Partial<T> => {
-  const out: Record<string, unknown> = {};
-  for (const k of Object.keys(obj)) {
+// Drop keys whose value is "", null, or undefined. Generic so the caller's
+// type flows through to the return value as Partial<T>. Constraint is just
+// `object` so interfaces (which lack an implicit index signature) are accepted
+// alongside Record-like types.
+const stripEmpty = <T extends object>(obj: T): Partial<T> => {
+  const out: Partial<T> = {};
+  for (const k of Object.keys(obj) as (keyof T)[]) {
     const v = obj[k];
     if (v === '' || v === undefined || v === null) continue;
     out[k] = v;
   }
-  return out as Partial<T>;
+  return out;
 };
 
 export default function PaymentLedger() {

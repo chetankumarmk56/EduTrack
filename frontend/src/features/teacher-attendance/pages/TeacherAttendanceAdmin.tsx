@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   CheckCircle2, XCircle, AlertCircle, Loader2, Edit3, X,
-  ChevronLeft, ChevronRight, ClipboardList, Clock,
+  ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import { teacherAttendanceApi, type TeacherAttendanceRecord, type TeacherLeaveRecord, type AuditLogRecord, type AttendanceSummary } from '@/features/teacher-attendance/api';
