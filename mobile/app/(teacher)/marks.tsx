@@ -2,9 +2,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, TextInput, KeyboardAvoidingView, Platform, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { directoryService, marksService, type StudentProfile } from '../../services';
-import { Colors } from '../../constants/Colors';
-import { Card, SectionHeader } from '../../components/ui/Card';
-import { LoadingScreen, ErrorState } from '../../components/ui/Feedback';
+import { Colors } from '@/shared/constants/Colors';
+import { Card, SectionHeader } from '@/shared/components/ui/Card';
+import { LoadingScreen, ErrorState } from '@/shared/components/ui/Feedback';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 

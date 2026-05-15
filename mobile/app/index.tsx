@@ -1,9 +1,9 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ImageBackground } from 'react-native';
 import { useRouter, Redirect } from 'expo-router';
-import { useAuth } from '../hooks/useAuth';
-import { LoadingScreen } from '../components/ui/Feedback';
-import { Colors } from '../constants/Colors';
+import { useAuth } from '@/features/auth/hooks/useAuth';
+import { LoadingScreen } from '@/shared/components/ui/Feedback';
+import { Colors } from '@/shared/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 

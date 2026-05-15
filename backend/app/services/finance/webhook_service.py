@@ -7,6 +7,7 @@ from app.core.config import settings
 from app.core.logger import logger
 from app.models.finance import Payment, StudentFee, StudentFeeStatus, PaymentTransaction
 from app.models.directory import Student
+from app.services.finance.ledger_helpers import write_ledger_entry
 
 
 class WebhookServiceMixin:
@@ -44,6 +45,10 @@ class WebhookServiceMixin:
         razorpay_payment_id = payment_entity.get("id")
         amount_paise = payment_entity.get("amount")
         amount = amount_paise / 100 if amount_paise else 0
+        # Razorpay reports `fee` (and `tax`) in paise on captured webhooks; fall back to None
+        gateway_fee_paise = payment_entity.get("fee")
+        gateway_fee = gateway_fee_paise / 100 if gateway_fee_paise else None
+        gateway_method = (payment_entity.get("method") or "UPI").upper()
 
         if not razorpay_order_id or not razorpay_payment_id:
             logger.warning(
@@ -148,7 +153,27 @@ class WebhookServiceMixin:
 
                 payment.status = "SUCCESS"
                 payment.razorpay_payment_id = razorpay_payment_id
+                if payment.payment_mode in (None, "UPI") and gateway_method:
+                    payment.payment_mode = gateway_method
+                await db.flush()
+
                 await self.allocate_payment(db, payment.id)
+
+                student_res2 = await db.execute(
+                    select(Student).where(Student.id == student_id)
+                )
+                student_obj = student_res2.scalars().first()
+                if student_obj:
+                    await write_ledger_entry(
+                        db,
+                        institution_id=payment.institution_id,
+                        payment=payment,
+                        student=student_obj,
+                        payment_method=gateway_method or payment.payment_mode or "UPI",
+                        payment_status="SUCCESS",
+                        gateway_fee=gateway_fee,
+                    )
+
                 await db.commit()
                 logger.info(
                     f"Webhook SUCCESS: Atomic update for payment {razorpay_payment_id}."
@@ -171,6 +196,22 @@ class WebhookServiceMixin:
                 if payment and payment.status != "FAILED":
                     payment.status = "FAILED"
                     payment.razorpay_payment_id = razorpay_payment_id
+                    await db.flush()
+
+                    student_res = await db.execute(
+                        select(Student).where(Student.id == payment.student_id)
+                    )
+                    student_obj = student_res.scalars().first()
+                    if student_obj:
+                        await write_ledger_entry(
+                            db,
+                            institution_id=payment.institution_id,
+                            payment=payment,
+                            student=student_obj,
+                            payment_method=gateway_method or payment.payment_mode or "UPI",
+                            payment_status="FAILED",
+                            gateway_fee=0.0,
+                        )
 
                 await db.commit()
                 logger.info(

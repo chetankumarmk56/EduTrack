@@ -6,6 +6,7 @@ from .order_service import OrderServiceMixin
 from .payment_service import PaymentServiceMixin
 from .webhook_service import WebhookServiceMixin
 from .reporting_service import ReportingServiceMixin
+from .ledger_service import LedgerServiceMixin
 
 
 class FinanceService(
@@ -14,6 +15,7 @@ class FinanceService(
     PaymentServiceMixin,
     WebhookServiceMixin,
     ReportingServiceMixin,
+    LedgerServiceMixin,
 ):
     def __init__(self):
         if settings.RAZORPAY_KEY_ID and settings.RAZORPAY_KEY_SECRET:

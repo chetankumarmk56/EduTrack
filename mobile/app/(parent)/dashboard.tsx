@@ -11,15 +11,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../../constants/Colors';
-import { LoadingScreen } from '../../components/ui/Feedback';
+import { Colors } from '@/shared/constants/Colors';
+import { LoadingScreen } from '@/shared/components/ui/Feedback';
 import { useDashboard } from '../../hooks';
 import {
   getAttendancePct,
   getSubjectPerformance,
   getTimeGreeting,
-} from '../../utils/formatters';
-import type { SubjectComparison } from '../../hooks/useDashboard';
+} from '@/shared/utils/formatters';
+import type { SubjectComparison } from '@/features/dashboard/hooks/useDashboard';
 
 export default function DashboardScreen() {
   const router = useRouter();

@@ -12,8 +12,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { directoryService, type StudentProfile, type Teacher } from '../../services';
-import { Colors } from '../../constants/Colors';
-import { LoadingScreen } from '../../components/ui/Feedback';
+import { Colors } from '@/shared/constants/Colors';
+import { LoadingScreen } from '@/shared/components/ui/Feedback';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 

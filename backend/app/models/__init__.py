@@ -6,8 +6,13 @@ from app.models.mark import Mark, Exam
 from app.models.event import Event
 from app.models.communication import Announcement
 from app.models.transport import Bus, Route, Stop, StudentTransport, BusLocation, NotificationLog
-from app.models.finance import FeeStructure, Payment, PaymentAllocation
+from app.models.finance import FeeStructure, Payment, PaymentAllocation, FinanceLedger, LedgerEntryType
 from app.models.timetable import SchedulePeriod, TimetableSlot
+from app.models.teacher_attendance import (
+    TeacherAttendance, TeacherLeaveRequest, TeacherAttendanceAuditLog,
+    TeacherAttendanceStatus, TeacherLeaveType, TeacherLeaveStatus,
+)
+from app.models.uploaded_file import UploadedFile
 from app.core.database import Base
 
 # Grouped export list for easy project-wide access
@@ -18,6 +23,9 @@ __all__ = [
     "Attendance", "Mark", "Exam",
     "Event", "Announcement", "Base",
     "Bus", "Route", "Stop", "StudentTransport", "BusLocation", "NotificationLog",
-    "FeeStructure", "Payment", "PaymentAllocation",
+    "FeeStructure", "Payment", "PaymentAllocation", "FinanceLedger", "LedgerEntryType",
     "SchedulePeriod", "TimetableSlot",
+    "TeacherAttendance", "TeacherLeaveRequest", "TeacherAttendanceAuditLog",
+    "TeacherAttendanceStatus", "TeacherLeaveType", "TeacherLeaveStatus",
+    "UploadedFile",
 ]

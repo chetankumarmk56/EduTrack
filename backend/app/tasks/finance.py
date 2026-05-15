@@ -9,8 +9,8 @@ from app.core.database import AsyncSessionLocal
 from app.models.finance import StudentFee
 from app.models.directory import Student, Parent
 from app.models.communication import Notification
-from app.services.notification_service import notification_service
-from app.services.call_service import call_service
+from app.services.notification import notification_service
+from app.services.call import call_service
 from app.core.logger import logger
 from app.models.communication import CronLock
 from sqlalchemy.exc import IntegrityError

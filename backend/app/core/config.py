@@ -36,11 +36,20 @@ class Settings(BaseSettings):
     
     # AI (Optional)
     GOOGLE_API_KEY: Optional[str] = None
+    OPENAI_API_KEY: Optional[str] = None
+    OPENAI_MODEL: str = "gpt-4o-mini"
 
     # Cloudinary (File Storage)
     CLOUDINARY_CLOUD_NAME: Optional[str] = None
     CLOUDINARY_API_KEY: Optional[str] = None
     CLOUDINARY_API_SECRET: Optional[str] = None
+
+    # AWS S3 (private teacher uploads — falls back to local disk if unset)
+    AWS_ACCESS_KEY_ID: Optional[str] = None
+    AWS_SECRET_ACCESS_KEY: Optional[str] = None
+    AWS_S3_REGION: Optional[str] = None
+    AWS_S3_BUCKET: Optional[str] = None
+    AWS_S3_PRESIGN_TTL: int = 900  # seconds (15 min)
     
     # Razorpay
     RAZORPAY_KEY_ID: Optional[str] = "rzp_test_placeholder"

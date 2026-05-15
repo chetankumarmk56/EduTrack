@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors } from '../../constants/Colors';
-import { LoadingScreen, ErrorState } from '../../components/ui/Feedback';
+import { Colors } from '@/shared/constants/Colors';
+import { LoadingScreen, ErrorState } from '@/shared/components/ui/Feedback';
 import { Ionicons } from '@expo/vector-icons';
 import { eventsService, type SchoolEvent } from '../../services';
 import Animated, { FadeInDown } from 'react-native-reanimated';

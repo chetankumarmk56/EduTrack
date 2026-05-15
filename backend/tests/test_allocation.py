@@ -8,7 +8,7 @@ sys.path.append(os.getcwd())
 from app.core.database import AsyncSessionLocal
 from app.models.finance import Payment, FeeStructure, PaymentAllocation
 from app.models.directory import Student
-from app.services.finance_service import finance_service
+from app.services.finance import finance_service
 from sqlalchemy import select, delete
 
 async def test_allocation():

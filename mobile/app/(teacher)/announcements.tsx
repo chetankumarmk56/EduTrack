@@ -12,8 +12,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { announcementService, directoryService, type Announcement } from '../../services';
-import { Colors } from '../../constants/Colors';
-import { LoadingScreen, EmptyState } from '../../components/ui/Feedback';
+import { Colors } from '@/shared/constants/Colors';
+import { LoadingScreen, EmptyState } from '@/shared/components/ui/Feedback';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown, SlideInUp } from 'react-native-reanimated';
 

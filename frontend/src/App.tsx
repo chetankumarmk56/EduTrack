@@ -1,57 +1,60 @@
 import { Component, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './lib/AuthContext';
-import { AppProvider } from './lib/AppContext';
-import ProtectedRoute from './components/auth/ProtectedRoute';
-import GuestRoute from './components/auth/GuestRoute';
-import Landing from './pages/Landing';
-import DashboardLayout from './components/layout/DashboardLayout';
-import Dashboard from './pages/Dashboard';
-import Academics from './pages/Academics';
-import Attendance from './pages/Attendance';
-import Events from './pages/Events';
-import Teachers from './pages/Teachers';
-import Profile from './pages/Profile';
+import { AuthProvider } from '@/shared/contexts/AuthContext';
+import { AppProvider } from '@/shared/contexts/AppContext';
+import ProtectedRoute from '@/shared/components/auth/ProtectedRoute';
+import GuestRoute from '@/shared/components/auth/GuestRoute';
+import Landing from '@/features/landing/pages/Landing';
+import DashboardLayout from '@/shared/components/layout/DashboardLayout';
+import Dashboard from '@/features/dashboard/pages/Dashboard';
+import Academics from '@/features/academics/pages/Academics';
+import Attendance from '@/features/attendance/pages/Attendance';
+import Events from '@/features/events/pages/Events';
+import Teachers from '@/features/directory/pages/Teachers';
+import Profile from '@/features/account/pages/Profile';
 // Announcement import removed
-import Login from './pages/Login';
-import Payments from './pages/Payments';
-import BusTracking from './pages/parent/BusTracking';
-import ParentAnnouncements from './pages/ParentAnnouncements';
-import ParentTimetable from './pages/parent/ParentTimetable';
+import Login from '@/features/auth/pages/Login';
+import Payments from '@/features/finance/pages/Payments';
+import BusTracking from '@/features/transport/pages/BusTracking';
+import ParentAnnouncements from '@/features/announcements/pages/ParentAnnouncements';
+import ParentTimetable from '@/features/timetable/pages/ParentTimetable';
 
 // Teacher Imports
-import TeacherLayout from './components/layout/TeacherLayout';
-import TeacherLogin from './pages/teacher/TeacherLogin';
-import TeacherDashboard from './pages/teacher/TeacherDashboard';
-import TeacherAttendance from './pages/teacher/TeacherAttendance';
-import LessonPlan from './pages/teacher/LessonPlan';
-import QuestionBank from './pages/teacher/QuestionBank';
-import TeacherProfile from './pages/teacher/TeacherProfile';
-import TeacherEvents from './pages/teacher/TeacherEvents';
-import ContactList from './pages/teacher/ContactList';
-import TeacherTransport from './pages/teacher/TeacherTransport';
-import TeacherAnnouncements from './pages/teacher/TeacherAnnouncements';
-import TeacherTimetable from './pages/teacher/TeacherTimetable';
+import TeacherLayout from '@/shared/components/layout/TeacherLayout';
+import TeacherLogin from '@/features/auth/pages/TeacherLogin';
+import TeacherDashboard from '@/features/marks/pages/TeacherDashboard';
+import TeacherAttendance from '@/features/attendance/pages/TeacherAttendance';
+import LessonPlan from '@/features/lesson-plan/pages/LessonPlan';
+import QuestionBank from '@/features/question-bank/pages/QuestionBank';
+import MyFiles from '@/features/my-files/pages/MyFiles';
+import TeacherProfile from '@/features/account/pages/TeacherProfile';
+import TeacherEvents from '@/features/events/pages/TeacherEvents';
+import ContactList from '@/features/contacts/pages/ContactList';
+import TeacherTransport from '@/features/transport/pages/TeacherTransport';
+import TeacherAnnouncements from '@/features/announcements/pages/TeacherAnnouncements';
+import TeacherTimetable from '@/features/timetable/pages/TeacherTimetable';
+import TeacherAttendanceLeave from '@/features/teacher-attendance/pages/TeacherAttendanceLeave';
 
 // Admin Imports
-import AdminLayout from './components/layout/AdminLayout';
-import AdminLogin from './pages/admin/AdminLogin';
-import AdminDirectory from './pages/admin/StudentDirectory';
-import TeacherDirectory from './pages/admin/TeacherDirectory';
-import AdminEvents from './pages/admin/AdminEvents';
-import AdminClasses from './pages/admin/AdminClasses';
-import AdminTimetable from './pages/admin/AdminTimetable';
-import AdminTransport from './pages/admin/AdminTransport';
-import FinanceDashboard from './pages/admin/FinanceDashboard.tsx';
-import AdminProfile from './pages/admin/AdminProfile';
+import AdminLayout from '@/shared/components/layout/AdminLayout';
+import AdminLogin from '@/features/auth/pages/AdminLogin';
+import AdminDirectory from '@/features/directory/pages/StudentDirectory';
+import TeacherDirectory from '@/features/directory/pages/TeacherDirectory';
+import AdminEvents from '@/features/events/pages/AdminEvents';
+import AdminClasses from '@/features/academics/pages/AdminClasses';
+import AdminTimetable from '@/features/timetable/pages/AdminTimetable';
+import AdminTransport from '@/features/transport/pages/AdminTransport';
+import FinanceDashboard from '@/features/finance/pages/FinanceDashboard';
+import AdminProfile from '@/features/account/pages/AdminProfile';
+import TeacherAttendanceAdmin from '@/features/teacher-attendance/pages/TeacherAttendanceAdmin';
 // Admin Announcement import removed (stale).
 
 // Super Admin Imports
-import SuperAdminLayout from './components/layout/SuperAdminLayout';
-import SuperAdminLogin from './pages/superadmin/SuperAdminLogin';
-import SuperAdminDashboard from './pages/superadmin/SuperAdminDashboard';
-import SuperAdminCredentials from './pages/superadmin/SuperAdminCredentials';
-import SuperAdminProfile from './pages/superadmin/SuperAdminProfile';
+import SuperAdminLayout from '@/shared/components/layout/SuperAdminLayout';
+import SuperAdminLogin from '@/features/auth/pages/SuperAdminLogin';
+import SuperAdminDashboard from '@/features/super-admin/pages/SuperAdminDashboard';
+import SuperAdminCredentials from '@/features/super-admin/pages/SuperAdminCredentials';
+import SuperAdminProfile from '@/features/account/pages/SuperAdminProfile';
 import { Toaster } from 'react-hot-toast';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
@@ -124,12 +127,14 @@ function App() {
               <Route path="attendance" element={<TeacherAttendance />} />
               <Route path="lesson-plan" element={<LessonPlan />} />
               <Route path="question-bank" element={<QuestionBank />} />
+              <Route path="files" element={<MyFiles />} />
               <Route path="profile" element={<TeacherProfile />} />
               <Route path="events" element={<TeacherEvents />} />
               <Route path="contacts" element={<ContactList />} />
               <Route path="transport" element={<TeacherTransport />} />
               <Route path="announcements" element={<TeacherAnnouncements />} />
               <Route path="timetable" element={<TeacherTimetable />} />
+              <Route path="my-attendance" element={<TeacherAttendanceLeave />} />
             </Route>
 
             <Route path="/admin-login" element={<GuestRoute><AdminLogin /></GuestRoute>} />
@@ -146,6 +151,7 @@ function App() {
               <Route path="events" element={<AdminEvents />} />
               <Route path="transport" element={<AdminTransport />} />
               <Route path="finance" element={<FinanceDashboard />} />
+              <Route path="teacher-attendance" element={<TeacherAttendanceAdmin />} />
               <Route path="profile" element={<AdminProfile />} />
             </Route>
 

@@ -13,11 +13,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown, FadeInUp, LinearTransition } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { useAuth } from '../../hooks/useAuth';
+import { useAuth } from '@/features/auth/hooks/useAuth';
 import { marksService, type Mark } from '../../services';
-import { Colors } from '../../constants/Colors';
-import { LoadingScreen, EmptyState, ErrorState } from '../../components/ui/Feedback';
+import { Colors } from '@/shared/constants/Colors';
+import { LoadingScreen, EmptyState, ErrorState } from '@/shared/components/ui/Feedback';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -103,7 +102,6 @@ function getDateMs(m: Mark): number {
 
 export default function MarksScreen() {
   const { user } = useAuth();
-  const router = useRouter();
   const [marks, setMarks] = useState<Mark[]>([]);
   const [rankings, setRankings] = useState<Rankings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -213,19 +211,11 @@ export default function MarksScreen() {
         {/* Header */}
         <Animated.View entering={FadeInUp.duration(400)} style={styles.headerRow}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.title}>Marks Ledger</Text>
+            <Text style={styles.title}>Academics</Text>
             <Text style={styles.subtitle}>
               {marks.length} assessment{marks.length === 1 ? '' : 's'} · {summaries.length} subject{summaries.length === 1 ? '' : 's'}
             </Text>
           </View>
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={() => router.push('/ai-questions')}
-            style={styles.aiBtn}
-          >
-            <Ionicons name="sparkles" size={14} color={Colors.primary} />
-            <Text style={styles.aiBtnText}>AI Quiz</Text>
-          </TouchableOpacity>
         </Animated.View>
 
         {error && <ErrorState message={error} onRetry={fetchMarks} />}
@@ -611,16 +601,6 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   title: { fontSize: 28, fontWeight: '900', color: Colors.text, letterSpacing: -1 },
   subtitle: { fontSize: 13, color: Colors.textSecondary, fontWeight: '600', marginTop: 2 },
-  aiBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: `${Colors.primary}10`,
-    borderColor: `${Colors.primary}30`,
-    borderWidth: 1,
-    paddingHorizontal: 12, paddingVertical: 8,
-    borderRadius: 14,
-  },
-  aiBtnText: { fontSize: 12, fontWeight: '900', color: Colors.primary },
-
   // HERO
   heroWrap: { borderRadius: 26, overflow: 'hidden' },
   heroCard: {

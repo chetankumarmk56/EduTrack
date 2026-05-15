@@ -4,6 +4,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.logger import logger
 from app.models.finance import Payment, StudentFee, PaymentAllocation, PaymentTransaction
+from app.services.finance.ledger_helpers import write_ledger_entry
 
 
 class PaymentServiceMixin:
@@ -68,6 +69,7 @@ class PaymentServiceMixin:
 
             payment.status = "SUCCESS"
             payment.razorpay_payment_id = razorpay_payment_id
+            await db.flush()
 
             logger.info(
                 f"Payment {payment.id} verified for order {razorpay_order_id}. "
@@ -78,6 +80,21 @@ class PaymentServiceMixin:
             await self._update_student_fee(
                 db, payment.student_id, payment.amount, institution_id
             )
+
+            from app.models.directory import Student as _Student
+            student_res = await db.execute(
+                select(_Student).where(_Student.id == payment.student_id)
+            )
+            student = student_res.scalars().first()
+            if student:
+                await write_ledger_entry(
+                    db,
+                    institution_id=institution_id,
+                    payment=payment,
+                    student=student,
+                    payment_method=payment.payment_mode or "UPI",
+                    payment_status="SUCCESS",
+                )
 
             await db.commit()
             logger.info(
@@ -242,6 +259,23 @@ class PaymentServiceMixin:
 
         await self.allocate_payment(db, payment.id)
         await self._update_student_fee(db, student_id, amount, institution_id)
+
+        from app.models.directory import Student as _Student
+        student_res = await db.execute(
+            select(_Student).where(_Student.id == student_id)
+        )
+        student = student_res.scalars().first()
+        if student:
+            await write_ledger_entry(
+                db,
+                institution_id=institution_id,
+                payment=payment,
+                student=student,
+                payment_method=mode,
+                payment_status="SUCCESS",
+                notes=note,
+                recorded_by_id=user_id,
+            )
 
         await db.commit()
 

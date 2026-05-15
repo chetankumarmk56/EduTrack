@@ -17,12 +17,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { directoryService } from '../../services';
-import { authService } from '../../services/authService';
-import { Colors } from '../../constants/Colors';
-import { LoadingScreen } from '../../components/ui/Feedback';
-import { useAuth } from '../../hooks/useAuth';
+import { authService } from '@/features/auth/services/authService';
+import { Colors } from '@/shared/constants/Colors';
+import { LoadingScreen } from '@/shared/components/ui/Feedback';
+import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useRouter } from 'expo-router';
-import { neonShadows } from '../../styles/neonStyles';
+import { neonShadows } from '@/shared/styles/neonStyles';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

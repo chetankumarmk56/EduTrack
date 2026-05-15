@@ -17,8 +17,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown, FadeInUp, LinearTransition } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { directoryService, type Teacher } from '../../services';
-import { Colors } from '../../constants/Colors';
-import { LoadingScreen, EmptyState, ErrorState } from '../../components/ui/Feedback';
+import { Colors } from '@/shared/constants/Colors';
+import { LoadingScreen, EmptyState, ErrorState } from '@/shared/components/ui/Feedback';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {

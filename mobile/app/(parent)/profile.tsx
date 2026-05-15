@@ -18,10 +18,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useAuth } from '../../hooks/useAuth';
-import { directoryService } from '../../services/directoryService';
-import { authService } from '../../services/authService';
-import { Colors } from '../../constants/Colors';
+import { useAuth } from '@/features/auth/hooks/useAuth';
+import { directoryService } from '@/features/directory/services/directoryService';
+import { authService } from '@/features/auth/services/authService';
+import { Colors } from '@/shared/constants/Colors';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

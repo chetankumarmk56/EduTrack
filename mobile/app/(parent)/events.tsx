@@ -10,8 +10,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown, FadeInUp, LinearTransition } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../../constants/Colors';
-import { LoadingScreen, ErrorState, EmptyState } from '../../components/ui/Feedback';
+import { Colors } from '@/shared/constants/Colors';
+import { LoadingScreen, ErrorState, EmptyState } from '@/shared/components/ui/Feedback';
 import { eventsService, type SchoolEvent } from '../../services';
 
 type EventType = 'exam' | 'meeting' | 'holiday' | 'sports' | 'activity';

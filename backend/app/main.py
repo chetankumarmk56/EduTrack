@@ -31,12 +31,15 @@ from app.api.routes.academic import router as academic_router
 from app.api.routes.transport import router as transport_router
 from app.api.routes.notifications import router as notifications_router
 from app.api.routes.finance import router as finance_router
-from app.api.routes.ai import router as ai_router
+from app.api.routes.question_bank import router as question_bank_router
+from app.api.routes.lesson_plan import router as lesson_plan_router
+from app.api.routes.uploaded_files import router as uploaded_files_router
 from app.api.routes.documents import router as documents_router
 from app.api.routes.parents import router as parents_router
 from app.api.routes.reports import router as reports_router
 from app.api.routes.system import router as system_router
 from app.api.routes.timetable import router as timetable_router
+from app.api.routes.teacher_attendance import router as teacher_attendance_router
 
 # Initialize Logging
 logger = setup_logging()
@@ -207,12 +210,15 @@ app.include_router(academic_router)
 app.include_router(transport_router)
 app.include_router(notifications_router)
 app.include_router(finance_router)
-app.include_router(ai_router)
+app.include_router(question_bank_router)
+app.include_router(lesson_plan_router)
+app.include_router(uploaded_files_router)
 app.include_router(documents_router)
 app.include_router(parents_router)
 app.include_router(reports_router)
 app.include_router(system_router)
 app.include_router(timetable_router)
+app.include_router(teacher_attendance_router)
 
 @app.get("/")
 async def read_root():

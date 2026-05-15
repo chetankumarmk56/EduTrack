@@ -12,11 +12,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
-import { Colors } from '../constants/Colors';
-import { API_BASE_URL } from '../constants';
+import { Colors } from '@/shared/constants/Colors';
+import { API_BASE_URL } from '@/shared/constants';
 import { useLogin, type LoginMode } from '../hooks';
-import { StudentLoginForm } from '../components/portal/StudentLoginForm';
-import { TeacherLoginForm } from '../components/portal/TeacherLoginForm';
+import { StudentLoginForm } from '@/features/auth/components/StudentLoginForm';
+import { TeacherLoginForm } from '@/features/auth/components/TeacherLoginForm';
 import { useLocalSearchParams } from 'expo-router';
 
 const MODE_CONFIG: Record<LoginMode, { label: string; icon: React.ComponentProps<typeof Ionicons>['name']; color: string }> = {

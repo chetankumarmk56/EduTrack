@@ -10,10 +10,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown, FadeInUp, LinearTransition } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '../../hooks/useAuth';
+import { useAuth } from '@/features/auth/hooks/useAuth';
 import { attendanceService, type AttendanceRecord } from '../../services';
-import { Colors } from '../../constants/Colors';
-import { LoadingScreen, EmptyState, ErrorState } from '../../components/ui/Feedback';
+import { Colors } from '@/shared/constants/Colors';
+import { LoadingScreen, EmptyState, ErrorState } from '@/shared/components/ui/Feedback';
 
 type FilterKey = 'All' | 'Present' | 'Absent' | 'Late';
 

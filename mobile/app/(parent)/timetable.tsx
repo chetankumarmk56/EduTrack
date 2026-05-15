@@ -10,15 +10,15 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../../constants/Colors';
-import { LoadingScreen, ErrorState, EmptyState } from '../../components/ui/Feedback';
-import { timetableService } from '../../services/timetableService';
-import { directoryService } from '../../services/directoryService';
+import { Colors } from '@/shared/constants/Colors';
+import { LoadingScreen, ErrorState, EmptyState } from '@/shared/components/ui/Feedback';
+import { timetableService } from '@/features/timetable/services/timetableService';
+import { directoryService } from '@/features/directory/services/directoryService';
 import type {
   ClassTimetable,
   SchedulePeriod,
   StudentProfile,
-} from '../../types';
+} from '@/shared/types';
 import {
   DAY_LABELS,
   DAY_FULL,
@@ -27,7 +27,7 @@ import {
   periodIconName,
   sortPeriods,
   buildSlotMap,
-} from '../../utils/timetable';
+} from '@/features/timetable/utils';
 
 export default function ParentTimetableScreen() {
   const [profile, setProfile] = useState<StudentProfile | null>(null);

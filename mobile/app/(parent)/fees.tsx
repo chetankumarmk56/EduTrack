@@ -12,12 +12,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '../../hooks/useAuth';
-import { financeService } from '../../services/financeService';
-import { Colors } from '../../constants/Colors';
-import { LoadingScreen, EmptyState, ErrorState } from '../../components/ui/Feedback';
-import { PaymentModal, RazorpayOrder } from '../../components/ui/PaymentModal';
-import type { StudentDues } from '../../types';
+import { useAuth } from '@/features/auth/hooks/useAuth';
+import { financeService } from '@/features/finance/services/financeService';
+import { Colors } from '@/shared/constants/Colors';
+import { LoadingScreen, EmptyState, ErrorState } from '@/shared/components/ui/Feedback';
+import { PaymentModal, RazorpayOrder } from '@/features/finance/components/PaymentModal';
+import type { StudentDues } from '@/shared/types';
 
 interface FeeItem {
   id: number;

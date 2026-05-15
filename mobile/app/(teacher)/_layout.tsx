@@ -2,8 +2,8 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Drawer } from 'expo-router/drawer';
 import { DrawerContentScrollView, DrawerItemList } from '@react-navigation/drawer';
-import { useAuth } from '../../hooks/useAuth';
-import { Colors } from '../../constants/Colors';
+import { useAuth } from '@/features/auth/hooks/useAuth';
+import { Colors } from '@/shared/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
@@ -89,12 +89,14 @@ export default function TeacherLayout() {
         drawerItemStyle: { borderRadius: 12, marginVertical: 4, marginHorizontal: 12 },
       }}
     >
+      {/* Drawer order mirrors the centralized web sidebar config in
+          frontend/src/lib/navigation.ts → teacherNavItems. */}
       <Drawer.Screen
-        name="dashboard"
+        name="my-attendance"
         options={{
-          drawerLabel: 'Home',
-          title: 'Teacher HQ',
-          drawerIcon: ({ color, size }) => <Ionicons name="apps-outline" size={size} color={color} />,
+          drawerLabel: 'My Attendance',
+          title: 'My Attendance & Leave',
+          drawerIcon: ({ color, size }) => <Ionicons name="calendar-number-outline" size={size} color={color} />,
         }}
       />
       <Drawer.Screen
@@ -106,6 +108,14 @@ export default function TeacherLayout() {
         }}
       />
       <Drawer.Screen
+        name="marks"
+        options={{
+          drawerLabel: 'Marks',
+          title: 'Mark Entry',
+          drawerIcon: ({ color, size }) => <Ionicons name="create-outline" size={size} color={color} />,
+        }}
+      />
+      <Drawer.Screen
         name="timetable"
         options={{
           drawerLabel: 'Timetable',
@@ -114,19 +124,19 @@ export default function TeacherLayout() {
         }}
       />
       <Drawer.Screen
-        name="marks"
+        name="announcements"
         options={{
-          drawerLabel: 'Grading',
-          title: 'Mark Entry',
-          drawerIcon: ({ color, size }) => <Ionicons name="create-outline" size={size} color={color} />,
+          drawerLabel: 'Announcements',
+          title: 'Post Update',
+          drawerIcon: ({ color, size }) => <Ionicons name="send-outline" size={size} color={color} />,
         }}
       />
       <Drawer.Screen
-        name="announcements"
+        name="contacts"
         options={{
-          drawerLabel: 'Broadcast',
-          title: 'Post Update',
-          drawerIcon: ({ color, size }) => <Ionicons name="send-outline" size={size} color={color} />,
+          drawerLabel: 'Contact List',
+          title: 'Contacts',
+          drawerIcon: ({ color, size }) => <Ionicons name="people-outline" size={size} color={color} />,
         }}
       />
       <Drawer.Screen
@@ -137,12 +147,15 @@ export default function TeacherLayout() {
           drawerIcon: ({ color, size }) => <Ionicons name="calendar-outline" size={size} color={color} />,
         }}
       />
+      {/* Kept as the post-login landing screen but hidden from the drawer
+          per the seven-item teacher portal spec. */}
       <Drawer.Screen
-        name="contacts"
+        name="dashboard"
         options={{
-          drawerLabel: 'Campus Directory',
-          title: 'Contacts',
-          drawerIcon: ({ color, size }) => <Ionicons name="people-outline" size={size} color={color} />,
+          drawerLabel: 'Home',
+          title: 'Teacher HQ',
+          drawerItemStyle: { display: 'none' },
+          drawerIcon: ({ color, size }) => <Ionicons name="apps-outline" size={size} color={color} />,
         }}
       />
       <Drawer.Screen

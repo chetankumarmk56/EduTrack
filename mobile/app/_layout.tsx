@@ -5,8 +5,8 @@ import React, { Component, useEffect, type ReactNode } from 'react';
 import 'react-native-reanimated';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Text, TouchableOpacity, View, StyleSheet, ScrollView } from 'react-native';
-import { AuthProvider, useAuth } from '../hooks/useAuth';
-import { Colors } from '../constants/Colors';
+import { AuthProvider, useAuth } from '@/features/auth/hooks/useAuth';
+import { Colors } from '@/shared/constants/Colors';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state: { error: Error | null } = { error: null };
@@ -67,8 +67,7 @@ function AuthGuard() {
 
     const inParentGroup = segments[0] === '(parent)';
     const inTeacherGroup = segments[0] === '(teacher)';
-    const inAiScreen = segments[0] === 'ai-questions';
-    const inProtectedRoute = inParentGroup || inTeacherGroup || inAiScreen;
+    const inProtectedRoute = inParentGroup || inTeacherGroup;
 
     if (!isAuthenticated && inProtectedRoute) {
       router.replace('/login');
@@ -98,14 +97,6 @@ export default function RootLayout() {
               <Stack.Screen name="login" options={{ headerShown: false, animation: 'fade' }} />
               <Stack.Screen name="(parent)" options={{ headerShown: false }} />
               <Stack.Screen name="(teacher)" options={{ headerShown: false }} />
-              <Stack.Screen
-                name="ai-questions"
-                options={{
-                  headerShown: false,
-                  animation: 'slide_from_bottom',
-                  presentation: 'modal',
-                }}
-              />
             </Stack>
             <StatusBar style="light" backgroundColor={Colors.background} />
           </View>

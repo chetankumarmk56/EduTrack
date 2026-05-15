@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAuth } from '../../hooks/useAuth';
-import { Colors } from '../../constants/Colors';
-import { neonShadows } from '@/styles/neonStyles';
+import { useAuth } from '@/features/auth/hooks/useAuth';
+import { Colors } from '@/shared/constants/Colors';
+import { neonShadows } from '@/shared/styles/neonStyles';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { dashboardService, directoryService } from '../../services';
-import { LoadingScreen } from '../../components/ui/Feedback';
+import { LoadingScreen } from '@/shared/components/ui/Feedback';
 
 export default function TeacherDashboard() {
   const { user } = useAuth();

@@ -2,8 +2,8 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Drawer } from 'expo-router/drawer';
 import { DrawerContentScrollView, DrawerItemList } from '@react-navigation/drawer';
-import { useAuth } from '../../hooks/useAuth';
-import { Colors } from '../../constants/Colors';
+import { useAuth } from '@/features/auth/hooks/useAuth';
+import { Colors } from '@/shared/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
@@ -110,6 +110,8 @@ export default function DrawerLayout() {
         },
       }}
     >
+      {/* Drawer order mirrors the centralized web sidebar config in
+          frontend/src/lib/navigation.ts → parentNavItems. */}
       <Drawer.Screen
         name="dashboard"
         options={{
@@ -121,7 +123,7 @@ export default function DrawerLayout() {
       <Drawer.Screen
         name="marks"
         options={{
-          drawerLabel: 'Marks Ledger',
+          drawerLabel: 'Academics',
           title: 'My Marks',
           drawerIcon: ({ color, size }) => <Ionicons name="medal-outline" size={size} color={color} />,
         }}
@@ -143,14 +145,6 @@ export default function DrawerLayout() {
         }}
       />
       <Drawer.Screen
-        name="fees"
-        options={{
-          drawerLabel: "Fee's Ledger",
-          title: 'Financials',
-          drawerIcon: ({ color, size }) => <Ionicons name="card-outline" size={size} color={color} />,
-        }}
-      />
-      <Drawer.Screen
         name="announcements"
         options={{
           drawerLabel: 'Announcements',
@@ -161,7 +155,7 @@ export default function DrawerLayout() {
       <Drawer.Screen
         name="teachers"
         options={{
-          drawerLabel: 'My Teachers',
+          drawerLabel: 'Teachers',
           title: 'Faculty',
           drawerIcon: ({ color, size }) => <Ionicons name="people-outline" size={size} color={color} />,
         }}
@@ -172,6 +166,22 @@ export default function DrawerLayout() {
           drawerLabel: 'Events',
           title: 'Calendar',
           drawerIcon: ({ color, size }) => <Ionicons name="sparkles-outline" size={size} color={color} />,
+        }}
+      />
+      <Drawer.Screen
+        name="bus-tracking"
+        options={{
+          drawerLabel: 'Bus Tracking',
+          title: 'Bus Tracking',
+          drawerIcon: ({ color, size }) => <Ionicons name="bus-outline" size={size} color={color} />,
+        }}
+      />
+      <Drawer.Screen
+        name="fees"
+        options={{
+          drawerLabel: 'Payment',
+          title: 'Financials',
+          drawerIcon: ({ color, size }) => <Ionicons name="card-outline" size={size} color={color} />,
         }}
       />
       <Drawer.Screen
