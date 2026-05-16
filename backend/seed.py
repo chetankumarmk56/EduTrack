@@ -73,10 +73,24 @@ def seed_db():
     print("🚀 Initializing Relational Database Seeding Upgrade...")
     from app.core.database import sync_engine, Base
     Base.metadata.create_all(bind=sync_engine)
-    
+
+    is_prod = os.getenv("ENVIRONMENT", "dev").lower() == "prod"
+
     db = SessionLocal()
-    
+
     try:
+        # SuperAdmin always seeded — without it nobody can bootstrap institutions.
+        # Production override: SUPER_ADMIN_EMAIL / SUPER_ADMIN_PASSWORD env vars.
+        sa_email = os.getenv("SUPER_ADMIN_EMAIL", "Chetan56")
+        sa_password = os.getenv("SUPER_ADMIN_PASSWORD", "asdfghjkl")
+        get_or_create_user(db, sa_email, "Global SuperAdmin", sa_password, "super_admin")
+
+        if is_prod:
+            print("✅ Production seed complete — super_admin only, no demo data.")
+            return
+
+        # --- Demo data below this line runs only in dev/test ---
+
         # 0. Initial Institution
         inst = db.query(Institution).filter(Institution.slug == "st-marys").first()
         if not inst:
@@ -86,8 +100,7 @@ def seed_db():
             db.refresh(inst)
             print("🏢 Created default Institution")
 
-        # 0.1 Admin Users
-        get_or_create_user(db, "Chetan56", "Global SuperAdmin", "asdfghjkl", "super_admin")
+        # 0.1 Demo Admin Users
         get_or_create_user(db, "admin@stmarys.edu", "School Admin", "admin123", "admin", institution_id=1)
         
         # 1. Academic Structure

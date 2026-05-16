@@ -88,9 +88,15 @@ async def add_security_headers(request: Request, call_next):
     return response
 
 # ✅ FIXED: Explicit origins, methods, and headers based on environment
-cors_origins = [
-    settings.FRONTEND_URL,
-]
+cors_origins = [settings.FRONTEND_URL]
+
+# Append any additional origins from env (comma-separated)
+if settings.ADDITIONAL_CORS_ORIGINS:
+    cors_origins.extend(
+        origin.strip()
+        for origin in settings.ADDITIONAL_CORS_ORIGINS.split(",")
+        if origin.strip()
+    )
 
 # Add localhost origins for development only
 if settings.ENVIRONMENT != "prod":

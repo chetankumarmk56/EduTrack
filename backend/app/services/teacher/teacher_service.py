@@ -6,23 +6,10 @@ from app.schemas import directory as schemas
 from app.core.security import get_password_hash, verify_password, create_access_token
 from app.models.directory import Teacher, TeacherAssignment
 from typing import List, Optional
-from app.core.cache import get_cache, set_cache, delete_cache_pattern
 
 class TeacherService:
     @staticmethod
     async def get_teachers(db: AsyncSession, institution_id: int, skip: int = 0, limit: int = 1000):
-        """
-        Fetch all teachers for an institution.
-        Uses Redis caching to reduce database load for this high-traffic read operation.
-        TTL: 300s - Balanced to maintain performance and data freshness.
-        """
-        # 1. Cache hit check
-        cache_key = f"teachers_list:{institution_id}:skip{skip}:limit{limit}"
-        cached_teachers = await get_cache(cache_key)
-        if cached_teachers:
-            return cached_teachers
-
-        # 2. Database query on cache miss
         from app.models.academic import SchoolClass
         result = await db.execute(
             select(Teacher)
@@ -35,15 +22,7 @@ class TeacherService:
             .offset(skip)
             .limit(limit)
         )
-        teachers = result.scalars().all()
-        
-        # 3. Serialize for Redis (JSON standard)
-        serialized_teachers = [schemas.TeacherResponse.model_validate(t).model_dump(mode='json') for t in teachers]
-        
-        # 4. Save to Redis
-        await set_cache(cache_key, serialized_teachers, ttl=300)
-        
-        return teachers
+        return result.scalars().all()
 
     @staticmethod
     async def get_teacher(db: AsyncSession, institution_id: int, teacher_id: int):
@@ -111,8 +90,6 @@ class TeacherService:
         )
         db.add(db_teacher)
         await db.commit()
-        # Invalidate teacher list cache
-        await delete_cache_pattern(f"teachers_list:{institution_id}:*")
         return await TeacherService.get_teacher(db, institution_id, db_teacher.id)
 
     @staticmethod
@@ -131,8 +108,6 @@ class TeacherService:
                 setattr(db_teacher, key, value)
 
         await db.commit()
-        # Invalidate teacher list cache
-        await delete_cache_pattern(f"teachers_list:{institution_id}:*")
         return await TeacherService.get_teacher(db, institution_id, db_teacher.id)
 
     @staticmethod
@@ -184,8 +159,6 @@ class TeacherService:
                 await db.execute(delete(User).where(User.id == user_id))
                 
             await db.commit()
-            # Invalidate cache
-            await delete_cache_pattern(f"teachers_list:{institution_id}:*")
             return True
         return False
 

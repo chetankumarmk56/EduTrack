@@ -58,14 +58,15 @@ class Settings(BaseSettings):
     
     # Frontend
     FRONTEND_URL: str = "http://localhost:5173"
+    # Optional comma-separated extra origins (e.g. "https://app.example.com,https://admin.example.com")
+    ADDITIONAL_CORS_ORIGINS: str = ""
     COOKIE_DOMAIN: str = Field(
         default="",
-        description="Cookie domain for production, e.g. 'yourdomain.com'"
+        description="Cookie domain for production, e.g. '.yourdomain.com' (leading dot for subdomains)"
     )
     
     # Infrastructure
     PORT: int = 8000
-    REDIS_URL: str = "redis://localhost:6379/0"
 
     # Exotel Configuration
     EXOTEL_SID: Optional[str] = None
@@ -107,6 +108,22 @@ class Settings(BaseSettings):
                 raise ValueError(
                     f"Production startup blocked: the following Razorpay credentials are unset or use placeholder values: {unset}. "
                     "Set them via environment variables before starting in production."
+                )
+
+            # Warn (don't block) on conditions that degrade reliability but aren't fatal.
+            # Uploads stored on container disk are lost on redeploy and unavailable to
+            # other replicas. Required for any multi-replica deploy (e.g. App Runner ≥2).
+            import warnings
+            if not self.AWS_S3_BUCKET or not self.AWS_S3_REGION:
+                warnings.warn(
+                    "AWS_S3_BUCKET/AWS_S3_REGION unset in production — uploads will be lost on redeploy "
+                    "and inaccessible across replicas. OK for single-instance deploys; required for scale-out."
+                )
+
+            if not self.FRONTEND_URL or "localhost" in self.FRONTEND_URL:
+                warnings.warn(
+                    f"FRONTEND_URL='{self.FRONTEND_URL}' looks wrong for production. "
+                    "Browsers will block API calls from the real frontend due to CORS."
                 )
 
             # Force secure cookies in production (overrides any .env override)

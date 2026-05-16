@@ -1,7 +1,6 @@
 version: '3.8'
 
 services:
-  # --- Database Layer ---
   db:
     image: postgres:15-alpine
     container_name: edutrack_db
@@ -15,65 +14,19 @@ services:
     ports:
       - "5432:5432"
 
-  # --- Caching & Messaging Layer ---
-  redis:
-    image: redis:alpine
-    container_name: edutrack_redis
+  backend:
+    build: ./backend
+    container_name: edutrack_api
     restart: always
     ports:
-      - "6379:6379"
-
-  # --- API Layer (Replicas for High Availability) ---
-  backend1:
-    build: ./backend
-    container_name: edutrack_api_1
-    restart: always
+      - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-luffy}:${POSTGRES_PASSWORD:-secret}@db:5432/${POSTGRES_DB:-school}
-      - REDIS_URL=redis://redis:6379/0
-      - ENVIRONMENT=prod
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-luffy}:${POSTGRES_PASSWORD:-secret}@db:5432/${POSTGRES_DB:-school}
+      - ENVIRONMENT=${ENVIRONMENT:-dev}
+      - SECRET_KEY=${SECRET_KEY:-change-me-to-32-or-more-random-chars-please}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
     depends_on:
       - db
-      - redis
-
-  backend2:
-    build: ./backend
-    container_name: edutrack_api_2
-    restart: always
-    environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-luffy}:${POSTGRES_PASSWORD:-secret}@db:5432/${POSTGRES_DB:-school}
-      - REDIS_URL=redis://redis:6379/0
-      - ENVIRONMENT=prod
-    depends_on:
-      - db
-      - redis
-
-  # --- Background Task Layer ---
-  worker:
-    build: ./backend
-    container_name: edutrack_worker
-    restart: always
-    command: celery -A app.core.celery_app worker --loglevel=info
-    environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-luffy}:${POSTGRES_PASSWORD:-secret}@db:5432/${POSTGRES_DB:-school}
-      - REDIS_URL=redis://redis:6379/0
-      - ENVIRONMENT=prod
-    depends_on:
-      - redis
-      - db
-
-  # --- Load Balancer Layer ---
-  nginx:
-    image: nginx:alpine
-    container_name: edutrack_nginx
-    restart: always
-    ports:
-      - "80:80"
-    volumes:
-      - ./deployment/nginx/nginx-docker.conf:/etc/nginx/nginx.conf:ro
-    depends_on:
-      - backend1
-      - backend2
 
 volumes:
   postgres_data:

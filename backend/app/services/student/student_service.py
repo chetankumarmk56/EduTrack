@@ -6,7 +6,6 @@ from app.schemas import directory as schemas
 from app.core.security import get_password_hash
 from app.models.directory import Student
 from typing import List, Optional
-from app.core.cache import get_cache, set_cache, delete_cache_pattern
 from app.core.logger import logger
 
 
@@ -53,27 +52,10 @@ class StudentService:
             await StudentService._sync_student_fee(db, db_student.id, db_student.school_class_id, institution_id)
 
         await db.commit()
-        
-        # Invalidate student list cache for this institution
-        await delete_cache_pattern(f"students_list:{institution_id}:*")
-        
-        # Eager load relationships before returning
         return await StudentService.get_student(db, institution_id, db_student.id)
 
     @staticmethod
     async def get_students(db: AsyncSession, institution_id: int, skip: int = 0, limit: int = 1000):
-        """
-        Fetch all students for an institution. 
-        Uses Redis caching to reduce database load for this high-traffic read operation.
-        TTL: 300s (5 minutes) - Chosen to provide fast lookups while allowing for state convergence.
-        """
-        # 1. Try cache lookup
-        cache_key = f"students_list:{institution_id}:skip{skip}:limit{limit}"
-        cached_students = await get_cache(cache_key)
-        if cached_students:
-            return cached_students
-
-        # 2. Database fallback
         from app.models.academic import SchoolClass
         result = await db.execute(
             select(Student)
@@ -86,16 +68,7 @@ class StudentService:
             .offset(skip)
             .limit(limit)
         )
-        students = result.scalars().all()
-        
-        # 3. Pre-serialize for Redis storage (using Pydantic schemas)
-        # mode='json' ensures datetime/enums are converted to strings
-        serialized_students = [schemas.StudentResponse.model_validate(s).model_dump(mode='json') for s in students]
-        
-        # 4. Populate cache
-        await set_cache(cache_key, serialized_students, ttl=300)
-        
-        return students
+        return result.scalars().all()
 
     @staticmethod
     async def get_student(db: AsyncSession, institution_id: int, student_id: int):
@@ -161,9 +134,6 @@ class StudentService:
                 await db.execute(delete(User).where(User.id == user_id))
                 
             await db.commit()
-            
-            # Invalidate cache
-            await delete_cache_pattern(f"students_list:{institution_id}:*")
             return True
         return False
 
@@ -198,8 +168,6 @@ class StudentService:
             await StudentService._sync_student_fee(db, db_student.id, update_data["school_class_id"], institution_id)
 
         await db.commit()
-        # Invalidate cache
-        await delete_cache_pattern(f"students_list:{institution_id}:*")
         return await StudentService.get_student(db, institution_id, db_student.id)
 
     @staticmethod
