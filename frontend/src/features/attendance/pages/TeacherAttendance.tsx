@@ -5,30 +5,40 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle2, Save, AlertCircle, Check, ChevronDown, Hash, UserCircle, Clock, Calendar as CalendarIcon, Users, PieChart } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import { attendanceApi } from '@/features/attendance/api';
+import { directoryApi } from '@/features/directory/api';
 
 export default function TeacherAttendance() {
   const { user } = useAuth();
-  const { classDirectory, teacherDirectory, teacherStats, fetchTeacherStats, activeAssignmentId, setActiveAssignmentId } = useApp();
+  const { teacherDirectory, teacherStats, fetchTeacherStats, activeAssignmentId, setActiveAssignmentId, refreshDirectory } = useApp();
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [isSaving, setIsSaving] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
-  
+
+  // Direct fetch — bypass AppContext cache so newly-enrolled students always show.
+  const [classDirectory, setClassDirectory] = useState<any[]>([]);
+  useEffect(() => {
+    refreshDirectory(true);
+    directoryApi.getMyStudents()
+      .then((data) => setClassDirectory(data || []))
+      .catch(err => console.error('[TeacherAttendance] getMyStudents failed', err));
+  }, [refreshDirectory]);
+
   // Find current teacher's assignments
   const teacherIdentity = user?.id;
   const currentTeacher = teacherDirectory.find((t: any) => t.user_id === teacherIdentity);
   const assignments: any[] = currentTeacher?.assignments || [];
 
-  // Selection State is handled globally by AppContext
-  
-  // Set initial assignment if none selected
+  // Set initial assignment OR reset if the cached id doesn't belong to this teacher
   useEffect(() => {
-    if (assignments.length > 0 && !activeAssignmentId) {
+    if (assignments.length === 0) return;
+    const stillValid = assignments.some((a: any) => a.id === activeAssignmentId);
+    if (!activeAssignmentId || !stillValid) {
       setActiveAssignmentId(assignments[0].id);
     }
   }, [assignments, activeAssignmentId]);
 
-  const activeAssignment = assignments.find((a: any) => a.id === activeAssignmentId);
+  const activeAssignment = assignments.find((a: any) => a.id === activeAssignmentId) || assignments[0];
 
   // Local state to track dynamic attendance status per student ID for the selected date
   const [localAttendance, setLocalAttendance] = useState<Record<number, 'present' | 'absent' | 'late'>>({});
@@ -73,10 +83,11 @@ export default function TeacherAttendance() {
 
   const filteredDB = useMemo(() => {
     if (!activeAssignment) return [];
-    const list = classDirectory.filter(
-      (s: any) => String(s.school_class?.id) === String(activeAssignment.school_class.id)
-    );
-    // Standardized alphabetical sorting
+    const targetClassId = activeAssignment.school_class?.id;
+    const list = classDirectory.filter((s: any) => {
+      const sClassId = s.school_class?.id ?? s.school_class_id;
+      return String(sClassId) === String(targetClassId);
+    });
     return list.sort((a, b) => a.name.localeCompare(b.name));
   }, [classDirectory, activeAssignment]);
 

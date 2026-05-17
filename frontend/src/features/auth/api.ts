@@ -1,13 +1,20 @@
 import client from '@/shared/api/client';
+import { getCurrentPortalRole } from '@/shared/lib/portalRole';
 import type { AuthResponse, User } from '@/shared/types';
 
 export const authApi = {
   login: async (credentials: any, institutionId: string) => {
+    // Persist with the role-suffixed key BEFORE the request — the axios
+    // interceptor reads localStorage to populate X-Institution-Id, and
+    // would otherwise clobber our explicit header with the stale default.
+    const role = getCurrentPortalRole();
+    localStorage.setItem(`edu_institution_id_${role}`, institutionId);
+
     // Specialized login for portals
     const isTeacher = credentials.password && !credentials.dob && !credentials.username;
     const isStudent = !!credentials.dob;
     const isAdmin = !!credentials.username; // OAuth2 style for Admin
-    
+
     let endpoint = 'auth/login';
     let data = credentials;
     let headers: Record<string, string> = { 'X-Institution-Id': institutionId };

@@ -12,9 +12,8 @@ class AnnouncementType(str, Enum):
     STUDENT = "STUDENT"
 
 class AnnouncementPriority(str, Enum):
-    LOW = "LOW"
-    MEDIUM = "MEDIUM"
-    HIGH = "HIGH"
+    NORMAL = "NORMAL"
+    IMPORTANT = "IMPORTANT"
 
 
 class Announcement(Base):
@@ -28,7 +27,7 @@ class Announcement(Base):
     message = Column(Text, nullable=False)
     
     type = Column(SQLEnum(AnnouncementType, native_enum=False), nullable=False)
-    priority = Column(SQLEnum(AnnouncementPriority, native_enum=False), default=AnnouncementPriority.LOW, nullable=False)
+    priority = Column(SQLEnum(AnnouncementPriority, native_enum=False), default=AnnouncementPriority.NORMAL, nullable=False)
     
     attachment_url = Column(String, nullable=True)
     

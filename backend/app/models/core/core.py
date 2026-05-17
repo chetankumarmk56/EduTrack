@@ -24,6 +24,7 @@ class Institution(Base, TimestampMixin):
     name = Column(String, index=True)
     slug = Column(String, unique=True, index=True)
     is_active = Column(Boolean, default=True)
+    deleted_at = Column(DateTime(timezone=True), nullable=True, index=True)
 
     # Relationships
     users = relationship("User", back_populates="institution")

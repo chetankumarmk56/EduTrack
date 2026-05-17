@@ -26,7 +26,7 @@ export default function Login() {
   const [dobMonth, setDobMonth] = useState('');
   const [dobYear, setDobYear] = useState('');
   const [error, setError] = useState(false);
-  const [instId, setInstId] = useState('1');
+  const [instId, setInstId] = useState('');
   
   const navigate = useNavigate();
 
@@ -145,16 +145,16 @@ export default function Login() {
             <div className="space-y-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                  Institution Code
+                  Institution ID
                 </label>
                 <div className="relative">
                   <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                   <input
-                    type="number"
+                    type="text"
                     value={instId}
                     onChange={(e) => setInstId(e.target.value)}
-                    placeholder="e.g. 1"
-                    className="flex h-11 w-full rounded-md border border-border bg-background px-10 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
+                    placeholder="e.g. stmarys2026"
+                    className="flex h-11 w-full rounded-md border border-border bg-background px-10 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-colors font-mono"
                   />
                 </div>
               </div>

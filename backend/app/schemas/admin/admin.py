@@ -43,6 +43,10 @@ class InstitutionResponse(InstitutionBase):
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
+class TrashedInstitutionResponse(InstitutionResponse):
+    deleted_at: datetime
+    days_until_purge: int
+
 # --- Admin User Schemas ---
 class UserBase(BaseModel):
     email: EmailStr

@@ -49,7 +49,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { token: null, user: null, state: 'unauthenticated' as const };
       }
     }
-    return { token: null, user: null, state: 'loading' as const };
+    // If there's a token but no cached user, we need to hydrate via /auth/me.
+    if (savedToken) {
+      return { token: savedToken, user: null, state: 'loading' as const };
+    }
+    // No token at all → don't show the spinner, just render the login page.
+    return { token: null, user: null, state: 'unauthenticated' as const };
   };
 
   const initialState = useMemo(getInitialState, []);
@@ -97,7 +102,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       try {
         console.debug(`[Auth] Hydrating session for ${currentRole}...`);
-        const userData = await authApi.getMe();
+        // Race the API call against a 5s timeout so a hung backend / network
+        // can never trap the UI in the 'loading' state forever.
+        const userData = await Promise.race([
+          authApi.getMe(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Auth hydration timed out after 5s')), 5000)
+          ),
+        ]) as Awaited<ReturnType<typeof authApi.getMe>>;
         if (!isMounted) return;
 
         const authUser: AuthUser = {
@@ -142,6 +154,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(`edu_user_${storageRole}`);
     localStorage.removeItem(`edu_institution_id_${storageRole}`);
 
+    // Wipe directory caches — they aren't namespaced per user, so a previous
+    // user's session would otherwise pollute this user's view (e.g. a teacher
+    // logging in inheriting an admin's full student list, or stale "0 students"
+    // from before a class assignment was made).
+    Object.keys(localStorage)
+      .filter(k => k.startsWith('edu_cache_'))
+      .forEach(k => localStorage.removeItem(k));
+
     // Persist to role-specific namespaces BEFORE updating state to avoid race with interceptors
     localStorage.setItem(`edu_auth_token_${storageRole}`, newToken);
     localStorage.setItem(`edu_user_${storageRole}`, JSON.stringify(newUser));
@@ -164,6 +184,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(`edu_auth_token_${currentRole}`);
     localStorage.removeItem(`edu_user_${currentRole}`);
     localStorage.removeItem(`edu_institution_id_${currentRole}`);
+    // Wipe directory caches AND per-page selection state (e.g. activeAssignmentId)
+    // so the next user starts fresh — these keys aren't user-scoped.
+    Object.keys(localStorage)
+      .filter(k => k.startsWith('edu_cache_') || k === 'edu_active_assignment_id')
+      .forEach(k => localStorage.removeItem(k));
   };
 
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';

@@ -29,6 +29,28 @@ async def get_institutions(
 ):
     return await admin_service.get_institutions(db, skip=skip, limit=limit)
 
+# IMPORTANT: must be registered BEFORE /institutions/{inst_id} so FastAPI
+# doesn't match "trash" as an int path param.
+@router.get("/institutions/trash", response_model=List[schemas.TrashedInstitutionResponse])
+async def list_trashed_institutions(
+    db: AsyncSession = Depends(get_db)
+):
+    """List soft-deleted schools with days_until_purge for each."""
+    from datetime import datetime, timezone, timedelta
+    from app.services.admin.admin_service import TRASH_RETENTION_DAYS
+    insts = await admin_service.get_trashed_institutions(db)
+    out = []
+    now = datetime.now(timezone.utc)
+    for i in insts:
+        purge_at = i.deleted_at + timedelta(days=TRASH_RETENTION_DAYS)
+        days_left = max(0, (purge_at - now).days)
+        out.append({
+            "id": i.id, "name": i.name, "slug": i.slug,
+            "is_active": i.is_active, "created_at": i.created_at,
+            "deleted_at": i.deleted_at, "days_until_purge": days_left,
+        })
+    return out
+
 @router.get("/institutions/{inst_id}", response_model=schemas.InstitutionResponse)
 async def get_institution(
     inst_id: int, 
@@ -72,13 +94,25 @@ async def deactivate_institution(
 
 @router.delete("/institutions/{inst_id}")
 async def delete_institution(
-    inst_id: int, 
+    inst_id: int,
     db: AsyncSession = Depends(get_db)
 ):
+    """Move a school to the trash. Permanently purged after 90 days."""
     success = await admin_service.delete_institution(db, inst_id)
     if not success:
-        raise HTTPException(status_code=404, detail="Institution not found")
-    return {"message": "Institution deleted successfully"}
+        raise HTTPException(status_code=404, detail="Institution not found or already in trash")
+    return {"message": "Institution moved to trash. Restorable for 90 days."}
+
+@router.post("/institutions/{inst_id}/restore", response_model=schemas.InstitutionResponse)
+async def restore_institution(
+    inst_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """Restore a trashed school. All admin/teacher/student credentials become usable again."""
+    inst = await admin_service.restore_institution(db, inst_id)
+    if not inst:
+        raise HTTPException(status_code=404, detail="Institution not found in trash")
+    return inst
 
 # --- Admin User Routes ---
 

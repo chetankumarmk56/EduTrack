@@ -48,12 +48,17 @@ async def get_current_user(
             )
             
         user_id = int(user_id_val)
-        if not inst_val:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token: missing institution context",
-            )
-        institution_id = int(inst_val)
+        # Super admins are global — no institution. Use 0 as a sentinel so the
+        # int-typed UserContext stays happy; super-admin routes don't filter on it.
+        if role_val == "super_admin":
+            institution_id = int(inst_val) if inst_val else 0
+        else:
+            if not inst_val:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid token: missing institution context",
+                )
+            institution_id = int(inst_val)
         
         # Unified Identity Fetch
         result = await db.execute(select(User).where(User.id == user_id))

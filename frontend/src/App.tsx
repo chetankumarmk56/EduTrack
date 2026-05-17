@@ -1,61 +1,73 @@
-import { Component, type ReactNode } from 'react';
+import { Component, lazy, Suspense, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from '@/shared/contexts/AuthContext';
 import { AppProvider } from '@/shared/contexts/AppContext';
 import ProtectedRoute from '@/shared/components/auth/ProtectedRoute';
 import GuestRoute from '@/shared/components/auth/GuestRoute';
-import Landing from '@/features/landing/pages/Landing';
-import DashboardLayout from '@/shared/components/layout/DashboardLayout';
-import Dashboard from '@/features/dashboard/pages/Dashboard';
-import Academics from '@/features/academics/pages/Academics';
-import Attendance from '@/features/attendance/pages/Attendance';
-import Events from '@/features/events/pages/Events';
-import Teachers from '@/features/directory/pages/Teachers';
-import Profile from '@/features/account/pages/Profile';
-// Announcement import removed
-import Login from '@/features/auth/pages/Login';
-import Payments from '@/features/finance/pages/Payments';
-import BusTracking from '@/features/transport/pages/BusTracking';
-import ParentAnnouncements from '@/features/announcements/pages/ParentAnnouncements';
-import ParentTimetable from '@/features/timetable/pages/ParentTimetable';
-
-// Teacher Imports
-import TeacherLayout from '@/shared/components/layout/TeacherLayout';
-import TeacherLogin from '@/features/auth/pages/TeacherLogin';
-import TeacherDashboard from '@/features/marks/pages/TeacherDashboard';
-import TeacherAttendance from '@/features/attendance/pages/TeacherAttendance';
-import LessonPlan from '@/features/lesson-plan/pages/LessonPlan';
-import QuestionBank from '@/features/question-bank/pages/QuestionBank';
-import MyFiles from '@/features/my-files/pages/MyFiles';
-import TeacherProfile from '@/features/account/pages/TeacherProfile';
-import TeacherEvents from '@/features/events/pages/TeacherEvents';
-import ContactList from '@/features/contacts/pages/ContactList';
-import TeacherTransport from '@/features/transport/pages/TeacherTransport';
-import TeacherAnnouncements from '@/features/announcements/pages/TeacherAnnouncements';
-import TeacherTimetable from '@/features/timetable/pages/TeacherTimetable';
-import TeacherAttendanceLeave from '@/features/teacher-attendance/pages/TeacherAttendanceLeave';
-
-// Admin Imports
-import AdminLayout from '@/shared/components/layout/AdminLayout';
-import AdminLogin from '@/features/auth/pages/AdminLogin';
-import AdminDirectory from '@/features/directory/pages/StudentDirectory';
-import TeacherDirectory from '@/features/directory/pages/TeacherDirectory';
-import AdminEvents from '@/features/events/pages/AdminEvents';
-import AdminClasses from '@/features/academics/pages/AdminClasses';
-import AdminTimetable from '@/features/timetable/pages/AdminTimetable';
-import AdminTransport from '@/features/transport/pages/AdminTransport';
-import FinanceDashboard from '@/features/finance/pages/FinanceDashboard';
-import AdminProfile from '@/features/account/pages/AdminProfile';
-import TeacherAttendanceAdmin from '@/features/teacher-attendance/pages/TeacherAttendanceAdmin';
-// Admin Announcement import removed (stale).
-
-// Super Admin Imports
-import SuperAdminLayout from '@/shared/components/layout/SuperAdminLayout';
-import SuperAdminLogin from '@/features/auth/pages/SuperAdminLogin';
-import SuperAdminDashboard from '@/features/super-admin/pages/SuperAdminDashboard';
-import SuperAdminCredentials from '@/features/super-admin/pages/SuperAdminCredentials';
-import SuperAdminProfile from '@/features/account/pages/SuperAdminProfile';
 import { Toaster } from 'react-hot-toast';
+
+// Eagerly load only the public entry (Landing) and the shell pieces.
+// Every other page is code-split so visiting one portal doesn't drag in the
+// others — the biggest single win for initial load time.
+import Landing from '@/features/landing/pages/Landing';
+
+// Parent / Student portal
+const DashboardLayout = lazy(() => import('@/shared/components/layout/DashboardLayout'));
+const Dashboard = lazy(() => import('@/features/dashboard/pages/Dashboard'));
+const Academics = lazy(() => import('@/features/academics/pages/Academics'));
+const Attendance = lazy(() => import('@/features/attendance/pages/Attendance'));
+const Events = lazy(() => import('@/features/events/pages/Events'));
+const Teachers = lazy(() => import('@/features/directory/pages/Teachers'));
+const Profile = lazy(() => import('@/features/account/pages/Profile'));
+const Login = lazy(() => import('@/features/auth/pages/Login'));
+const Payments = lazy(() => import('@/features/finance/pages/Payments'));
+const BusTracking = lazy(() => import('@/features/transport/pages/BusTracking'));
+const ParentAnnouncements = lazy(() => import('@/features/announcements/pages/ParentAnnouncements'));
+const ParentTimetable = lazy(() => import('@/features/timetable/pages/ParentTimetable'));
+
+// Teacher portal
+const TeacherLayout = lazy(() => import('@/shared/components/layout/TeacherLayout'));
+const TeacherLogin = lazy(() => import('@/features/auth/pages/TeacherLogin'));
+const TeacherDashboard = lazy(() => import('@/features/marks/pages/TeacherDashboard'));
+const TeacherAttendance = lazy(() => import('@/features/attendance/pages/TeacherAttendance'));
+const LessonPlan = lazy(() => import('@/features/lesson-plan/pages/LessonPlan'));
+const QuestionBank = lazy(() => import('@/features/question-bank/pages/QuestionBank'));
+const MyFiles = lazy(() => import('@/features/my-files/pages/MyFiles'));
+const TeacherProfile = lazy(() => import('@/features/account/pages/TeacherProfile'));
+const TeacherEvents = lazy(() => import('@/features/events/pages/TeacherEvents'));
+const ContactList = lazy(() => import('@/features/contacts/pages/ContactList'));
+const TeacherTransport = lazy(() => import('@/features/transport/pages/TeacherTransport'));
+const TeacherAnnouncements = lazy(() => import('@/features/announcements/pages/TeacherAnnouncements'));
+const TeacherTimetable = lazy(() => import('@/features/timetable/pages/TeacherTimetable'));
+const TeacherAttendanceLeave = lazy(() => import('@/features/teacher-attendance/pages/TeacherAttendanceLeave'));
+
+// Admin portal
+const AdminLayout = lazy(() => import('@/shared/components/layout/AdminLayout'));
+const AdminLogin = lazy(() => import('@/features/auth/pages/AdminLogin'));
+const AdminDirectory = lazy(() => import('@/features/directory/pages/StudentDirectory'));
+const TeacherDirectory = lazy(() => import('@/features/directory/pages/TeacherDirectory'));
+const AdminEvents = lazy(() => import('@/features/events/pages/AdminEvents'));
+const AdminClasses = lazy(() => import('@/features/academics/pages/AdminClasses'));
+const AdminTimetable = lazy(() => import('@/features/timetable/pages/AdminTimetable'));
+const AdminTransport = lazy(() => import('@/features/transport/pages/AdminTransport'));
+const FinanceDashboard = lazy(() => import('@/features/finance/pages/FinanceDashboard'));
+const AdminProfile = lazy(() => import('@/features/account/pages/AdminProfile'));
+const TeacherAttendanceAdmin = lazy(() => import('@/features/teacher-attendance/pages/TeacherAttendanceAdmin'));
+
+// Super Admin portal
+const SuperAdminLayout = lazy(() => import('@/shared/components/layout/SuperAdminLayout'));
+const SuperAdminLogin = lazy(() => import('@/features/auth/pages/SuperAdminLogin'));
+const SuperAdminDashboard = lazy(() => import('@/features/super-admin/pages/SuperAdminDashboard'));
+const SuperAdminCredentials = lazy(() => import('@/features/super-admin/pages/SuperAdminCredentials'));
+const SuperAdminProfile = lazy(() => import('@/features/account/pages/SuperAdminProfile'));
+
+function RouteFallback() {
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-slate-900">
+      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500" />
+    </div>
+  );
+}
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   state = { hasError: false };
@@ -94,6 +106,7 @@ function App() {
       <AuthProvider>
         <AppProvider>
           <Toaster position="top-right" />
+          <Suspense fallback={<RouteFallback />}>
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/parent-login" element={<GuestRoute><Login /></GuestRoute>} />
@@ -171,6 +184,7 @@ function App() {
             {/* Catch-all */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          </Suspense>
         </AppProvider>
       </AuthProvider>
     </BrowserRouter>

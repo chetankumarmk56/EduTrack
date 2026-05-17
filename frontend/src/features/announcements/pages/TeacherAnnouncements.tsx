@@ -6,17 +6,16 @@ import {
   FileText, ImageIcon, Film, File,
   Loader2, AlertCircle, RefreshCw,
   Paperclip, CheckCircle2, Clock,
-  Search, CalendarDays, Filter,
+  Search, CalendarDays, Filter, AlertTriangle,
 } from 'lucide-react';
 import { useAuth } from '@/shared/contexts/AuthContext';
 import { useApp } from '@/shared/contexts/AppContext';
 import { announcementApi, type AnnouncementCreate, type Announcement } from '@/features/announcements/api';
 import { cn } from '@/shared/lib/utils';
 
-const PRIORITY_STYLES: Record<string, any> = {
-  HIGH:   { bar: 'bg-rose-500',   badge: 'bg-rose-500/10 border-rose-500/20 text-rose-500' },
-  MEDIUM: { bar: 'bg-amber-500',  badge: 'bg-amber-500/10 border-amber-500/20 text-amber-500' },
-  LOW:    { bar: 'bg-brand-indigo', badge: 'bg-brand-indigo/10 border-brand-indigo/20 text-brand-indigo' },
+const PRIORITY_STYLES: Record<string, { bar: string; badge: string }> = {
+  IMPORTANT: { bar: 'bg-rose-500', badge: 'bg-rose-500/10 border-rose-500/30 text-rose-400' },
+  NORMAL:    { bar: 'bg-brand-indigo/40', badge: 'bg-white/5 border-white/10 text-text-secondary' },
 };
 
 
@@ -46,7 +45,7 @@ export default function TeacherAnnouncements() {
   const [isUploading, setIsUploading]   = useState(false);
 
   const [form, setForm] = useState<AnnouncementCreate>({
-    title: '', message: '', type: 'CLASS', priority: 'LOW',
+    title: '', message: '', type: 'CLASS', priority: 'NORMAL',
     class_id: undefined, student_id: undefined, attachment_url: undefined,
   });
 
@@ -58,7 +57,7 @@ export default function TeacherAnnouncements() {
   // Search & filter state
   const [search, setSearch]               = useState('');
   const [filterDate, setFilterDate]       = useState('');
-  const [filterPriority, setFilterPriority] = useState<'ALL' | 'LOW' | 'MEDIUM' | 'HIGH'>('ALL');
+  const [filterPriority, setFilterPriority] = useState<'ALL' | 'NORMAL' | 'IMPORTANT'>('ALL');
   const [filterType, setFilterType]       = useState<'ALL' | 'CLASS' | 'STUDENT'>('ALL');
 
   const isFiltering = search || filterDate || filterPriority !== 'ALL' || filterType !== 'ALL';
@@ -117,7 +116,7 @@ export default function TeacherAnnouncements() {
   useEffect(() => { fetchAnnouncements(); }, [teacherId]);
 
   const resetForm = () => {
-    setForm({ title: '', message: '', type: 'CLASS', priority: 'LOW',
+    setForm({ title: '', message: '', type: 'CLASS', priority: 'NORMAL',
       class_id: undefined, student_id: undefined, attachment_url: undefined });
 
 
@@ -271,20 +270,19 @@ export default function TeacherAnnouncements() {
               <Filter className="w-3.5 h-3.5 text-text-secondary opacity-40" />
               <span className="text-[10px] font-black uppercase tracking-widest text-text-secondary opacity-40">Priority</span>
             </div>
-            {(['ALL', 'LOW', 'MEDIUM', 'HIGH'] as const).map(p => (
+            {(['ALL', 'NORMAL', 'IMPORTANT'] as const).map(p => (
               <button
                 key={p}
                 onClick={() => setFilterPriority(p)}
                 className={cn(
                   'px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all',
                   filterPriority === p
-                    ? p === 'HIGH'   ? 'bg-rose-500/10 border-rose-500/40 text-rose-400'
-                      : p === 'MEDIUM' ? 'bg-amber-500/10 border-amber-500/40 text-amber-400'
-                      : p === 'LOW'    ? 'bg-brand-indigo/10 border-brand-indigo/40 text-brand-indigo'
+                    ? p === 'IMPORTANT' ? 'bg-rose-500/10 border-rose-500/40 text-rose-400'
+                      : p === 'NORMAL'  ? 'bg-brand-indigo/10 border-brand-indigo/40 text-brand-indigo'
                       : 'bg-white/10 border-white/20 text-white'
                     : 'bg-white/5 border-white/5 text-text-secondary hover:bg-white/10'
                 )}
-              >{p === 'ALL' ? 'All' : p}</button>
+              >{p === 'ALL' ? 'All' : p === 'NORMAL' ? 'Normal' : 'Important'}</button>
             ))}
 
             <div className="w-px bg-white/10 mx-1" />
@@ -354,7 +352,8 @@ export default function TeacherAnnouncements() {
         ) : (
           <AnimatePresence mode="popLayout">
             {filtered.map((a) => {
-              const style = PRIORITY_STYLES[a.priority as keyof typeof PRIORITY_STYLES] || PRIORITY_STYLES.low;
+              const style = PRIORITY_STYLES[a.priority] || PRIORITY_STYLES.NORMAL;
+              const isImportant = a.priority === 'IMPORTANT';
               return (
                 <motion.div
                   key={a.id}
@@ -362,21 +361,31 @@ export default function TeacherAnnouncements() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95 }}
-                  className="obsidian-card group relative p-8 flex gap-6 items-start border border-white/5 hover:border-brand-indigo/30 transition-all duration-300 overflow-hidden"
+                  className={cn(
+                    'obsidian-card group relative p-8 flex gap-6 items-start border transition-all duration-300 overflow-hidden',
+                    isImportant
+                      ? 'border-rose-500/30 hover:border-rose-500/50'
+                      : 'border-white/5 hover:border-brand-indigo/30',
+                  )}
                 >
-                  <div className={cn('absolute top-0 left-0 w-full h-1 transition-opacity opacity-30 group-hover:opacity-100', style.bar)} />
+                  <div className={cn('absolute top-0 left-0 w-full h-1 transition-opacity opacity-50 group-hover:opacity-100', style.bar)} />
 
                   {/* Type icon */}
-                  <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center text-brand-indigo shrink-0">
+                  <div className={cn(
+                    'w-12 h-12 rounded-2xl flex items-center justify-center shrink-0',
+                    isImportant ? 'bg-rose-500/10 text-rose-400' : 'bg-white/5 text-brand-indigo',
+                  )}>
                     {a.type === 'CLASS' ? <Users className="w-6 h-6" /> : <User className="w-6 h-6" />}
                   </div>
 
 
                   <div className="flex-1 min-w-0 space-y-3">
                     <div className="flex items-center gap-3 flex-wrap">
-                      <span className={cn('px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest border', style.badge)}>
-                        {a.priority}
-                      </span>
+                      {isImportant && (
+                        <span className={cn('inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest border', style.badge)}>
+                          <AlertTriangle className="w-3 h-3" /> Important
+                        </span>
+                      )}
                       <span className="text-[9px] font-bold uppercase tracking-widest text-text-secondary opacity-50">
                         {a.type === 'CLASS' ? 'Class-Wide' : 'Individual'}
                       </span>
@@ -537,27 +546,55 @@ export default function TeacherAnnouncements() {
                     )}
                   </div>
 
-                  {/* Priority */}
+                  {/* Importance — defaults to Normal; teacher opts in to Important */}
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-text-secondary">Priority</label>
-                    <div className="flex gap-3">
-                      {(['low', 'medium', 'high'] as const).map(p => (
-                        <button
-                          key={p} type="button"
-                          onClick={() => setForm({ ...form, priority: p.toUpperCase() as AnnouncementCreate['priority'] })}
-
-                          className={cn(
-                            'flex-1 h-12 rounded-xl border font-black text-[10px] uppercase tracking-widest transition-all',
-                            form.priority === p.toUpperCase()
-                              ? p === 'high' ? 'bg-rose-500/10 border-rose-500 text-rose-500'
-                                : p === 'medium' ? 'bg-amber-500/10 border-amber-500 text-amber-500'
-                                : 'bg-brand-indigo/10 border-brand-indigo text-brand-indigo'
-                              : 'bg-white/5 border-white/10 text-text-secondary hover:bg-white/10'
-                          )}
-                        >{p}</button>
-                      ))}
-
-                    </div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-text-secondary">Importance</label>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={form.priority === 'IMPORTANT'}
+                      onClick={() => setForm({
+                        ...form,
+                        priority: form.priority === 'IMPORTANT' ? 'NORMAL' : 'IMPORTANT',
+                      })}
+                      className={cn(
+                        'w-full flex items-center justify-between gap-4 p-4 rounded-2xl border transition-all',
+                        form.priority === 'IMPORTANT'
+                          ? 'bg-rose-500/10 border-rose-500/40'
+                          : 'bg-white/5 border-white/10 hover:border-white/20',
+                      )}
+                    >
+                      <div className="flex items-center gap-3 text-left">
+                        <div className={cn(
+                          'w-10 h-10 rounded-xl flex items-center justify-center shrink-0',
+                          form.priority === 'IMPORTANT'
+                            ? 'bg-rose-500/20 text-rose-400'
+                            : 'bg-white/5 text-text-secondary',
+                        )}>
+                          <AlertTriangle className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className={cn(
+                            'text-sm font-black',
+                            form.priority === 'IMPORTANT' ? 'text-rose-400' : 'text-white',
+                          )}>
+                            Mark as Important
+                          </p>
+                          <p className="text-[10px] text-text-secondary mt-0.5">
+                            Highlighted in red for parents. Use sparingly.
+                          </p>
+                        </div>
+                      </div>
+                      <div className={cn(
+                        'relative w-11 h-6 rounded-full transition-colors shrink-0',
+                        form.priority === 'IMPORTANT' ? 'bg-rose-500' : 'bg-white/15',
+                      )}>
+                        <div className={cn(
+                          'absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-md transition-transform',
+                          form.priority === 'IMPORTANT' ? 'translate-x-5' : 'translate-x-0.5',
+                        )} />
+                      </div>
+                    </button>
                   </div>
 
                   {/* Message */}

@@ -58,6 +58,8 @@ export const teacherAttendanceService = {
   },
 
   getMyHistory: async (params?: {
+    date_from?: string;
+    date_to?: string;
     skip?: number;
     limit?: number;
   }): Promise<PaginatedAttendanceResponse> => {

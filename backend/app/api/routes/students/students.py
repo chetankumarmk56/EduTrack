@@ -29,7 +29,6 @@ async def create_student(
     return await student_service.create_student(db, user.institution_id, student)
 
 @router.post("/students/login", response_model=Token)
-@limiter.limit("5/minute")  # ✅ NEW: Max 5 student login attempts per minute per IP
 async def student_login(
     request: Request,  # ✅ NEW: Required for rate limiter
     login_data: schemas.StudentLogin,
@@ -37,23 +36,32 @@ async def student_login(
     db: AsyncSession = Depends(get_db)
 ):
     """Secure endpoint for student/parent login generating JWT token structure."""
-    institution_id_str = request.headers.get("X-Institution-Id")
-    institution_id = int(institution_id_str) if institution_id_str and institution_id_str.isdigit() else 1
+    from app.services.auth.auth_service import resolve_institution_id
+    inst_header = request.headers.get("X-Institution-Id")
+    institution_id = await resolve_institution_id(db, inst_header)
+    if inst_header and institution_id is None:
+        raise HTTPException(status_code=401, detail="Unknown Institution ID. Check with your school admin.")
+    if institution_id is None:
+        institution_id = 1
     
-    # NORMALIZE: Handle "8" vs "Grade 8"
-    class_level_norm = login_data.class_level.strip()
-    if class_level_norm.isdigit():
-        class_level_norm = f"Grade {class_level_norm}"
-        
+    # Match by Grade.level (integer) so it works regardless of whether the
+    # admin form names the grade "Grade 1" or "Class 1". Extract the first
+    # integer from whatever the parent typed ("1", "Grade 1", "Class 1" all OK).
+    import re
     from app.models.academic import SchoolClass, Grade, Section
     from sqlalchemy import func
-    
+
+    match = re.search(r'\d+', login_data.class_level or "")
+    if not match:
+        raise HTTPException(status_code=401, detail="Invalid class/section combination.")
+    class_level_int = int(match.group())
+
     stmt = select(SchoolClass).join(
         Grade, SchoolClass.grade_id == Grade.id
     ).join(
         Section, SchoolClass.section_id == Section.id
     ).filter(
-        func.lower(Grade.name) == class_level_norm.lower(),
+        Grade.level == class_level_int,
         func.lower(Section.name) == login_data.section.strip().lower(),
         SchoolClass.institution_id == institution_id
     )

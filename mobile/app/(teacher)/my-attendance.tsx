@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   RefreshControl, Modal, TextInput, Alert, ActivityIndicator,
@@ -35,6 +35,25 @@ function localDateStr(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+/** Parse "YYYY-MM-DD" as a local Date (avoids UTC-shift bugs). */
+function parseLocalDate(iso: string): Date {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, (m ?? 1) - 1, d ?? 1);
+}
+
+type DisplayStatus = 'PRESENT' | 'ABSENT' | 'HALF_DAY' | 'ON_LEAVE';
+type StatusFilter = 'ALL' | DisplayStatus;
+
+interface HistoryRow {
+  date: string;
+  status: DisplayStatus;
+  check_in_time: string | null;
+  check_out_time: string | null;
+  remarks: string | null;
+  is_edited: boolean;
+  source: 'recorded' | 'auto-absent' | 'leave';
+}
+
 export default function MyAttendanceScreen() {
   const [tab, setTab] = useState<Tab>('today');
   const [refreshing, setRefreshing] = useState(false);
@@ -43,11 +62,12 @@ export default function MyAttendanceScreen() {
   const [todayRecord, setTodayRecord] = useState<TeacherAttendanceRecord | null | undefined>(undefined);
   const [actionLoading, setActionLoading] = useState(false);
 
-  // ── History state ────────────────────────────────────────────────────────
-  const [history, setHistory] = useState<TeacherAttendanceRecord[]>([]);
-  const [historyTotal, setHistoryTotal] = useState(0);
+  // ── History state — windowed view (last N days, Sundays excluded, gaps auto-filled) ──
+  const [historyRecords, setHistoryRecords] = useState<TeacherAttendanceRecord[]>([]);
+  const [historyLeaves, setHistoryLeaves] = useState<TeacherLeaveRecord[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyPage, setHistoryPage] = useState(0);
+  const [rangeDays, setRangeDays] = useState<30 | 60 | 90>(30);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
   const PAGE_SIZE = 20;
 
   // ── Leave state ──────────────────────────────────────────────────────────
@@ -77,19 +97,27 @@ export default function MyAttendanceScreen() {
   const loadHistory = useCallback(async () => {
     setHistoryLoading(true);
     try {
-      const res = await teacherAttendanceService.getMyHistory({ skip: historyPage * PAGE_SIZE, limit: PAGE_SIZE });
-      setHistory(res.items);
-      setHistoryTotal(res.total);
+      const today = new Date();
+      const start = new Date(today);
+      start.setDate(today.getDate() - (rangeDays - 1));
+      const date_from = localDateStr(start);
+      const date_to = localDateStr(today);
+      const [recs, lvs] = await Promise.all([
+        teacherAttendanceService.getMyHistory({ date_from, date_to, limit: 200 }),
+        teacherAttendanceService.getMyLeaves({ limit: 200 }),
+      ]);
+      setHistoryRecords(recs.items);
+      setHistoryLeaves(lvs.items);
     } catch (e) {
       // Treat fetch failure as "no records yet" so the screen renders an
       // empty state instead of throwing an Uncaught (in promise) error.
       console.warn('[my-attendance] history fetch failed', e);
-      setHistory([]);
-      setHistoryTotal(0);
+      setHistoryRecords([]);
+      setHistoryLeaves([]);
     } finally {
       setHistoryLoading(false);
     }
-  }, [historyPage]);
+  }, [rangeDays]);
 
   const loadLeaves = useCallback(async () => {
     setLeaveLoading(true);
@@ -188,8 +216,88 @@ export default function MyAttendanceScreen() {
 
   const canCheckIn = todayRecord === null;
   const canCheckOut = !!todayRecord && !todayRecord.check_out_time;
-  const totalHistoryPages = Math.ceil(historyTotal / PAGE_SIZE);
   const totalLeavePages = Math.ceil(leavesTotal / PAGE_SIZE);
+
+  // Build a continuous list of working days (Sundays excluded) for the window,
+  // overlaying real records and falling back to auto-ABSENT or ON_LEAVE.
+  const mergedHistory = useMemo<HistoryRow[]>(() => {
+    const today = new Date();
+    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    const recordsByDate = new Map<string, TeacherAttendanceRecord>();
+    historyRecords.forEach((r) => recordsByDate.set(r.date, r));
+
+    const leaveByDate = new Map<string, TeacherLeaveRecord>();
+    historyLeaves
+      .filter((l) => l.status === 'APPROVED')
+      .forEach((l) => {
+        const s = parseLocalDate(l.start_date);
+        const e = parseLocalDate(l.end_date);
+        for (const d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+          leaveByDate.set(localDateStr(d), l);
+        }
+      });
+
+    const rows: HistoryRow[] = [];
+    const cursor = new Date(startOfToday);
+    for (let i = 0; i < rangeDays; i++) {
+      // Sunday = non-working day; skip entirely.
+      if (cursor.getDay() !== 0) {
+        const ds = localDateStr(cursor);
+        const rec = recordsByDate.get(ds);
+        if (rec) {
+          rows.push({
+            date: ds,
+            status: rec.status as DisplayStatus,
+            check_in_time: rec.check_in_time,
+            check_out_time: rec.check_out_time,
+            remarks: rec.remarks,
+            is_edited: !!rec.is_edited,
+            source: 'recorded',
+          });
+        } else if (cursor < startOfToday) {
+          const lv = leaveByDate.get(ds);
+          if (lv) {
+            rows.push({
+              date: ds,
+              status: 'ON_LEAVE',
+              check_in_time: null,
+              check_out_time: null,
+              remarks: `${lv.leave_type} leave (approved)`,
+              is_edited: false,
+              source: 'leave',
+            });
+          } else {
+            rows.push({
+              date: ds,
+              status: 'ABSENT',
+              check_in_time: null,
+              check_out_time: null,
+              remarks: 'No check-in recorded',
+              is_edited: false,
+              source: 'auto-absent',
+            });
+          }
+        }
+        // Today with no record is deliberately skipped — the day isn't over.
+      }
+      cursor.setDate(cursor.getDate() - 1);
+    }
+    return rows;
+  }, [historyRecords, historyLeaves, rangeDays]);
+
+  const historySummary = useMemo(() => ({
+    workingDays: mergedHistory.length,
+    present: mergedHistory.filter((r) => r.status === 'PRESENT').length,
+    absent: mergedHistory.filter((r) => r.status === 'ABSENT').length,
+    onLeave: mergedHistory.filter((r) => r.status === 'ON_LEAVE').length,
+    halfDay: mergedHistory.filter((r) => r.status === 'HALF_DAY').length,
+  }), [mergedHistory]);
+
+  const filteredHistory = useMemo(
+    () => statusFilter === 'ALL' ? mergedHistory : mergedHistory.filter((r) => r.status === statusFilter),
+    [mergedHistory, statusFilter],
+  );
 
   if (todayRecord === undefined) return <LoadingScreen message="Loading attendance..." />;
 
@@ -274,57 +382,105 @@ export default function MyAttendanceScreen() {
         {/* ── HISTORY ───────────────────────────────────────────────────── */}
         {tab === 'history' && (
           <>
+            {/* Summary tiles */}
+            <View style={styles.summaryGrid}>
+              <SummaryTile label="Working days" value={historySummary.workingDays} color={Colors.text} bg={Colors.surfaceElevated} />
+              <SummaryTile label="Present" value={historySummary.present} color={Colors.success} bg={`${Colors.success}15`} />
+              <SummaryTile label="Absent" value={historySummary.absent} color={Colors.danger} bg={`${Colors.danger}15`} />
+              <SummaryTile label="On leave" value={historySummary.onLeave} color={Colors.info} bg={`${Colors.info}15`} />
+              <SummaryTile label="Half day" value={historySummary.halfDay} color={Colors.warning} bg={`${Colors.warning}15`} />
+            </View>
+
+            {/* Range selector */}
+            <View style={styles.rangeRow}>
+              {([30, 60, 90] as const).map((n) => (
+                <TouchableOpacity
+                  key={n}
+                  style={[styles.rangeChip, rangeDays === n && styles.rangeChipActive]}
+                  onPress={() => setRangeDays(n)}
+                  activeOpacity={0.75}
+                >
+                  <Text style={[styles.rangeChipText, rangeDays === n && styles.rangeChipTextActive]}>
+                    Last {n} days
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Status filter */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
+              {(['ALL', 'PRESENT', 'ABSENT', 'ON_LEAVE', 'HALF_DAY'] as const).map((s) => {
+                const active = statusFilter === s;
+                const baseColor =
+                  s === 'PRESENT'  ? Colors.success :
+                  s === 'ABSENT'   ? Colors.danger :
+                  s === 'ON_LEAVE' ? Colors.info :
+                  s === 'HALF_DAY' ? Colors.warning :
+                  Colors.primary;
+                return (
+                  <TouchableOpacity
+                    key={s}
+                    style={[
+                      styles.filterChip,
+                      active && { backgroundColor: `${baseColor}18`, borderColor: `${baseColor}55` },
+                    ]}
+                    onPress={() => setStatusFilter(s)}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={[styles.filterChipText, active && { color: baseColor }]}>
+                      {s === 'ALL' ? 'All' : s.replace('_', ' ')}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            <Text style={styles.historyCaption}>
+              Sundays are excluded. Past working days with no check-in are auto-marked absent unless covered by an approved leave.
+            </Text>
+
             {historyLoading ? (
               <View style={styles.centerLoader}><ActivityIndicator color={Colors.success} size="large" /></View>
-            ) : history.length === 0 ? (
+            ) : filteredHistory.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <Ionicons name="calendar-outline" size={48} color={Colors.textMuted} />
-                <Text style={styles.emptyTitle}>No attendance records yet</Text>
+                <Text style={styles.emptyTitle}>No matching records in this window</Text>
               </View>
             ) : (
               <>
-                {history.map((row, i) => (
-                  <Animated.View key={row.id} entering={FadeInDown.delay(i * 40).springify()} style={styles.historyRow}>
-                    <View style={[styles.historyStatus, { backgroundColor: `${STATUS_COLORS[row.status]}18` }]}>
-                      <Text style={[styles.historyStatusText, { color: STATUS_COLORS[row.status] }]}>
-                        {row.status.replace('_', ' ')}
-                      </Text>
-                    </View>
-                    <View style={styles.historyInfo}>
-                      <Text style={styles.historyDate}>{row.date}</Text>
-                      <Text style={styles.historyTimes}>
-                        In: {row.check_in_time || '—'} · Out: {row.check_out_time || '—'}
-                      </Text>
-                      {row.remarks ? <Text style={styles.historyRemarks} numberOfLines={1}>{row.remarks}</Text> : null}
-                    </View>
-                    {row.is_edited ? (
-                      <View style={styles.editedBadge}>
-                        <Text style={styles.editedText}>Edited</Text>
+                {filteredHistory.map((row, i) => {
+                  const day = parseLocalDate(row.date).toLocaleDateString(undefined, { weekday: 'short' });
+                  const sourceLabel =
+                    row.source === 'auto-absent' ? 'Auto-marked' :
+                    row.source === 'leave' ? 'From leave' :
+                    row.is_edited ? 'Edited' : 'Recorded';
+                  const sourceColor =
+                    row.source === 'auto-absent' ? Colors.danger :
+                    row.source === 'leave' ? Colors.info :
+                    row.is_edited ? Colors.warning : Colors.textMuted;
+                  return (
+                    <Animated.View key={row.date} entering={FadeInDown.delay(i * 25).springify()} style={styles.historyRow}>
+                      <View style={[styles.historyStatus, { backgroundColor: `${STATUS_COLORS[row.status]}18` }]}>
+                        <Text style={[styles.historyStatusText, { color: STATUS_COLORS[row.status] }]}>
+                          {row.status.replace('_', ' ')}
+                        </Text>
                       </View>
-                    ) : null}
-                  </Animated.View>
-                ))}
-
-                {/* Pagination */}
-                {totalHistoryPages > 1 && (
-                  <View style={styles.paginationRow}>
-                    <TouchableOpacity
-                      style={[styles.pageBtn, historyPage === 0 && styles.pageBtnDisabled]}
-                      disabled={historyPage === 0}
-                      onPress={() => setHistoryPage(p => p - 1)}
-                    >
-                      <Ionicons name="chevron-back" size={18} color={historyPage === 0 ? Colors.textMuted : Colors.success} />
-                    </TouchableOpacity>
-                    <Text style={styles.pageText}>Page {historyPage + 1} / {totalHistoryPages}</Text>
-                    <TouchableOpacity
-                      style={[styles.pageBtn, historyPage >= totalHistoryPages - 1 && styles.pageBtnDisabled]}
-                      disabled={historyPage >= totalHistoryPages - 1}
-                      onPress={() => setHistoryPage(p => p + 1)}
-                    >
-                      <Ionicons name="chevron-forward" size={18} color={historyPage >= totalHistoryPages - 1 ? Colors.textMuted : Colors.success} />
-                    </TouchableOpacity>
-                  </View>
-                )}
+                      <View style={styles.historyInfo}>
+                        <Text style={styles.historyDate}>
+                          {row.date}
+                          <Text style={styles.historyDayMuted}>  ·  {day}</Text>
+                        </Text>
+                        <Text style={styles.historyTimes}>
+                          In: {row.check_in_time || '—'} · Out: {row.check_out_time || '—'}
+                        </Text>
+                        {row.remarks ? <Text style={styles.historyRemarks} numberOfLines={1}>{row.remarks}</Text> : null}
+                      </View>
+                      <View style={[styles.sourceBadge, { backgroundColor: `${sourceColor}15` }]}>
+                        <Text style={[styles.sourceBadgeText, { color: sourceColor }]}>{sourceLabel}</Text>
+                      </View>
+                    </Animated.View>
+                  );
+                })}
               </>
             )}
           </>
@@ -498,6 +654,17 @@ function StatusItem({ label, children }: { label: string; children: React.ReactN
   );
 }
 
+function SummaryTile({
+  label, value, color, bg,
+}: { label: string; value: number; color: string; bg: string }) {
+  return (
+    <View style={[styles.summaryTile, { backgroundColor: bg }]}>
+      <Text style={[styles.summaryValue, { color }]}>{value}</Text>
+      <Text style={styles.summaryLabel}>{label.toUpperCase()}</Text>
+    </View>
+  );
+}
+
 function ActionButton({
   icon, label, color, disabled, loading, onPress,
 }: {
@@ -564,6 +731,52 @@ const styles = StyleSheet.create({
   historyRemarks: { fontSize: 11, color: Colors.textMuted, marginTop: 2 },
   editedBadge: { backgroundColor: `${Colors.warning}15`, paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6 },
   editedText: { fontSize: 9, fontWeight: '900', color: Colors.warning, letterSpacing: 0.5 },
+  historyDayMuted: { color: Colors.textMuted, fontWeight: '700' },
+  sourceBadge: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6 },
+  sourceBadgeText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.5, textTransform: 'uppercase' },
+
+  // History summary + filters
+  summaryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 14,
+  },
+  summaryTile: {
+    flexBasis: '31%',
+    flexGrow: 1,
+    minWidth: 95,
+    padding: 12,
+    borderRadius: 14,
+  },
+  summaryValue: { fontSize: 22, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  summaryLabel: { fontSize: 9, fontWeight: '900', color: Colors.textMuted, letterSpacing: 0.8, marginTop: 4 },
+  rangeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    padding: 4,
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: 12,
+  },
+  rangeChip: { flex: 1, paddingVertical: 8, borderRadius: 9, alignItems: 'center' },
+  rangeChipActive: { backgroundColor: Colors.success },
+  rangeChipText: { fontSize: 11, fontWeight: '900', color: Colors.textMuted, letterSpacing: 0.5 },
+  rangeChipTextActive: { color: Colors.white },
+  filterScroll: { marginBottom: 12 },
+  filterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginRight: 8,
+  },
+  filterChipText: { fontSize: 11, fontWeight: '900', color: Colors.textMuted, letterSpacing: 0.5 },
+  historyCaption: { fontSize: 11, color: Colors.textMuted, fontStyle: 'italic', marginBottom: 12, lineHeight: 16 },
 
   // Leave list
   applyBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: Colors.success, borderRadius: 18, paddingVertical: 16, marginBottom: 16, shadowColor: Colors.success, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 10, elevation: 4 },

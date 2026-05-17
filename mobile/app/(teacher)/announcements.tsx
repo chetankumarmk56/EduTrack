@@ -19,20 +19,10 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
-function priorityColor(priority?: string) {
-  switch (priority?.toUpperCase()) {
-    case 'HIGH':   return Colors.danger;
-    case 'MEDIUM': return Colors.warning;
-    default:       return Colors.success;
-  }
-}
-
-function priorityBg(priority?: string) {
-  switch (priority?.toUpperCase()) {
-    case 'HIGH':   return 'rgba(239,68,68,0.12)';
-    case 'MEDIUM': return 'rgba(245,158,11,0.12)';
-    default:       return 'rgba(16,185,129,0.12)';
-  }
+/** Treat any legacy HIGH as IMPORTANT so old cached/posted records render right. */
+function isImportant(priority?: string): boolean {
+  const k = (priority || '').toUpperCase();
+  return k === 'IMPORTANT' || k === 'HIGH';
 }
 
 // ─── component ──────────────────────────────────────────────────────────────
@@ -48,7 +38,7 @@ export default function TeacherAnnouncements() {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [selectedClassId, setSelectedClassId] = useState<number | null>(null);
-  const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
+  const [important, setImportant] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const loadData = useCallback(async () => {
@@ -98,7 +88,7 @@ export default function TeacherAnnouncements() {
       await announcementService.createAnnouncement({
         title,
         message: content,
-        priority: priority.toUpperCase(),
+        priority: important ? 'IMPORTANT' : 'NORMAL',
         class_id: resolvedClassId,
         type: 'CLASS',
       });
@@ -108,6 +98,7 @@ export default function TeacherAnnouncements() {
       setTitle('');
       setContent('');
       setSelectedClassId(null);
+      setImportant(false);
       loadData();
     } catch (error: any) {
       const detail =
@@ -166,23 +157,24 @@ export default function TeacherAnnouncements() {
         ) : (
           <View style={styles.list}>
             {announcements.map((ann, i) => {
-              const pColor = priorityColor(ann.priority);
-              const pBg    = priorityBg(ann.priority);
+              const isImp = isImportant(ann.priority);
+              const accentColor = isImp ? Colors.danger : Colors.success;
               return (
                 <Animated.View key={ann.id} entering={FadeInDown.delay(i * 80).springify()}>
-                  <View style={styles.card}>
+                  <View style={[styles.card, isImp && styles.cardImportant]}>
                     {/* left accent border */}
-                    <View style={[styles.cardAccent, { backgroundColor: pColor }]} />
+                    <View style={[styles.cardAccent, { backgroundColor: accentColor }]} />
 
                     {/* card body */}
                     <View style={styles.cardBody}>
-                      {/* top row: priority pill + date */}
+                      {/* top row: optional important badge + date */}
                       <View style={styles.cardTopRow}>
-                        <View style={[styles.priorityPill, { backgroundColor: pBg }]}>
-                          <Text style={[styles.priorityPillText, { color: pColor }]}>
-                            {ann.priority?.toUpperCase() ?? 'LOW'}
-                          </Text>
-                        </View>
+                        {isImp ? (
+                          <View style={styles.importantBadge}>
+                            <Ionicons name="alert-circle" size={11} color={Colors.danger} />
+                            <Text style={styles.importantBadgeText}>IMPORTANT</Text>
+                          </View>
+                        ) : <View />}
                         <Text style={styles.dateText}>
                           {new Date(ann.created_at).toLocaleDateString(undefined, {
                             month: 'short', day: 'numeric', year: 'numeric',
@@ -309,39 +301,46 @@ export default function TeacherAnnouncements() {
                   })}
               </View>
 
-              {/* priority */}
-              <Text style={styles.fieldLabel}>PRIORITY</Text>
-              <View style={styles.priorityRow}>
-                {(['high', 'medium', 'low'] as const).map(p => {
-                  const isSelected = priority === p;
-                  const color =
-                    p === 'high' ? Colors.danger :
-                    p === 'medium' ? Colors.warning :
-                    Colors.success;
-                  return (
-                    <TouchableOpacity
-                      key={p}
-                      style={[
-                        styles.priorityBtn,
-                        isSelected
-                          ? { backgroundColor: color, borderColor: color }
-                          : styles.priorityBtnUnselected,
-                      ]}
-                      onPress={() => setPriority(p)}
-                      activeOpacity={0.78}
-                    >
-                      <Text
-                        style={[
-                          styles.priorityBtnText,
-                          isSelected ? styles.priorityBtnTextSelected : { color: Colors.textMuted },
-                        ]}
-                      >
-                        {p.toUpperCase()}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+              {/* importance — opt-in toggle (default normal) */}
+              <Text style={styles.fieldLabel}>IMPORTANCE</Text>
+              <TouchableOpacity
+                accessibilityRole="switch"
+                accessibilityState={{ checked: important }}
+                onPress={() => setImportant((v) => !v)}
+                activeOpacity={0.85}
+                style={[styles.importantToggle, important && styles.importantToggleActive]}
+              >
+                <View style={[
+                  styles.importantToggleIcon,
+                  important ? styles.importantToggleIconActive : styles.importantToggleIconInactive,
+                ]}>
+                  <Ionicons
+                    name="alert-circle"
+                    size={18}
+                    color={important ? Colors.danger : Colors.textMuted}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[
+                    styles.importantToggleLabel,
+                    important && { color: Colors.danger },
+                  ]}>
+                    Mark as Important
+                  </Text>
+                  <Text style={styles.importantToggleHint}>
+                    Highlighted in red for parents. Use sparingly.
+                  </Text>
+                </View>
+                <View style={[
+                  styles.switchTrack,
+                  important ? styles.switchTrackOn : styles.switchTrackOff,
+                ]}>
+                  <View style={[
+                    styles.switchThumb,
+                    important ? styles.switchThumbOn : styles.switchThumbOff,
+                  ]} />
+                </View>
+              </TouchableOpacity>
 
               {/* bottom spacer so submit btn clears keyboard */}
               <View style={{ height: 24 }} />
@@ -464,15 +463,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 10,
   },
-  priorityPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 20,
+  cardImportant: {
+    borderWidth: 1,
+    borderColor: 'rgba(239,68,68,0.35)',
+    backgroundColor: '#fef7f7',
   },
-  priorityPillText: {
+  importantBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    backgroundColor: 'rgba(239,68,68,0.12)',
+  },
+  importantBadgeText: {
     fontSize: 10,
     fontWeight: '900',
     letterSpacing: 0.5,
+    color: Colors.danger,
   },
   dateText: {
     fontSize: 12,
@@ -622,29 +631,53 @@ const styles = StyleSheet.create({
   classChipBtnTextSelected: {
     color: Colors.white,
   },
-  priorityRow: {
+  importantToggle: {
     flexDirection: 'row',
-    gap: 10,
-  },
-  priorityBtn: {
-    flex: 1,
-    paddingVertical: 11,
-    borderRadius: 12,
     alignItems: 'center',
-    borderWidth: 1.5,
-  },
-  priorityBtnUnselected: {
+    gap: 12,
+    padding: 14,
+    borderRadius: 16,
     backgroundColor: Colors.surface,
+    borderWidth: 1.5,
     borderColor: Colors.border,
   },
-  priorityBtnText: {
-    fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 0.5,
+  importantToggleActive: {
+    backgroundColor: 'rgba(239,68,68,0.08)',
+    borderColor: 'rgba(239,68,68,0.4)',
   },
-  priorityBtnTextSelected: {
-    color: Colors.white,
+  importantToggleIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+  importantToggleIconInactive: { backgroundColor: Colors.surfaceElevated },
+  importantToggleIconActive: { backgroundColor: 'rgba(239,68,68,0.15)' },
+  importantToggleLabel: { fontSize: 14, fontWeight: '900', color: Colors.text },
+  importantToggleHint: { fontSize: 11, color: Colors.textMuted, marginTop: 2, fontWeight: '600' },
+  switchTrack: {
+    width: 44,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+  },
+  switchTrackOn:  { backgroundColor: Colors.danger },
+  switchTrackOff: { backgroundColor: Colors.border },
+  switchThumb: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: Colors.white,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  switchThumbOn:  { alignSelf: 'flex-end' },
+  switchThumbOff: { alignSelf: 'flex-start' },
   submitBtn: {
     flexDirection: 'row',
     alignItems: 'center',

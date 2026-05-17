@@ -12,7 +12,7 @@ export default function AdminLogin() {
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [instId, setInstId] = useState('1');
+  const [instId, setInstId] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -23,8 +23,8 @@ export default function AdminLogin() {
     }
 
     try {
-      // Set institution ID immediately to ensure interceptors pick it up
-      localStorage.setItem('edu_institution_id', instId);
+      // Interceptor reads role-suffixed key — must match what client.ts expects
+      localStorage.setItem('edu_institution_id_admin', instId);
 
       const data = await authApi.login({ username, password }, instId);
 
@@ -161,17 +161,17 @@ export default function AdminLogin() {
                 transition={{ delay: 0.35 }}
                 className="space-y-2"
               >
-                <label className="text-sm font-medium text-slate-300">Institution Code</label>
+                <label className="text-sm font-medium text-slate-300">Institution ID</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-slate-500">
                     <ShieldAlert className="h-4 w-4" />
                   </div>
                   <input
-                    type="number"
+                    type="text"
                     value={instId}
                     onChange={(e) => { setInstId(e.target.value); setError(null); }}
-                    className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 text-white rounded-lg pl-10 pr-4 py-2.5 outline-none transition-all focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
-                    placeholder="Enter Institution ID"
+                    className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 text-white rounded-lg pl-10 pr-4 py-2.5 outline-none transition-all focus:ring-1 focus:ring-indigo-500 disabled:opacity-50 font-mono"
+                    placeholder="e.g. stmarys2026"
                   />
                 </div>
               </motion.div>

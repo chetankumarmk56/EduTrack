@@ -13,7 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/shared/constants/Colors';
 import { LoadingScreen, ErrorState, EmptyState } from '@/shared/components/ui/Feedback';
 import { timetableService } from '@/features/timetable/services/timetableService';
-import type { TeacherTimetable, SchedulePeriod } from '@/shared/types';
+import type { TeacherTimetable, ClassTimetable, SchedulePeriod } from '@/shared/types';
 import {
   DAY_LABELS,
   DAY_FULL,
@@ -24,12 +24,20 @@ import {
   buildSlotMap,
 } from '@/features/timetable/utils';
 
+type TimetableView = 'mine' | 'class';
+
 export default function TeacherTimetableScreen() {
   const [data, setData] = useState<TeacherTimetable | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<number>(todayIndex());
+
+  // View toggle: own slots vs full class timetable
+  const [view, setView] = useState<TimetableView>('mine');
+  const [selectedClassId, setSelectedClassId] = useState<number | null>(null);
+  const [classData, setClassData] = useState<ClassTimetable | null>(null);
+  const [classLoading, setClassLoading] = useState(false);
 
   const today = todayIndex();
 
@@ -55,11 +63,52 @@ export default function TeacherTimetableScreen() {
     fetchData();
   }, [fetchData]);
 
+  // Unique classes the teacher is assigned to (derived from their own slots).
+  const assignedClasses = useMemo(() => {
+    const map = new Map<number, { id: number; display_name: string }>();
+    (data?.slots ?? []).forEach((s) => {
+      if (!s.school_class_id || map.has(s.school_class_id)) return;
+      map.set(s.school_class_id, {
+        id: s.school_class_id,
+        display_name: s.school_class?.display_name || `Class ${s.school_class_id}`,
+      });
+    });
+    return Array.from(map.values()).sort((a, b) => a.display_name.localeCompare(b.display_name));
+  }, [data]);
+
+  // Auto-select the first assigned class when switching to class view.
+  useEffect(() => {
+    if (view === 'class' && selectedClassId == null && assignedClasses.length > 0) {
+      setSelectedClassId(assignedClasses[0].id);
+    }
+  }, [view, selectedClassId, assignedClasses]);
+
+  // Fetch the full class timetable when selection changes.
+  useEffect(() => {
+    if (view !== 'class' || selectedClassId == null) return;
+    setClassLoading(true);
+    setClassData(null);
+    (async () => {
+      try {
+        const ct = await timetableService.getClassTimetable(selectedClassId);
+        setClassData(ct);
+      } catch (err) {
+        console.warn('[timetable] class fetch failed', err);
+      } finally {
+        setClassLoading(false);
+      }
+    })();
+  }, [view, selectedClassId]);
+
+  // Active source: own slots or selected class's slots.
+  const activePeriods = view === 'class' ? (classData?.periods ?? []) : (data?.periods ?? []);
+  const activeSlots = view === 'class' ? (classData?.slots ?? []) : (data?.slots ?? []);
+
   const sortedPeriods = useMemo<SchedulePeriod[]>(
-    () => sortPeriods(data?.periods ?? []),
-    [data],
+    () => sortPeriods(activePeriods),
+    [activePeriods],
   );
-  const slotByCoord = useMemo(() => buildSlotMap(data?.slots ?? []), [data]);
+  const slotByCoord = useMemo(() => buildSlotMap(activeSlots), [activeSlots]);
 
   const dayItems = useMemo(() => {
     return sortedPeriods.map((period) => ({
@@ -94,7 +143,7 @@ export default function TeacherTimetableScreen() {
         {/* Header */}
         <Animated.View entering={FadeInUp.duration(400)} style={styles.headerRow}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.title}>My Schedule</Text>
+            <Text style={styles.title}>{view === 'mine' ? 'My Schedule' : 'Class Timetable'}</Text>
             <Text style={styles.subtitle}>
               {selectedDay === today ? `Today · ${DAY_FULL[today]}` : DAY_FULL[selectedDay]}
               {' · '}
@@ -108,6 +157,63 @@ export default function TeacherTimetableScreen() {
           </View>
         </Animated.View>
 
+        {/* View toggle */}
+        {data && data.periods.length > 0 && (
+          <Animated.View entering={FadeInDown.delay(30)} style={styles.viewToggleRow}>
+            <TouchableOpacity
+              style={[styles.viewToggleBtn, view === 'mine' && styles.viewToggleBtnActive]}
+              onPress={() => setView('mine')}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="person-circle-outline" size={15} color={view === 'mine' ? Colors.white : Colors.textMuted} />
+              <Text style={[styles.viewToggleText, view === 'mine' && styles.viewToggleTextActive]}>
+                My Schedule
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.viewToggleBtn, view === 'class' && styles.viewToggleBtnActive]}
+              onPress={() => setView('class')}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="grid-outline" size={15} color={view === 'class' ? Colors.white : Colors.textMuted} />
+              <Text style={[styles.viewToggleText, view === 'class' && styles.viewToggleTextActive]}>
+                Class Timetable
+              </Text>
+            </TouchableOpacity>
+          </Animated.View>
+        )}
+
+        {/* Class picker (class view only) */}
+        {view === 'class' && data && assignedClasses.length > 0 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.classPickerRow}>
+            {assignedClasses.map((c) => {
+              const active = c.id === selectedClassId;
+              return (
+                <TouchableOpacity
+                  key={c.id}
+                  onPress={() => setSelectedClassId(c.id)}
+                  activeOpacity={0.78}
+                  style={[styles.classPickerChip, active && styles.classPickerChipActive]}
+                >
+                  <Text style={[styles.classPickerText, active && styles.classPickerTextActive]}>
+                    {c.display_name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        )}
+
+        {view === 'class' && assignedClasses.length === 0 && data && (
+          <View style={{ marginTop: 24 }}>
+            <EmptyState
+              icon={<Ionicons name="people-outline" size={40} color={Colors.textMuted} />}
+              title="No classes assigned"
+              subtitle="Ask your administrator to assign you to a class."
+            />
+          </View>
+        )}
+
         {error ? (
           <ErrorState message={error} onRetry={fetchData} />
         ) : !data || data.periods.length === 0 ? (
@@ -118,6 +224,20 @@ export default function TeacherTimetableScreen() {
               }
               title="No timetable available yet"
               subtitle="Your administrator hasn't published the schedule."
+            />
+          </View>
+        ) : view === 'class' && assignedClasses.length > 0 && (classLoading || !classData) ? (
+          <View style={{ paddingVertical: 32, alignItems: 'center' }}>
+            <Text style={{ fontSize: 13, color: Colors.textMuted, fontWeight: '700' }}>
+              {classLoading ? 'Loading class timetable...' : ''}
+            </Text>
+          </View>
+        ) : view === 'class' && classData && classData.periods.length === 0 ? (
+          <View style={{ marginTop: 24 }}>
+            <EmptyState
+              icon={<Ionicons name="time-outline" size={48} color={Colors.textMuted} />}
+              title="No timetable published for this class"
+              subtitle="Once your administrator publishes it, you'll see it here."
             />
           </View>
         ) : (
@@ -196,6 +316,9 @@ export default function TeacherTimetableScreen() {
                 const hasClass = !!slot?.subject;
                 const room =
                   slot?.school_class?.room_number || slot?.room || null;
+                // In class view, highlight slots taught by the current teacher.
+                const isMine =
+                  view === 'class' && !!slot && !!data && slot.teacher_id === data.teacher_id;
 
                 return (
                   <Animated.View
@@ -204,6 +327,7 @@ export default function TeacherTimetableScreen() {
                     style={[
                       styles.slotCard,
                       hasClass && styles.slotCardActive,
+                      isMine && styles.slotCardMine,
                     ]}
                   >
                     <View style={styles.timeCol}>
@@ -219,10 +343,23 @@ export default function TeacherTimetableScreen() {
                     <View style={styles.slotBody}>
                       {hasClass ? (
                         <>
-                          <Text style={styles.slotSubject} numberOfLines={1}>
-                            {slot!.subject!.name}
-                          </Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <Text style={[styles.slotSubject, isMine && { color: Colors.primary }]} numberOfLines={1}>
+                              {slot!.subject!.name}
+                            </Text>
+                            {isMine && (
+                              <View style={styles.youBadge}>
+                                <Text style={styles.youBadgeText}>YOU</Text>
+                              </View>
+                            )}
+                          </View>
                           <View style={styles.slotMetaRow}>
+                            {view === 'class' && slot!.teacher?.name && !isMine && (
+                              <View style={styles.metaItem}>
+                                <Ionicons name="person-outline" size={12} color={Colors.textMuted} />
+                                <Text style={styles.metaText}>{slot!.teacher.name}</Text>
+                              </View>
+                            )}
                             <View style={styles.metaItem}>
                               <Ionicons
                                 name="people-outline"
@@ -412,4 +549,56 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     fontStyle: 'italic',
   },
+
+  // View toggle
+  viewToggleRow: {
+    flexDirection: 'row',
+    padding: 4,
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    gap: 4,
+  },
+  viewToggleBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 9,
+    borderRadius: 9,
+  },
+  viewToggleBtnActive: { backgroundColor: Colors.primary },
+  viewToggleText: { fontSize: 12, fontWeight: '900', color: Colors.textMuted, letterSpacing: 0.3 },
+  viewToggleTextActive: { color: Colors.white },
+
+  // Class picker chips
+  classPickerRow: { gap: 8, paddingRight: 12 },
+  classPickerChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 11,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  classPickerChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  classPickerText: { fontSize: 12, fontWeight: '900', color: Colors.textMuted, letterSpacing: 0.5 },
+  classPickerTextActive: { color: Colors.white },
+
+  // "You" highlight for teacher's own slots in class view
+  slotCardMine: {
+    backgroundColor: `${Colors.primary}10`,
+    borderColor: `${Colors.primary}40`,
+    borderLeftWidth: 4,
+    borderLeftColor: Colors.primary,
+  },
+  youBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: Colors.primary,
+  },
+  youBadgeText: { fontSize: 9, fontWeight: '900', color: Colors.white, letterSpacing: 0.8 },
 });

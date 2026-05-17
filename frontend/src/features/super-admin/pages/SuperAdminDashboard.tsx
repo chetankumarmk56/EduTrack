@@ -1,29 +1,47 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Building2, Plus, Power, Activity, Globe, Server, Database, Trash2, Edit3 } from 'lucide-react';
+import { Building2, Plus, Power, Activity, Globe, Server, Database, Trash2, Edit3, RotateCcw, Archive } from 'lucide-react';
 import { superAdminApi } from '@/features/super-admin/api';
 import type { Institution } from '@/shared/types';
 import { cn } from '@/shared/lib/utils';
 
+type TrashedInstitution = Institution & { deleted_at: string; days_until_purge: number };
+
 export default function SuperAdminDashboard() {
   const [institutions, setInstitutions] = useState<Institution[]>([]);
+  const [trashed, setTrashed] = useState<TrashedInstitution[]>([]);
+  const [view, setView] = useState<'active' | 'trash'>('active');
   const [isLoading, setIsLoading] = useState(true);
   const [isDeploying, setIsDeploying] = useState(false);
   const [newInstName, setNewInstName] = useState('');
   const [newInstSlug, setNewInstSlug] = useState('');
-  
+
   const [editingInst, setEditingInst] = useState<Institution | null>(null);
   const [editName, setEditName] = useState('');
   const [editSlug, setEditSlug] = useState('');
 
   const fetchData = async () => {
     try {
-      const data = await superAdminApi.getInstitutions();
-      setInstitutions(data);
+      const [active, trash] = await Promise.all([
+        superAdminApi.getInstitutions(),
+        superAdminApi.getTrashedInstitutions().catch(() => []),
+      ]);
+      setInstitutions(active);
+      setTrashed(trash);
     } catch (err) {
       console.error("Failed to fetch institutions:", err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleRestore = async (id: number) => {
+    if (!confirm("Restore this school? Its admins, teachers, students, and parents will be able to log in again.")) return;
+    try {
+      await superAdminApi.restoreInstitution(id);
+      fetchData();
+    } catch (err) {
+      console.error("Restore failed:", err);
     }
   };
 
@@ -60,7 +78,7 @@ export default function SuperAdminDashboard() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm("Are you sure you want to delete this school? This will remove all associated data.")) return;
+    if (!confirm("Move this school to the trash? Admins, teachers, and students lose access immediately. You have 90 days to restore it before everything is permanently deleted.")) return;
     try {
       await superAdminApi.deleteInstitution(id);
       fetchData();
@@ -159,17 +177,16 @@ export default function SuperAdminDashboard() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] font-mono text-cyan-500/80 uppercase tracking-widest ml-1">Subdomain Slug</label>
-                <div className="relative">
-                  <input 
-                    type="text" value={newInstSlug} onChange={e => setNewInstSlug(e.target.value)}
-                    placeholder="st-xaviers"
-                    className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-4 py-3 outline-none focus:border-cyan-500/50 transition-all text-slate-100 text-sm pr-20 font-mono"
-                  />
-                  <div className="absolute right-3 inset-y-0 flex items-center text-[10px] text-slate-600 font-mono">
-                    .school.edu
-                  </div>
-                </div>
+                <label className="text-[10px] font-mono text-cyan-500/80 uppercase tracking-widest ml-1">Institution ID</label>
+                <input
+                  type="text" value={newInstSlug}
+                  onChange={e => setNewInstSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                  placeholder="stmarys2026"
+                  className="w-full bg-slate-950/50 border border-slate-700/50 rounded-xl px-4 py-3 outline-none focus:border-cyan-500/50 transition-all text-slate-100 text-sm font-mono"
+                />
+                <p className="text-[10px] text-slate-500 leading-relaxed">
+                  Lowercase letters, digits, hyphens. Admins, teachers, and parents of this school will enter this value as their Institution ID when logging in.
+                </p>
               </div>
 
               <button 
@@ -194,15 +211,83 @@ export default function SuperAdminDashboard() {
           <div className="flex items-center justify-between px-2">
             <div className="flex items-center gap-3">
               <div className="h-8 w-8 rounded-lg bg-cyan-500/10 flex items-center justify-center border border-cyan-500/20">
-                <Building2 className="h-4 w-4 text-cyan-400" />
+                {view === 'active' ? <Building2 className="h-4 w-4 text-cyan-400" /> : <Archive className="h-4 w-4 text-amber-400" />}
               </div>
-              <h2 className="text-xl font-black text-white uppercase tracking-tight">Active Infrastructure</h2>
+              <h2 className="text-xl font-black text-white uppercase tracking-tight">
+                {view === 'active' ? 'Active Infrastructure' : 'Trash'}
+              </h2>
             </div>
-            <div className="px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-[10px] font-mono text-slate-500">
-              UPLINK: <span className="text-green-500 font-bold">ESTABLISHED</span>
+            <div className="inline-flex rounded-xl border border-slate-800 bg-slate-900/60 p-1">
+              <button
+                onClick={() => setView('active')}
+                className={cn(
+                  "px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all",
+                  view === 'active' ? "bg-cyan-600 text-white" : "text-slate-400 hover:text-white"
+                )}
+              >
+                Active ({institutions.length})
+              </button>
+              <button
+                onClick={() => setView('trash')}
+                className={cn(
+                  "px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all flex items-center gap-1.5",
+                  view === 'trash' ? "bg-amber-600 text-white" : "text-slate-400 hover:text-white"
+                )}
+              >
+                <Archive className="h-3 w-3" /> Trash ({trashed.length})
+              </button>
             </div>
           </div>
 
+          {view === 'trash' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {trashed.length === 0 ? (
+                <div className="col-span-full py-20 text-center bg-slate-900/40 rounded-3xl border border-dashed border-slate-800">
+                  <Archive className="h-10 w-10 text-slate-700 mx-auto mb-3" />
+                  <p className="text-slate-500 text-sm">Trash is empty.</p>
+                  <p className="text-slate-600 text-xs mt-1">Deleted schools appear here and are permanently purged after 90 days.</p>
+                </div>
+              ) : trashed.map(inst => (
+                <motion.div
+                  key={inst.id}
+                  initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+                  className="bg-slate-900/40 backdrop-blur-xl border border-amber-900/30 rounded-2xl p-6 relative overflow-hidden"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex gap-4">
+                      <div className="h-12 w-12 rounded-xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20">
+                        <Archive className="h-6 w-6 text-amber-400" />
+                      </div>
+                      <div>
+                        <h4 className="text-lg font-bold text-slate-200">{inst.name}</h4>
+                        <p className="text-slate-500 text-[10px] font-mono tracking-wider uppercase">ID: <span className="text-amber-400">{inst.slug}</span></p>
+                        <p className="text-[10px] text-slate-500 mt-1">Deleted {new Date(inst.deleted_at).toLocaleDateString()}</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleRestore(inst.id)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[9px] font-black bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-all"
+                    >
+                      <RotateCcw className="h-3 w-3" /> RESTORE
+                    </button>
+                  </div>
+                  <div className="mt-4 flex items-center justify-between border-t border-amber-900/20 pt-3">
+                    <span className="text-[10px] font-mono text-amber-500/70 uppercase tracking-widest">
+                      Permanent deletion in
+                    </span>
+                    <span className={cn(
+                      "text-sm font-black",
+                      inst.days_until_purge < 7 ? "text-red-400" : inst.days_until_purge < 30 ? "text-amber-400" : "text-slate-300"
+                    )}>
+                      {inst.days_until_purge} {inst.days_until_purge === 1 ? 'day' : 'days'}
+                    </span>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
+
+          {view === 'active' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {isLoading ? (
               <div className="col-span-full py-20 text-center">
@@ -243,7 +328,7 @@ export default function SuperAdminDashboard() {
                       ) : (
                         <>
                           <h4 className="text-lg font-bold text-slate-100 group-hover:text-white transition-colors">{inst.name}</h4>
-                          <p className="text-slate-500 text-[10px] font-mono tracking-tighter uppercase">{inst.slug}.school.edu</p>
+                          <p className="text-slate-500 text-[10px] font-mono tracking-wider uppercase">ID: <span className="text-cyan-400">{inst.slug}</span></p>
                         </>
                       )}
                     </div>
@@ -283,6 +368,7 @@ export default function SuperAdminDashboard() {
               </motion.div>
             ))}
           </div>
+          )}
         </div>
       </div>
     </div>

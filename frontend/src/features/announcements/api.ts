@@ -4,7 +4,7 @@ export interface AnnouncementCreate {
   title: string;
   message: string;
   type: 'CLASS' | 'STUDENT';
-  priority: 'LOW' | 'MEDIUM' | 'HIGH';
+  priority: 'NORMAL' | 'IMPORTANT';
 
   class_id?: number;
   student_id?: number;
@@ -16,7 +16,7 @@ export interface Announcement {
   title: string;
   message: string;
   type: 'CLASS' | 'STUDENT';
-  priority: 'LOW' | 'MEDIUM' | 'HIGH';
+  priority: 'NORMAL' | 'IMPORTANT';
 
   class_id?: number;
   student_id?: number;

@@ -32,6 +32,18 @@ export const superAdminApi = {
     await client.delete(`admin/institutions/${id}`);
   },
 
+  // --- Trash / Restore ---
+
+  getTrashedInstitutions: async () => {
+    const response = await client.get<Array<Institution & { deleted_at: string; days_until_purge: number }>>('admin/institutions/trash');
+    return response.data;
+  },
+
+  restoreInstitution: async (id: number) => {
+    const response = await client.post<Institution>(`admin/institutions/${id}/restore`);
+    return response.data;
+  },
+
   // --- Admin Credential Management ---
   
   getAdmins: async () => {

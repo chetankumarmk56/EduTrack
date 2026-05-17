@@ -12,6 +12,7 @@ import {
 import { cn } from '@/shared/lib/utils';
 import { StaggerContainer, StaggerItem } from '@/shared/components/ui/PageWrapper';
 import { marksApi, type Exam } from '@/features/marks/api';
+import { directoryApi } from '@/features/directory/api';
 
 interface ClassStudent {
   roll: number;
@@ -22,17 +23,26 @@ interface ClassStudent {
 
 export default function TeacherDashboard() {
   const { user } = useAuth();
-  const { 
-    classDirectory, 
+  const {
     teacherDirectory,
     fetchClassMarks,
     teacherStats,
     fetchTeacherStats,
     activeAssignmentId,
-    setActiveAssignmentId
+    setActiveAssignmentId,
+    refreshDirectory,
   } = useApp();
   const [searchParams, setSearchParams] = useSearchParams();
-  
+
+  // Direct fetch — bypass AppContext cache so newly-enrolled students always show.
+  const [classDirectory, setClassDirectory] = useState<any[]>([]);
+  useEffect(() => {
+    refreshDirectory(true);
+    directoryApi.getMyStudents()
+      .then((data) => setClassDirectory(data || []))
+      .catch(err => console.error('[TeacherDashboard] getMyStudents failed', err));
+  }, [refreshDirectory]);
+
   const currentTeacher = useMemo(() => teacherDirectory.find((t: any) => t.user_id === user?.id), [teacherDirectory, user]);
   const assignments: any[] = currentTeacher?.assignments || [];
 
@@ -46,9 +56,11 @@ export default function TeacherDashboard() {
     return assignments.find((a: any) => a.id === activeAssignmentId) || assignments[0];
   }, [assignments, activeAssignmentId]);
 
-  // Set initial assignment if none selected
+  // Set initial assignment OR reset if cached id doesn't belong to this teacher
   useEffect(() => {
-    if (assignments.length > 0 && !activeAssignmentId) {
+    if (assignments.length === 0) return;
+    const stillValid = assignments.some((a: any) => a.id === activeAssignmentId);
+    if (!activeAssignmentId || !stillValid) {
       setActiveAssignmentId(assignments[0].id);
     }
   }, [assignments, activeAssignmentId]);
@@ -123,17 +135,14 @@ export default function TeacherDashboard() {
 
   const filteredDB = useMemo(() => {
     if (!activeAssignment) return [];
-    const list = classDirectory.filter(
-      (s: any) => s.school_class?.id === activeAssignment.school_class?.id
-    );
-    // Standardized alphabetical sorting
+    const targetClassId = activeAssignment.school_class?.id;
+    const list = classDirectory.filter((s: any) => {
+      const sClassId = s.school_class?.id ?? s.school_class_id;
+      return String(sClassId) === String(targetClassId);
+    });
     return list.sort((a, b) => a.name.localeCompare(b.name));
   }, [classDirectory, activeAssignment]);
 
-  // 1. Initial/Global Stats Fetch
-  useEffect(() => {
-    fetchTeacherStats();
-  }, []);
 
   // 2. Classroom-Specific Exam List Fetch
   useEffect(() => {
@@ -146,6 +155,19 @@ export default function TeacherDashboard() {
     if (!activeAssignment || !activeExamId || filteredDB.length === 0) return;
     fetchMarksForActiveExam();
   }, [activeAssignment?.id, activeExamId, filteredDB.length]);
+
+  // 4. Always seed `students` from filteredDB so the roster shows even
+  //    before an exam is created. `fetchMarksForActiveExam` overrides
+  //    this with real marks once an exam is selected.
+  useEffect(() => {
+    if (activeExamId) return; // marks fetch will handle this case
+    setStudents(filteredDB.map((s: any, idx: number) => ({
+      roll: idx + 1,
+      student_id: s.id,
+      name: s.name,
+      marks: [],
+    })));
+  }, [filteredDB, activeExamId]);
 
   const handleScoreChange = (studentId: number, newScore: number) => {
     if (!activeExamId) return;

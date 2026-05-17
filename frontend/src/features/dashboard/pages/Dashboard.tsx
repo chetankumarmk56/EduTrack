@@ -125,7 +125,7 @@ export default function Dashboard() {
 
    return (
       <div className="bg-transparent min-h-screen pb-20">
-         <div className="max-w-7xl mx-auto space-y-12 py-10 px-4 sm:px-6 lg:px-8">
+         <div className="w-full space-y-12 py-10 px-4 sm:px-6 lg:px-8">
 
             <div className="relative group">
                <div className="absolute -inset-4 bg-gradient-to-r from-primary/20 via-indigo-500/10 to-violet-500/10 blur-3xl opacity-50"></div>

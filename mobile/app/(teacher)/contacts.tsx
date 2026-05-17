@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -32,6 +32,18 @@ function getAvatarColor(name: string): string {
   return AVATAR_PALETTE[name.charCodeAt(0) % AVATAR_PALETTE.length];
 }
 
+/** Strip "Grade " / "Class " prefixes so "Grade 10" → "10". */
+function shortGrade(level?: string): string {
+  return (level || '').replace(/^(grade|class)\s+/i, '').trim();
+}
+
+/** Combine "10" + "A" → "10A" for a compact class chip label. */
+function compactClassLabel(level?: string, section?: string): string {
+  const g = shortGrade(level);
+  const s = (section || '').trim();
+  return s ? `${g}${s}` : g;
+}
+
 export default function TeacherContacts() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -39,6 +51,8 @@ export default function TeacherContacts() {
   const [faculty, setFaculty] = useState<Teacher[]>([]);
   const [students, setStudents] = useState<StudentProfile[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterGrade, setFilterGrade] = useState<string>('ALL');
+  const [filterSection, setFilterSection] = useState<string>('ALL');
 
   const loadData = useCallback(async () => {
     try {
@@ -93,6 +107,51 @@ export default function TeacherContacts() {
       }
     });
   };
+
+  // Derived: unique grades/sections in the teacher's assigned students.
+  const availableGrades = useMemo(() => {
+    const set = new Set(students.map(s => shortGrade(s.school_class?.grade?.name)).filter(Boolean));
+    return Array.from(set).sort((a, b) => {
+      const na = parseInt(a, 10); const nb = parseInt(b, 10);
+      if (!Number.isNaN(na) && !Number.isNaN(nb)) return na - nb;
+      return a.localeCompare(b);
+    });
+  }, [students]);
+
+  const availableSections = useMemo(() => {
+    const set = new Set(students.map(s => s.school_class?.section?.name || '').filter(Boolean));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [students]);
+
+  // Filter + group students by compact class label ("10A", "9B", ...)
+  const groupedStudents = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    const scoped = students.filter((s) => {
+      const g = shortGrade(s.school_class?.grade?.name);
+      const sec = s.school_class?.section?.name || '';
+      if (filterGrade !== 'ALL' && g !== filterGrade) return false;
+      if (filterSection !== 'ALL' && sec !== filterSection) return false;
+      if (q && !s.name.toLowerCase().includes(q)) return false;
+      return true;
+    });
+    const map = new Map<string, StudentProfile[]>();
+    for (const s of scoped) {
+      const key = compactClassLabel(s.school_class?.grade?.name, s.school_class?.section?.name) || '—';
+      const arr = map.get(key) ?? [];
+      arr.push(s);
+      map.set(key, arr);
+    }
+    return Array.from(map.entries())
+      .map(([key, list]) => [key, list.sort((a, b) => a.name.localeCompare(b.name))] as [string, StudentProfile[]])
+      .sort(([keyA], [keyB]) => {
+        const a = parseInt(keyA, 10); const b = parseInt(keyB, 10);
+        if (!Number.isNaN(a) && !Number.isNaN(b) && a !== b) return a - b;
+        return keyA.localeCompare(keyB);
+      });
+  }, [students, searchQuery, filterGrade, filterSection]);
+
+  const isFiltering = filterGrade !== 'ALL' || filterSection !== 'ALL' || searchQuery.trim().length > 0;
+  const clearFilters = () => { setFilterGrade('ALL'); setFilterSection('ALL'); setSearchQuery(''); };
 
   if (loading) return <LoadingScreen message="Loading directory..." />;
 
@@ -169,60 +228,112 @@ export default function TeacherContacts() {
 
         {/* Search bar — students only */}
         {activeTab === 'STUDENTS' && (
-          <View style={styles.searchBar}>
-            <Ionicons name="search-outline" size={18} color={Colors.textMuted} style={styles.searchIcon} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search students by name…"
-              placeholderTextColor={Colors.textMuted}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              clearButtonMode="while-editing"
-              autoCapitalize="words"
-              returnKeyType="search"
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Ionicons name="close-circle" size={18} color={Colors.textMuted} />
-              </TouchableOpacity>
-            )}
-          </View>
+          <>
+            <View style={styles.searchBar}>
+              <Ionicons name="search-outline" size={18} color={Colors.textMuted} style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search students by name…"
+                placeholderTextColor={Colors.textMuted}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                clearButtonMode="while-editing"
+                autoCapitalize="words"
+                returnKeyType="search"
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Ionicons name="close-circle" size={18} color={Colors.textMuted} />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Class + Section filter rows */}
+            <View style={styles.filterBlock}>
+              <View style={styles.filterRow}>
+                <Text style={styles.filterRowLabel}>CLASS</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterPillRow}>
+                  <FilterPill active={filterGrade === 'ALL'} label="All" onPress={() => setFilterGrade('ALL')} />
+                  {availableGrades.map((g) => (
+                    <FilterPill key={g} active={filterGrade === g} label={g} onPress={() => setFilterGrade(g)} />
+                  ))}
+                </ScrollView>
+              </View>
+              <View style={styles.filterRow}>
+                <Text style={styles.filterRowLabel}>SECTION</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterPillRow}>
+                  <FilterPill active={filterSection === 'ALL'} label="All" onPress={() => setFilterSection('ALL')} />
+                  {availableSections.map((s) => (
+                    <FilterPill key={s} active={filterSection === s} label={s} onPress={() => setFilterSection(s)} />
+                  ))}
+                </ScrollView>
+              </View>
+              {isFiltering && (
+                <TouchableOpacity onPress={clearFilters} style={styles.clearFiltersBtn} activeOpacity={0.75}>
+                  <Ionicons name="close-circle-outline" size={13} color={Colors.danger} />
+                  <Text style={styles.clearFiltersText}>Clear filters</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </>
         )}
 
-        {activeTab === 'FACULTY'
-          ? faculty.map((teacher, index) => (
-              <Animated.View key={teacher.id} entering={FadeInDown.delay(index * 50)}>
-                {index > 0 && <View style={styles.cardDivider} />}
-                <ContactCard
-                  name={teacher.name}
-                  sub={teacher.email}
-                  role="Teacher"
-                  phone={teacher.whatsapp || teacher.phone}
-                  email={teacher.email}
-                  onCall={() => handleCall(teacher.phone)}
-                  onEmail={() => handleEmail(teacher.email)}
-                  onWhatsApp={() => handleWhatsApp(teacher.whatsapp || teacher.phone)}
-                />
-              </Animated.View>
-            ))
-          : students
-              .filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase()))
-              .map((student, index) => (
-                <Animated.View key={student.id} entering={FadeInDown.delay(index * 30)}>
-                  {index > 0 && <View style={styles.cardDivider} />}
+        {activeTab === 'FACULTY' ? (
+          faculty.map((teacher, index) => (
+            <Animated.View key={teacher.id} entering={FadeInDown.delay(index * 50)}>
+              {index > 0 && <View style={styles.cardDivider} />}
+              <ContactCard
+                name={teacher.name}
+                sub={teacher.email}
+                role="Teacher"
+                phone={teacher.whatsapp || teacher.phone}
+                email={teacher.email}
+                onCall={() => handleCall(teacher.phone)}
+                onEmail={() => handleEmail(teacher.email)}
+                onWhatsApp={() => handleWhatsApp(teacher.whatsapp || teacher.phone)}
+              />
+            </Animated.View>
+          ))
+        ) : groupedStudents.length === 0 ? (
+          <View style={{ alignItems: 'center', paddingVertical: 40, gap: 8 }}>
+            <Ionicons name="people-outline" size={36} color={Colors.textMuted} />
+            <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.textMuted }}>
+              No students match
+            </Text>
+          </View>
+        ) : (
+          groupedStudents.map(([groupKey, list]) => (
+            <View key={groupKey} style={styles.groupBlock}>
+              <View style={styles.groupHeader}>
+                <View style={styles.groupHeaderIcon}>
+                  <Ionicons name="school" size={13} color={Colors.white} />
+                </View>
+                <Text style={styles.groupHeaderLabel}>{groupKey}</Text>
+                <View style={styles.groupHeaderCount}>
+                  <Text style={styles.groupHeaderCountText}>
+                    {list.length} {list.length === 1 ? 'student' : 'students'}
+                  </Text>
+                </View>
+              </View>
+              {list.map((student, idx) => (
+                <Animated.View key={student.id} entering={FadeInDown.delay(idx * 20)}>
+                  {idx > 0 && <View style={styles.cardDivider} />}
                   <ContactCard
                     name={student.name}
-                    sub={`${student.school_class?.grade?.name || 'Class'}-${student.school_class?.section?.name || ''}`}
+                    sub={groupKey}
                     role="Student"
                     phone={student.whatsapp || student.parent_phone}
                     email={student.parent_email}
-                    rollNo={index + 1}
+                    rollNo={idx + 1}
                     onCall={() => handleCall(student.parent_phone)}
                     onEmail={() => handleEmail(student.parent_email)}
                     onWhatsApp={() => handleWhatsApp(student.whatsapp || student.parent_phone)}
                   />
                 </Animated.View>
               ))}
+            </View>
+          ))
+        )}
 
         <View style={{ height: 32 }} />
       </ScrollView>
@@ -298,6 +409,24 @@ function ContactCard({
         />
       </View>
     </View>
+  );
+}
+
+// ── FilterPill ───────────────────────────────────────────────────────────────
+
+function FilterPill({
+  active, label, onPress,
+}: { active: boolean; label: string; onPress: () => void }) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.75}
+      style={[styles.filterPill, active && styles.filterPillActive]}
+    >
+      <Text style={[styles.filterPillText, active && styles.filterPillTextActive]}>
+        {label}
+      </Text>
+    </TouchableOpacity>
   );
 }
 
@@ -583,5 +712,98 @@ const styles = StyleSheet.create({
     color: Colors.text,
     fontWeight: '500',
     paddingVertical: 0,
+  },
+
+  // Filters
+  filterBlock: {
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 16,
+    gap: 10,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  filterRowLabel: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: Colors.textMuted,
+    letterSpacing: 1,
+    width: 54,
+  },
+  filterPillRow: { gap: 6, paddingRight: 4 },
+  filterPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 9,
+    backgroundColor: Colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  filterPillActive: {
+    backgroundColor: `${Colors.success}18`,
+    borderColor: Colors.success,
+  },
+  filterPillText: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: Colors.textMuted,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  filterPillTextActive: { color: Colors.success },
+  clearFiltersBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: `${Colors.danger}10`,
+  },
+  clearFiltersText: { fontSize: 11, fontWeight: '900', color: Colors.danger, letterSpacing: 0.5 },
+
+  // Class-grouped sections
+  groupBlock: { marginBottom: 18 },
+  groupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    marginBottom: 8,
+  },
+  groupHeaderIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    backgroundColor: Colors.success,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  groupHeaderLabel: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: Colors.text,
+    letterSpacing: -0.2,
+  },
+  groupHeaderCount: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    backgroundColor: `${Colors.success}15`,
+  },
+  groupHeaderCountText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: Colors.success,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
 });

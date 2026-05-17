@@ -116,11 +116,16 @@ apiClient.interceptors.response.use(
     const data: any = error?.response?.data;
 
     // ── Auto-retry transient network failures (cold-start friendly) ─────────
-    // We retry GETs and idempotent HEAD/OPTIONS only — never POST/PUT/PATCH/DELETE
-    // since those may have side effects on the server even when the client
-    // never saw the response.
+    // We retry GETs and idempotent HEAD/OPTIONS by default. Login POSTs are
+    // also retried: re-submitting the same credentials produces the same result
+    // with no side effects, so a cold-start timeout shouldn't surface as a
+    // bogus "no response" to the user. Other POST/PUT/PATCH/DELETE are never
+    // retried since they may have committed work the client didn't observe.
     const method = (config.method || 'get').toLowerCase();
-    const isIdempotent = method === 'get' || method === 'head' || method === 'options';
+    const requestPath: string = config.url || '';
+    const isLoginPost = method === 'post' && /\/login(\?|$)/.test(requestPath);
+    const isIdempotent =
+      method === 'get' || method === 'head' || method === 'options' || isLoginPost;
     const transient = isTransientNetworkError(error);
     const retryCount = config.__retryCount ?? 0;
 
@@ -179,10 +184,12 @@ apiClient.interceptors.response.use(
     // ── Build a user-friendly error message ─────────────────────────────────
     let message = 'Something went wrong';
     if (transient) {
-      // Survived all the retries — the server is genuinely unreachable.
+      // Survived all the retries — the server is genuinely unreachable, or
+      // the free-tier dyno is still spinning up. Cold starts can take 30–60s.
       message =
-        "Couldn't reach the server. Check your internet connection and try " +
-        'again. If the issue persists, the server may be starting up.';
+        'Server is taking too long to respond. This often happens on the ' +
+        'first request after a period of inactivity — please wait a moment ' +
+        'and try again.';
     } else if (typeof data?.detail === 'string') {
       message = data.detail;
     } else if (data?.detail?.message) {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LogIn, LogOut, Plus, X,
@@ -6,6 +6,19 @@ import {
 } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import { teacherAttendanceApi, type TeacherAttendanceRecord, type TeacherLeaveRecord } from '@/features/teacher-attendance/api';
+
+type DisplayStatus = 'PRESENT' | 'ABSENT' | 'HALF_DAY' | 'ON_LEAVE';
+type StatusFilter = 'ALL' | DisplayStatus;
+
+interface HistoryRow {
+  date: string;
+  status: DisplayStatus;
+  check_in_time: string | null;
+  check_out_time: string | null;
+  remarks: string | null;
+  is_edited: boolean;
+  source: 'recorded' | 'auto-absent' | 'leave';
+}
 
 type Tab = 'today' | 'history' | 'leave';
 
@@ -32,6 +45,12 @@ function localDateStr(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+/** Parse a "YYYY-MM-DD" string as a local-time Date (avoids UTC-shift bugs). */
+function parseLocalDate(iso: string): Date {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, (m ?? 1) - 1, d ?? 1);
+}
+
 export default function TeacherAttendanceLeave() {
   const [tab, setTab] = useState<Tab>('today');
 
@@ -41,11 +60,12 @@ export default function TeacherAttendanceLeave() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
-  // History state
-  const [history, setHistory] = useState<TeacherAttendanceRecord[]>([]);
-  const [historyTotal, setHistoryTotal] = useState(0);
-  const [historyPage, setHistoryPage] = useState(0);
+  // History state — windowed view (last N days, Sundays excluded, gaps auto-filled)
+  const [historyRecords, setHistoryRecords] = useState<TeacherAttendanceRecord[]>([]);
+  const [historyLeaves, setHistoryLeaves] = useState<TeacherLeaveRecord[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [rangeDays, setRangeDays] = useState<30 | 60 | 90>(30);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
   const PAGE_SIZE = 20;
 
   // Leave state
@@ -75,13 +95,21 @@ export default function TeacherAttendanceLeave() {
   const loadHistory = useCallback(async () => {
     setHistoryLoading(true);
     try {
-      const res = await teacherAttendanceApi.getMyHistory({ skip: historyPage * PAGE_SIZE, limit: PAGE_SIZE });
-      setHistory(res.items);
-      setHistoryTotal(res.total);
+      const today = new Date();
+      const start = new Date(today);
+      start.setDate(today.getDate() - (rangeDays - 1));
+      const date_from = localDateStr(start);
+      const date_to = localDateStr(today);
+      const [recs, lvs] = await Promise.all([
+        teacherAttendanceApi.getMyHistory({ date_from, date_to, limit: 200 }),
+        teacherAttendanceApi.getMyLeaves({ limit: 200 }),
+      ]);
+      setHistoryRecords(recs.items);
+      setHistoryLeaves(lvs.items);
     } finally {
       setHistoryLoading(false);
     }
-  }, [historyPage]);
+  }, [rangeDays]);
 
   const loadLeaves = useCallback(async () => {
     setLeaveLoading(true);
@@ -162,8 +190,91 @@ export default function TeacherAttendanceLeave() {
 
   const canCheckIn = todayRecord === null;
   const canCheckOut = todayRecord !== null && todayRecord !== undefined && !todayRecord.check_out_time;
-  const totalHistoryPages = Math.ceil(historyTotal / PAGE_SIZE);
   const totalLeavePages = Math.ceil(leavesTotal / PAGE_SIZE);
+
+  // Build a continuous list of working days (Sundays excluded) for the window,
+  // overlaying real records and falling back to auto-ABSENT or ON_LEAVE.
+  const mergedHistory = useMemo<HistoryRow[]>(() => {
+    const today = new Date();
+    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    const recordsByDate = new Map<string, TeacherAttendanceRecord>();
+    historyRecords.forEach(r => recordsByDate.set(r.date, r));
+
+    // Approved leaves expand into per-day coverage so we can show ON_LEAVE for
+    // each day they cover when no attendance record exists.
+    const leaveByDate = new Map<string, TeacherLeaveRecord>();
+    historyLeaves
+      .filter(l => l.status === 'APPROVED')
+      .forEach(l => {
+        const s = parseLocalDate(l.start_date);
+        const e = parseLocalDate(l.end_date);
+        for (const d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+          leaveByDate.set(localDateStr(d), l);
+        }
+      });
+
+    const rows: HistoryRow[] = [];
+    const cursor = new Date(startOfToday);
+    for (let i = 0; i < rangeDays; i++) {
+      // Sunday = non-working day per the requirement; skip entirely.
+      if (cursor.getDay() !== 0) {
+        const ds = localDateStr(cursor);
+        const rec = recordsByDate.get(ds);
+        if (rec) {
+          rows.push({
+            date: ds,
+            status: rec.status,
+            check_in_time: rec.check_in_time,
+            check_out_time: rec.check_out_time,
+            remarks: rec.remarks,
+            is_edited: !!rec.is_edited,
+            source: 'recorded',
+          });
+        } else if (cursor < startOfToday) {
+          // Past working day with no record — fill in.
+          const lv = leaveByDate.get(ds);
+          if (lv) {
+            rows.push({
+              date: ds,
+              status: 'ON_LEAVE',
+              check_in_time: null,
+              check_out_time: null,
+              remarks: `${lv.leave_type} leave (approved)`,
+              is_edited: false,
+              source: 'leave',
+            });
+          } else {
+            rows.push({
+              date: ds,
+              status: 'ABSENT',
+              check_in_time: null,
+              check_out_time: null,
+              remarks: 'No check-in recorded',
+              is_edited: false,
+              source: 'auto-absent',
+            });
+          }
+        }
+        // For today with no record we deliberately skip — the day isn't over yet.
+      }
+      cursor.setDate(cursor.getDate() - 1);
+    }
+    return rows;
+  }, [historyRecords, historyLeaves, rangeDays]);
+
+  const historySummary = useMemo(() => ({
+    workingDays: mergedHistory.length,
+    present: mergedHistory.filter(r => r.status === 'PRESENT').length,
+    absent: mergedHistory.filter(r => r.status === 'ABSENT').length,
+    onLeave: mergedHistory.filter(r => r.status === 'ON_LEAVE').length,
+    halfDay: mergedHistory.filter(r => r.status === 'HALF_DAY').length,
+  }), [mergedHistory]);
+
+  const filteredHistory = useMemo(
+    () => statusFilter === 'ALL' ? mergedHistory : mergedHistory.filter(r => r.status === statusFilter),
+    [mergedHistory, statusFilter],
+  );
 
   return (
     <div className="space-y-8 pb-20">
@@ -253,28 +364,86 @@ export default function TeacherAttendanceLeave() {
         )}
 
         {tab === 'history' && (
-          <motion.div key="history" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-4">
+          <motion.div key="history" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-5">
+            {/* Summary tiles */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <SummaryTile label="Working days" value={historySummary.workingDays} tone="slate" />
+              <SummaryTile label="Present" value={historySummary.present} tone="emerald" />
+              <SummaryTile label="Absent" value={historySummary.absent} tone="rose" />
+              <SummaryTile label="On leave" value={historySummary.onLeave} tone="blue" />
+              <SummaryTile label="Half day" value={historySummary.halfDay} tone="amber" />
+            </div>
+
+            {/* Range + status filters */}
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+              <div className="flex items-center gap-2 p-1 bg-slate-900/50 border border-white/5 rounded-xl w-fit">
+                {([30, 60, 90] as const).map(n => (
+                  <button
+                    key={n}
+                    onClick={() => setRangeDays(n)}
+                    className={cn(
+                      "px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
+                      rangeDays === n ? "bg-primary text-white" : "text-slate-400 hover:text-white hover:bg-white/5",
+                    )}
+                  >
+                    Last {n} days
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {(['ALL', 'PRESENT', 'ABSENT', 'ON_LEAVE', 'HALF_DAY'] as const).map(s => (
+                  <button
+                    key={s}
+                    onClick={() => setStatusFilter(s)}
+                    className={cn(
+                      "px-3 py-1.5 rounded-lg border text-[10px] font-black uppercase tracking-widest transition-all",
+                      statusFilter === s
+                        ? s === 'ABSENT'   ? 'bg-rose-500/15 border-rose-500/40 text-rose-300'
+                          : s === 'PRESENT'  ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+                          : s === 'ON_LEAVE' ? 'bg-blue-500/15 border-blue-500/40 text-blue-300'
+                          : s === 'HALF_DAY' ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
+                          : 'bg-primary/15 border-primary/40 text-primary'
+                        : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10 hover:text-white',
+                    )}
+                  >
+                    {s === 'ALL' ? 'All' : s.replace('_', ' ')}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+              Sundays are excluded. Past working days with no check-in are auto-marked absent unless covered by an approved leave.
+            </p>
+
+            {/* Table */}
             {historyLoading ? (
               <div className="flex items-center gap-3 text-slate-400 py-8"><Loader2 className="w-5 h-5 animate-spin" /> Loading history...</div>
-            ) : history.length === 0 ? (
+            ) : filteredHistory.length === 0 ? (
               <div className="p-8 rounded-3xl bg-slate-900/60 border border-white/5 text-center text-slate-400">
-                No attendance records found.
+                No matching records in the selected window.
               </div>
             ) : (
-              <>
-                <div className="overflow-x-auto rounded-3xl border border-white/5 bg-slate-900/60 backdrop-blur-md">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="border-b border-white/5">
-                        {['Date', 'Status', 'Check-in', 'Check-out', 'Remarks', 'Edited'].map(h => (
-                          <th key={h} className="px-4 py-3 text-left font-black uppercase tracking-widest text-slate-500">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {history.map((row) => (
-                        <tr key={row.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                          <td className="px-4 py-3 font-mono text-slate-300">{row.date}</td>
+              <div className="overflow-x-auto rounded-3xl border border-white/5 bg-slate-900/60 backdrop-blur-md">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-white/5">
+                      {['Date', 'Status', 'Check-in', 'Check-out', 'Remarks', 'Source'].map(h => (
+                        <th key={h} className="px-4 py-3 text-left font-black uppercase tracking-widest text-slate-500">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredHistory.map((row) => {
+                      const d = parseLocalDate(row.date);
+                      const dayLabel = d.toLocaleDateString(undefined, { weekday: 'short' });
+                      return (
+                        <tr key={row.date} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                          <td className="px-4 py-3 font-mono text-slate-300">
+                            {row.date}
+                            <span className="ml-2 text-[10px] text-slate-500 uppercase">{dayLabel}</span>
+                          </td>
                           <td className="px-4 py-3">
                             <span className={cn("px-2 py-0.5 rounded border font-black uppercase tracking-widest", STATUS_COLORS[row.status])}>
                               {row.status.replace('_', ' ')}
@@ -284,17 +453,22 @@ export default function TeacherAttendanceLeave() {
                           <td className="px-4 py-3 font-mono text-slate-300">{row.check_out_time || '—'}</td>
                           <td className="px-4 py-3 text-slate-400 max-w-xs truncate">{row.remarks || '—'}</td>
                           <td className="px-4 py-3">
-                            {row.is_edited ? (
-                              <span className="text-amber-400 text-[10px] font-black uppercase">Yes</span>
-                            ) : '—'}
+                            {row.source === 'recorded' ? (
+                              row.is_edited
+                                ? <span className="text-amber-400 text-[10px] font-black uppercase tracking-widest">Edited</span>
+                                : <span className="text-slate-500 text-[10px] font-black uppercase tracking-widest">Recorded</span>
+                            ) : row.source === 'auto-absent' ? (
+                              <span className="text-rose-400/80 text-[10px] font-black uppercase tracking-widest">Auto-marked</span>
+                            ) : (
+                              <span className="text-blue-400/80 text-[10px] font-black uppercase tracking-widest">From leave</span>
+                            )}
                           </td>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <Pagination page={historyPage} totalPages={totalHistoryPages} onPage={setHistoryPage} />
-              </>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             )}
           </motion.div>
         )}
@@ -441,6 +615,28 @@ export default function TeacherAttendanceLeave() {
 }
 
 // ── Shared sub-components ──────────────────────────────────────────────────
+
+function SummaryTile({
+  label, value, tone,
+}: {
+  label: string;
+  value: number;
+  tone: 'slate' | 'emerald' | 'rose' | 'blue' | 'amber';
+}) {
+  const toneClasses = {
+    slate: 'bg-slate-500/10 border-slate-500/20 text-slate-200',
+    emerald: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300',
+    rose: 'bg-rose-500/10 border-rose-500/20 text-rose-300',
+    blue: 'bg-blue-500/10 border-blue-500/20 text-blue-300',
+    amber: 'bg-amber-500/10 border-amber-500/20 text-amber-300',
+  }[tone];
+  return (
+    <div className={cn('p-4 rounded-2xl border backdrop-blur-md', toneClasses)}>
+      <p className="text-2xl font-black tabular-nums leading-none">{value}</p>
+      <p className="text-[10px] font-black uppercase tracking-widest opacity-70 mt-1.5">{label}</p>
+    </div>
+  );
+}
 
 function Stat({ label, value }: { label: string; value: React.ReactNode }) {
   return (

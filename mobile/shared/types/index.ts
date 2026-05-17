@@ -4,8 +4,9 @@ export interface Announcement {
   message: string;
   // Backend returns uppercase: 'CLASS' | 'STUDENT'
   type: 'CLASS' | 'STUDENT' | 'class' | 'student';
-  // Backend returns uppercase: 'LOW' | 'MEDIUM' | 'HIGH'
-  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'low' | 'medium' | 'high';
+  // Backend collapsed to NORMAL/IMPORTANT in 2026-05; 'low/medium/high'
+  // unions kept for backward-compat with any cached records during rollout.
+  priority: 'NORMAL' | 'IMPORTANT' | 'LOW' | 'MEDIUM' | 'HIGH';
   school_class?: {
     id: number;
     grade: { name: string };

@@ -21,18 +21,21 @@ import { Colors } from '@/shared/constants/Colors';
 import { LoadingScreen, EmptyState, ErrorState } from '@/shared/components/ui/Feedback';
 import { API_BASE_URL } from '@/shared/constants';
 
-type FilterKey = 'all' | 'unread' | 'high' | 'class' | 'personal';
+type FilterKey = 'all' | 'unread' | 'important' | 'class' | 'personal';
+
+/** Treat legacy HIGH as IMPORTANT so old records render with the right styling. */
+function isImportant(p?: string): boolean {
+  const k = (p || '').toUpperCase();
+  return k === 'IMPORTANT' || k === 'HIGH';
+}
 
 const PRIORITY_META = {
-  high:   { color: Colors.danger,  bg: '#fef2f2', label: 'High',   icon: 'alert-circle' as const },
-  medium: { color: Colors.warning, bg: '#fffbeb', label: 'Medium', icon: 'information-circle' as const },
-  low:    { color: Colors.primary, bg: '#eff6ff', label: 'Low',    icon: 'megaphone' as const },
+  important: { color: Colors.danger,  bg: '#fef2f2', label: 'Important', icon: 'alert-circle' as const },
+  normal:    { color: Colors.primary, bg: '#eff6ff', label: 'Normal',    icon: 'megaphone' as const },
 };
 
-function priorityKey(p: string | undefined): keyof typeof PRIORITY_META {
-  const k = (p || '').toLowerCase();
-  if (k === 'high' || k === 'medium' || k === 'low') return k as keyof typeof PRIORITY_META;
-  return 'low';
+function priorityMeta(p: string | undefined) {
+  return isImportant(p) ? PRIORITY_META.important : PRIORITY_META.normal;
 }
 
 function isClassType(t: string | undefined) {
@@ -95,8 +98,8 @@ interface CardProps {
 }
 
 function AnnouncementCard({ item, onPress, delay }: CardProps) {
-  const pk = priorityKey(item.priority);
-  const pm = PRIORITY_META[pk];
+  const important = isImportant(item.priority);
+  const pm = priorityMeta(item.priority);
   const isClass = isClassType(item.type);
   const unread = !item.is_read;
   const attachType = item.attachment_url
@@ -113,8 +116,13 @@ function AnnouncementCard({ item, onPress, delay }: CardProps) {
         onPress={onPress}
         style={[
           styles.card,
-          { borderLeftColor: pm.color },
-          unread && { backgroundColor: '#fafbff' },
+          { borderLeftColor: important ? pm.color : Colors.border },
+          // Important → light red wash; otherwise subtle unread tint.
+          important
+            ? { backgroundColor: pm.bg, borderColor: 'rgba(239,68,68,0.25)' }
+            : unread
+              ? { backgroundColor: '#fafbff' }
+              : null,
         ]}
       >
         <View style={[styles.cardIconBox, { backgroundColor: pm.bg }]}>
@@ -123,12 +131,14 @@ function AnnouncementCard({ item, onPress, delay }: CardProps) {
 
         <View style={{ flex: 1, gap: 6 }}>
           <View style={styles.cardTop}>
-            <View style={[styles.priorityChip, { backgroundColor: pm.bg }]}>
-              <Ionicons name={pm.icon} size={10} color={pm.color} />
-              <Text style={[styles.priorityChipText, { color: pm.color }]}>
-                {pm.label.toUpperCase()}
-              </Text>
-            </View>
+            {important && (
+              <View style={[styles.priorityChip, { backgroundColor: pm.bg }]}>
+                <Ionicons name={pm.icon} size={10} color={pm.color} />
+                <Text style={[styles.priorityChipText, { color: pm.color }]}>
+                  IMPORTANT
+                </Text>
+              </View>
+            )}
             <View style={styles.audChip}>
               <Ionicons
                 name={isClass ? 'school-outline' : 'person-outline'}
@@ -182,8 +192,8 @@ interface DetailProps {
 
 function DetailModal({ item, visible, onClose }: DetailProps) {
   if (!item) return null;
-  const pk = priorityKey(item.priority);
-  const pm = PRIORITY_META[pk];
+  const important = isImportant(item.priority);
+  const pm = priorityMeta(item.priority);
   const isClass = isClassType(item.type);
   const attachType = item.attachment_url
     ? announcementService.getAttachmentType(item.attachment_url)
@@ -216,12 +226,14 @@ function DetailModal({ item, visible, onClose }: DetailProps) {
           </View>
           <View style={{ flex: 1 }}>
             <View style={styles.modalChips}>
-              <View style={[styles.priorityChip, { backgroundColor: pm.bg }]}>
-                <Ionicons name={pm.icon} size={11} color={pm.color} />
-                <Text style={[styles.priorityChipText, { color: pm.color }]}>
-                  {pm.label.toUpperCase()}
-                </Text>
-              </View>
+              {important && (
+                <View style={[styles.priorityChip, { backgroundColor: pm.bg }]}>
+                  <Ionicons name={pm.icon} size={11} color={pm.color} />
+                  <Text style={[styles.priorityChipText, { color: pm.color }]}>
+                    IMPORTANT
+                  </Text>
+                </View>
+              )}
               <View style={styles.audChip}>
                 <Ionicons
                   name={isClass ? 'school-outline' : 'person-outline'}
@@ -337,14 +349,14 @@ export default function AnnouncementsScreen() {
   };
 
   const counts = useMemo(() => {
-    let unread = 0, high = 0, classCount = 0, personal = 0;
+    let unread = 0, important = 0, classCount = 0, personal = 0;
     for (const a of announcements) {
       if (!a.is_read) unread++;
-      if ((a.priority || '').toUpperCase() === 'HIGH') high++;
+      if (isImportant(a.priority)) important++;
       if (isClassType(a.type)) classCount++;
       else personal++;
     }
-    return { all: announcements.length, unread, high, class: classCount, personal };
+    return { all: announcements.length, unread, important, class: classCount, personal };
   }, [announcements]);
 
   const filtered = useMemo(() => {
@@ -352,7 +364,7 @@ export default function AnnouncementsScreen() {
     return announcements
       .filter((a) => {
         if (filter === 'unread' && a.is_read) return false;
-        if (filter === 'high' && (a.priority || '').toUpperCase() !== 'HIGH') return false;
+        if (filter === 'important' && !isImportant(a.priority)) return false;
         if (filter === 'class' && !isClassType(a.type)) return false;
         if (filter === 'personal' && isClassType(a.type)) return false;
         if (q) {
@@ -463,10 +475,10 @@ export default function AnnouncementsScreen() {
                       icon="ellipse"
                     />
                     <FilterPill
-                      active={filter === 'high'}
-                      onPress={() => setFilter('high')}
-                      label="High"
-                      count={counts.high}
+                      active={filter === 'important'}
+                      onPress={() => setFilter('important')}
+                      label="Important"
+                      count={counts.important}
                       color={Colors.danger}
                       icon="alert-circle"
                     />

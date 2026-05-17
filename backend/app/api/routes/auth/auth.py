@@ -14,7 +14,6 @@ router = APIRouter(
 )
 
 @router.post("/login", response_model=Token)
-@limiter.limit("5/minute")  # ✅ NEW: Max 5 login attempts per minute per IP
 async def login_for_access_token(
     request: Request,  # ✅ NEW: Required for rate limiter
     response: Response,
@@ -25,13 +24,16 @@ async def login_for_access_token(
     Standard OAuth2 compatible token login for Admin and SuperAdmin roles.
     Uses bcrypt-hashed password verification and issues a JWT token.
     """
-    institution_id = None
-    institution_id_header = request.headers.get("X-Institution-Id")
-    if institution_id_header:
-        try:
-            institution_id = int(institution_id_header)
-        except ValueError:
-            pass
+    from app.services.auth.auth_service import resolve_institution_id
+    inst_header = request.headers.get("X-Institution-Id")
+    institution_id = await resolve_institution_id(db, inst_header)
+    # If a header was supplied but didn't resolve, the Institution ID is wrong.
+    # Reject before checking the password so it can't grant access to another school.
+    if inst_header and institution_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unknown Institution ID. Check with your school admin.",
+        )
 
     user = await auth_service.authenticate_user(
         db, 
@@ -67,7 +69,6 @@ async def login_for_access_token(
     return token_data
 
 @router.post("/refresh", response_model=Token)
-@limiter.limit("10/minute")  # ✅ NEW: Max 10 refresh attempts per minute per IP
 async def refresh_access_token(
     request: Request,
     response: Response,
@@ -183,7 +184,6 @@ async def read_users_me(current_user: UserContext = Depends(get_current_user)):
 
 
 @router.post("/change-password", response_model=ChangePasswordResponse)
-@limiter.limit("5/minute")
 async def change_password(
     request: Request,
     payload: ChangePasswordRequest,

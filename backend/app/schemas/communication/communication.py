@@ -9,16 +9,15 @@ class AnnouncementType(str, Enum):
     STUDENT = "STUDENT"
 
 class AnnouncementPriority(str, Enum):
-    LOW = "LOW"
-    MEDIUM = "MEDIUM"
-    HIGH = "HIGH"
+    NORMAL = "NORMAL"
+    IMPORTANT = "IMPORTANT"
 
 
 class AnnouncementBase(BaseModel):
     title: str = Field(..., min_length=1, max_length=200, description="Announcement title")
     message: str = Field(..., min_length=1, max_length=5000, description="Announcement message")
     type: AnnouncementType
-    priority: AnnouncementPriority = AnnouncementPriority.LOW
+    priority: AnnouncementPriority = AnnouncementPriority.NORMAL
     class_id: Optional[int] = None
     student_id: Optional[int] = None
     attachment_url: Optional[str] = None

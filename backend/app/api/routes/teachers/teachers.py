@@ -60,8 +60,13 @@ async def teacher_login(
     db: AsyncSession = Depends(get_db)
 ):
     """Secure endpoint for faculty login generating JWT token structure."""
-    institution_id_str = request.headers.get("X-Institution-Id")
-    institution_id = int(institution_id_str) if institution_id_str and institution_id_str.isdigit() else 1
+    from app.services.auth.auth_service import resolve_institution_id
+    inst_header = request.headers.get("X-Institution-Id")
+    institution_id = await resolve_institution_id(db, inst_header)
+    if inst_header and institution_id is None:
+        raise HTTPException(status_code=401, detail="Unknown Institution ID. Check with your school admin.")
+    if institution_id is None:
+        institution_id = 1
     
     auth_data = await auth_service.authenticate_portal(
         db, 

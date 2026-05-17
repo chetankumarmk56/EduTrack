@@ -10,7 +10,7 @@ import { authApi } from '@/features/auth/api';
 export default function TeacherLogin() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [instId, setInstId] = useState('1');
+  const [instId, setInstId] = useState('');
   const [error, setError] = useState(false);
   const { login } = useAuth();
   const { setInstitutionName } = useApp();
@@ -119,15 +119,15 @@ export default function TeacherLogin() {
 
             <div className="space-y-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium leading-none">Institution Code</label>
+                <label className="text-sm font-medium leading-none">Institution ID</label>
                 <div className="relative">
                   <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                   <input
-                    type="number"
+                    type="text"
                     value={instId}
                     onChange={(e) => setInstId(e.target.value)}
-                    placeholder="e.g. 1"
-                    className="flex h-11 w-full rounded-md border border-border bg-background pl-10 pr-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 transition-colors"
+                    placeholder="e.g. stmarys2026"
+                    className="flex h-11 w-full rounded-md border border-border bg-background pl-10 pr-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 transition-colors font-mono"
                   />
                 </div>
               </div>

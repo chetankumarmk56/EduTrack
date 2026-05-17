@@ -10,6 +10,39 @@ from app.core.security import verify_password, create_access_token, create_refre
 from app.core.logger import logger
 from typing import Optional
 
+async def resolve_institution_id(db: AsyncSession, raw: Optional[str]) -> Optional[int]:
+    """
+    The X-Institution-Id header may carry either the user-facing slug (which
+    Super-Admin sets — could be alphanumeric or purely digits like '2') OR a
+    raw primary key. Try slug first so a numeric-looking slug isn't mistaken
+    for a PK. Trashed (soft-deleted) institutions are not resolved.
+    """
+    if not raw:
+        return None
+    s = raw.strip()
+    # 1. Slug match (case-insensitive). Covers the common case where the user
+    #    typed exactly what Super-Admin assigned them.
+    result = await db.execute(
+        select(Institution.id).where(
+            Institution.slug == s.lower(),
+            Institution.deleted_at.is_(None),
+        )
+    )
+    inst_id = result.scalar()
+    if inst_id is not None:
+        return inst_id
+    # 2. Numeric PK fallback (only meaningful if the input is all digits).
+    if s.isdigit():
+        result = await db.execute(
+            select(Institution.id).where(
+                Institution.id == int(s),
+                Institution.deleted_at.is_(None),
+            )
+        )
+        return result.scalar()
+    return None
+
+
 class AuthService:
     @staticmethod
     async def check_account_lockout(db: AsyncSession, user: User) -> None:
@@ -78,23 +111,15 @@ class AuthService:
 
         if not user:
             return None
-        
-        # ✅ NEW: Check account lockout before attempting password verification
-        await AuthService.check_account_lockout(db, user)
-            
+
         # Password verification is CPU intensive
         pw_start = time.time()
         is_valid = verify_password(password, user.password_hash)
         pw_time = (time.time() - pw_start) * 1000
         logger.debug(f"AUTH_PW_VERIFY: {pw_time:.2f}ms")
-        
+
         if not is_valid:
-            # ✅ NEW: Update failed login attempt
-            await AuthService.update_login_attempt(db, user, success=False)
             return None
-        
-        # ✅ NEW: Reset failed attempts on successful password verification
-        await AuthService.update_login_attempt(db, user, success=True)
             
         if not user.is_active:
              raise HTTPException(status_code=403, detail="Your account has been deactivated.")
@@ -102,8 +127,11 @@ class AuthService:
         if user.role != "super_admin" and institution_id:
             if user.institution_id != institution_id:
                  raise HTTPException(
-                    status_code=403, 
-                    detail="You do not have administrative access to this institution."
+                    status_code=403,
+                    detail=(
+                        "Wrong Institution ID for this account. Make sure you're using the "
+                        "Institution ID your super admin assigned you (not another school's)."
+                    ),
                 )
         
         # Institution status check (already loaded via joinedload)
