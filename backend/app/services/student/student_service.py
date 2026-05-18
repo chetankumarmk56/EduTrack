@@ -152,10 +152,8 @@ class StudentService:
             # Clean up the unified User credential record
             if user_id:
                 from app.models.core import AuditLog
-                from app.models.communication import Notification
 
                 await db.execute(delete(AuditLog).where(AuditLog.user_id == user_id))
-                await db.execute(delete(Notification).where(Notification.user_id == user_id))
                 await db.execute(delete(User).where(User.id == user_id))
 
             if removed_class_id:

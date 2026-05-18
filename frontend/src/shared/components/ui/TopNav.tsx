@@ -7,7 +7,6 @@ import {
 import { useAuth } from '@/shared/contexts/AuthContext';
 import { useApp } from '@/shared/contexts/AppContext';
 import { cn } from '@/shared/lib/utils';
-import NotificationMenu from '@/features/notifications/components/NotificationMenu';
 
 interface TopNavProps {
   onMenuClick?: () => void;
@@ -68,10 +67,6 @@ export default function TopNav({ onMenuClick }: TopNavProps) {
 
         {/* User Actions Segment */}
         <div className="flex items-center gap-4 min-w-max">
-          <NotificationMenu />
-
-          <div className="h-8 w-px bg-glass-border mx-1 hidden sm:block"></div>
-
           {/* Clickable Profile Area */}
           <motion.button
             whileHover={{ x: 2 }}

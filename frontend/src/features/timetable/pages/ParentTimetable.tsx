@@ -352,7 +352,7 @@ export default function ParentTimetable() {
                   <table className="w-full border-collapse min-w-[920px]">
                     <thead>
                       <tr>
-                        <th className="text-left px-4 py-4 text-[10px] font-black uppercase tracking-widest text-text-secondary w-[200px] sticky left-0 bg-[var(--bg-card)] backdrop-blur-xl z-10">
+                        <th className="text-left px-4 py-4 text-[10px] font-black uppercase tracking-widest text-text-secondary w-[200px] sticky left-0 bg-white/95 z-10">
                           Period
                         </th>
                         {DAY_LABELS.map((day, idx) => {
@@ -390,7 +390,7 @@ export default function ParentTimetable() {
                         if (period.period_type !== 'class_period') {
                           return (
                             <tr key={period.id} className="bg-amber-500/[0.04]">
-                              <td className="px-4 py-3 border-t border-glass-border sticky left-0 bg-[var(--bg-card)] backdrop-blur-xl z-10">
+                              <td className="px-4 py-3 border-t border-glass-border sticky left-0 bg-white/95 z-10">
                                 <div className="flex items-center gap-2.5 text-amber-400">
                                   <span className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
                                     <PeriodIcon type={period.period_type} />
@@ -417,7 +417,7 @@ export default function ParentTimetable() {
 
                         return (
                           <tr key={period.id} className="group">
-                            <td className="px-4 py-3 border-t border-glass-border align-top sticky left-0 bg-[var(--bg-card)] backdrop-blur-xl z-10">
+                            <td className="px-4 py-3 border-t border-glass-border align-top sticky left-0 bg-white/95 z-10">
                               <div className="flex items-center gap-2.5">
                                 <span className="w-7 h-7 rounded-lg bg-brand-indigo/10 border border-brand-indigo/20 flex items-center justify-center text-brand-indigo">
                                   <BookOpen className="w-3.5 h-3.5" />

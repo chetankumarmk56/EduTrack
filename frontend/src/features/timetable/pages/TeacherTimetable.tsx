@@ -27,14 +27,6 @@ function PeriodIcon({ type }: { type: SchedulePeriodType }) {
   return <Icon className="w-3.5 h-3.5" />;
 }
 
-/** Deterministic hue per subject so each subject gets its own color across the grid. */
-function subjectHue(name?: string) {
-  if (!name) return 230;
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
-  return h % 360;
-}
-
 type View = 'mine' | 'class';
 
 export default function TeacherTimetable() {
@@ -444,8 +436,6 @@ export default function TeacherTimetable() {
                                 {DAY_LABELS.map((_, day) => {
                                   const slot = classSlotByCoord.get(`${period.id}:${day}`);
                                   const isToday = day === today;
-                                  const subj = slot?.subject?.name;
-                                  const hue = subj ? subjectHue(subj) : 0;
                                   // Highlight cells taught by the current teacher.
                                   const isMine = !!(slot && data && slot.teacher_id === data.teacher_id);
                                   return (
@@ -453,31 +443,23 @@ export default function TeacherTimetable() {
                                       key={day}
                                       className={cn(
                                         'px-2 py-2 border-t border-l border-glass-border align-top min-w-[110px]',
-                                        isToday && 'bg-brand-indigo/[0.05]',
+                                        isMine
+                                          ? 'bg-brand-indigo/[0.12] ring-1 ring-inset ring-brand-indigo/40'
+                                          : isToday
+                                            ? 'bg-brand-indigo/[0.05]'
+                                            : slot?.subject && 'bg-white/[0.02]',
                                       )}
                                     >
-                                      {subj ? (
-                                        <div
-                                          className="rounded-lg border p-1.5 space-y-0.5"
-                                          style={{
-                                            background: isMine
-                                              ? 'rgba(99,102,241,0.10)'
-                                              : `hsla(${hue}, 70%, 50%, 0.08)`,
-                                            borderColor: isMine
-                                              ? 'rgba(99,102,241,0.45)'
-                                              : `hsla(${hue}, 70%, 55%, 0.25)`,
-                                          }}
-                                        >
+                                      {slot?.subject ? (
+                                        <div className="space-y-0.5">
                                           <div className="flex items-center gap-1">
                                             <p
-                                              className="text-[11px] font-black truncate"
-                                              style={{
-                                                color: isMine
-                                                  ? '#a5b4fc'
-                                                  : `hsl(${hue}, 80%, 75%)`,
-                                              }}
+                                              className={cn(
+                                                'text-[11px] font-black truncate',
+                                                isMine ? 'text-brand-indigo' : 'text-white',
+                                              )}
                                             >
-                                              {subj}
+                                              {slot.subject.name}
                                             </p>
                                             {isMine && (
                                               <span className="text-[8px] font-black uppercase tracking-widest px-1 py-px rounded bg-brand-indigo/20 text-brand-indigo border border-brand-indigo/40 shrink-0">
@@ -486,8 +468,13 @@ export default function TeacherTimetable() {
                                             )}
                                           </div>
                                           <p className="text-[9px] text-text-secondary truncate">
-                                            {slot!.teacher?.name || 'TBA'}
+                                            {slot.teacher?.name || 'TBA'}
                                           </p>
+                                          {(slot.school_class?.room_number || slot.room) && (
+                                            <p className="text-[8px] uppercase tracking-widest text-brand-indigo opacity-70">
+                                              Rm {slot.school_class?.room_number || slot.room}
+                                            </p>
+                                          )}
                                         </div>
                                       ) : (
                                         <span className="text-text-secondary opacity-20 text-[10px]">—</span>

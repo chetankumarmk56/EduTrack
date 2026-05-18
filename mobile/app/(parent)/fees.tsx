@@ -408,15 +408,6 @@ export default function FeesScreen() {
           )}
         </View>
 
-        {/* Trust footer */}
-        {fees.length > 0 && (
-          <Animated.View entering={FadeInDown.delay(500)} style={styles.trustRow}>
-            <Ionicons name="shield-checkmark" size={14} color={Colors.textMuted} />
-            <Text style={styles.trustText}>
-              Secured by Razorpay · Payments are encrypted end-to-end
-            </Text>
-          </Animated.View>
-        )}
       </ScrollView>
 
       {/* Sticky amount selector + pay bar */}
@@ -490,19 +481,17 @@ export default function FeesScreen() {
               )}
             </View>
 
-            {dueExceedsTxnLimit && !amountError && (
-              <View style={styles.noticeRow}>
-                <Ionicons name="information-circle" size={13} color={Colors.warning} />
-                <Text style={styles.noticeText}>
-                  Single payment limit is ₹{RAZORPAY_MAX_PER_TXN.toLocaleString('en-IN')}. Pay the rest in another transaction.
-                </Text>
-              </View>
-            )}
-
-            {amountError && (
+            {amountError ? (
               <View style={styles.errorRow}>
                 <Ionicons name="alert-circle" size={13} color={Colors.danger} />
                 <Text style={styles.errorText}>{amountError}</Text>
+              </View>
+            ) : (
+              <View style={styles.trustRow}>
+                <Ionicons name="shield-checkmark" size={13} color={Colors.textMuted} />
+                <Text style={styles.trustText}>
+                  Secured by Razorpay · Payments are encrypted end-to-end
+                </Text>
               </View>
             )}
 
@@ -827,18 +816,6 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 12, fontWeight: '700', color: Colors.danger, flex: 1,
-  },
-  noticeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: `${Colors.warning}12`,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
-  },
-  noticeText: {
-    fontSize: 11, fontWeight: '700', color: Colors.warning, flex: 1,
   },
   payBtn: {
     flexDirection: 'row',

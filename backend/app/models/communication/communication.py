@@ -70,23 +70,6 @@ class AnnouncementRead(Base):
         UniqueConstraint("announcement_id", "parent_id", name="uq_announcement_parent_read"),
     )
 
-class Notification(Base, TimestampMixin):
-    """
-    User-specific notifications (e.g. reminders, alerts).
-    """
-    __tablename__ = "notifications"
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), index=True)
-    title = Column(String)
-    message = Column(Text)
-    type = Column(String, default="INFO") 
-    is_read = Column(Boolean, default=False) 
-    
-    user = relationship("User")
-    institution_id = Column(Integer, ForeignKey("institutions.id"), index=True)
-    institution = relationship("Institution")
-
 class CronLock(Base):
     """Distributed lock for background tasks."""
     __tablename__ = "cron_locks"

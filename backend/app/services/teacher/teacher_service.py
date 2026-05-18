@@ -142,20 +142,18 @@ class TeacherService:
             # 1. Clean up assignments
             await db.execute(delete(TeacherAssignment).where(TeacherAssignment.teacher_id == teacher_id))
             
-            # 2. Clean up notifications/comms if any (optional but good for consistency)
-            from app.models.communication import Notification, Announcement
+            # 2. Clean up comms attached to this teacher
+            from app.models.communication import Announcement
             await db.execute(delete(Announcement).where(Announcement.teacher_id == teacher_id))
-            
+
             # 3. Delete teacher profile
             await db.delete(teacher)
             await db.flush()
-            
+
             # 4. Clean up user credentials and audit trail
             if user_id:
                 from app.models.core import AuditLog
-                from app.models.communication import Notification
                 await db.execute(delete(AuditLog).where(AuditLog.user_id == user_id))
-                await db.execute(delete(Notification).where(Notification.user_id == user_id))
                 await db.execute(delete(User).where(User.id == user_id))
                 
             await db.commit()

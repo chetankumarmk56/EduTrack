@@ -4,7 +4,6 @@ import { marksApi } from '@/features/marks/api';
 import { attendanceApi } from '@/features/attendance/api';
 import { eventsApi } from '@/features/events/api';
 import { financeApi } from '@/features/finance/api';
-import { notificationApi } from '@/features/notifications/api';
 import { useAuth } from './AuthContext';
 import type {
   Student,
@@ -16,7 +15,6 @@ import type {
   Mark,
   Attendance,
   Event,
-  Notification,
   TeacherStats,
   SubjectSummary,
   ParentFeeItem,
@@ -69,13 +67,10 @@ interface AppContextType {
   activeAssignmentId: number | null;
   setActiveAssignmentId: (id: number | null) => void;
 
-  // Parent / notifications
+  // Parent fees
   parentFees: ParentFeeItem[];
-  notifications: Notification[];
   refreshParentFees: () => Promise<void>;
   getParentFees: () => Promise<ParentFeeItem[]>;
-  refreshNotifications: () => Promise<void>;
-  markNotificationRead: (id: number) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -159,7 +154,6 @@ const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
   });
 
   const [parentFees, setParentFees] = useState<ParentFeeItem[]>([]);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
 
   useEffect(() => {
     if (activeAssignmentId) {
@@ -306,24 +300,6 @@ const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
     }
   }, []);
 
-  const refreshNotifications = useCallback(async () => {
-    try {
-      const data: Notification[] = await notificationApi.getNotifications();
-      setNotifications(data);
-    } catch (err) {
-      console.error("Notifications Fetch Error:", err);
-    }
-  }, []);
-
-  const markNotificationRead = useCallback(async (id: number) => {
-    try {
-      await notificationApi.markAsRead(id);
-      setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
-    } catch (err) {
-      console.error("Mark Read Error:", err);
-    }
-  }, []);
-
   const [currentlyFetchingMarks, setCurrentlyFetchingMarks] = useState<string | null>(null);
 
   const fetchClassMarks = async (subject: string, schoolClassId?: number, examId?: number): Promise<Mark[]> => {
@@ -390,11 +366,6 @@ const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
         }).catch(err => console.error("Failed to load student teachers:", err));
       }
 
-      const notificationTimer = setTimeout(() => {
-        refreshNotifications();
-      }, 500);
-
-      return () => clearTimeout(notificationTimer);
     }
   }, [authState]);
 
@@ -460,11 +431,8 @@ const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
       fetchSubjectSummary,
       subjectSummaries,
       parentFees,
-      notifications,
       refreshParentFees,
       getParentFees,
-      refreshNotifications,
-      markNotificationRead,
     }}>
       {children}
     </AppContext.Provider>

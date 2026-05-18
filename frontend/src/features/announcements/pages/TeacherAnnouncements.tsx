@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Megaphone, Plus, Send, Trash2, X,
@@ -437,8 +438,11 @@ export default function TeacherAnnouncements() {
         )}
       </div>
 
-      {/* Creation Modal */}
-      <AnimatePresence>
+      {/* Creation Modal — portalled to document.body so it escapes any
+          ancestor `transform` (PageWrapper's framer-motion animation creates
+          a containing block that breaks position:fixed otherwise). */}
+      {createPortal(
+        <AnimatePresence>
         {isAdding && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <motion.div
@@ -447,10 +451,10 @@ export default function TeacherAnnouncements() {
               className="absolute inset-0 bg-black/90 backdrop-blur-2xl"
             />
             <motion.div
-              initial={{ scale: 0.95, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0, y: 10 }}
-              className="relative w-full max-w-2xl obsidian-card border border-brand-indigo/30 overflow-hidden shadow-2xl max-h-[90vh] overflow-y-auto"
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="relative w-full max-w-2xl obsidian-card border border-brand-indigo/30 shadow-2xl max-h-[90vh] overflow-y-auto"
             >
               <div className="absolute top-0 left-0 w-full h-1 aurora-gradient" />
 
@@ -674,7 +678,9 @@ export default function TeacherAnnouncements() {
             </motion.div>
           </div>
         )}
-      </AnimatePresence>
+        </AnimatePresence>,
+        document.body,
+      )}
     </div>
   );
 }

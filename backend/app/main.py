@@ -30,7 +30,6 @@ from app.api.routes.events import router as events_router
 from app.api.routes.announcements import router as announcements_router
 from app.api.routes.academic import router as academic_router
 from app.api.routes.transport import router as transport_router
-from app.api.routes.notifications import router as notifications_router
 from app.api.routes.finance import router as finance_router
 from app.api.routes.question_bank import router as question_bank_router
 from app.api.routes.lesson_plan import router as lesson_plan_router
@@ -233,7 +232,6 @@ app.include_router(events_router)
 app.include_router(announcements_router)
 app.include_router(academic_router)
 app.include_router(transport_router)
-app.include_router(notifications_router)
 app.include_router(finance_router)
 app.include_router(question_bank_router)
 app.include_router(lesson_plan_router)

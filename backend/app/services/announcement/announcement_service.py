@@ -256,29 +256,14 @@ class AnnouncementService:
         if not target_user_ids:
             return
 
-        # 3. Create in-app notifications (existing behaviour — keeps the bell icon alive)
-        from app.services.notification import notification_service
-        title = f"New Announcement: {announcement.title}"
         body = (
             announcement.message[:100] + "..."
             if len(announcement.message) > 100
             else announcement.message
         )
 
-        for u_id in target_user_ids:
-            await notification_service.create_notification(
-                db,
-                announcement.institution_id,
-                u_id,
-                title=title,
-                message=body,
-                n_type="INFO"
-            )
-        await db.commit()
-
-        # 4. Fan out push notifications with deep-link payload.
-        #    Deliberately wrapped so a push failure never escapes — the
-        #    in-app notification has already landed; push is best-effort.
+        # Fan out push notifications with deep-link payload.
+        # Wrapped so a push failure never escapes — push is best-effort.
         try:
             from app.services.push import push_service, PushNotificationType
 

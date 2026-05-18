@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { MapPin, Clock, Calendar, BookOpen, UserCheck, Trophy, Palmtree, Zap, Sparkles, ChevronRight } from 'lucide-react';
+import { MapPin, Clock, Calendar, BookOpen, UserCheck, Trophy, Palmtree, Zap, Sparkles } from 'lucide-react';
 import { eventsApi } from '@/features/events/api';
 import { type Event as SchoolEvent } from '@/shared/types';
 import { cn } from '@/shared/lib/utils';
@@ -39,7 +39,7 @@ export default function Events() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-12 py-10 pb-32">
+    <div className="w-full px-4 md:px-8 xl:px-12 space-y-12 py-10 pb-32">
       {/* Cinematic Header */}
       <div className="space-y-4 text-center lg:text-left">
          <div className="flex items-center justify-center lg:justify-start gap-3 text-primary text-[11px] font-black uppercase tracking-[0.5em] aurora-pulse">
@@ -49,9 +49,15 @@ export default function Events() {
          <h1 className="text-7xl font-black tracking-tighter text-gradient-crystal leading-tight">
             Upcoming <span className="italic opacity-80">Milestones</span>
          </h1>
-         <p className="text-lg font-bold text-muted-foreground/60 max-w-2xl">
+         <p className="text-lg font-bold text-muted-foreground/60 max-w-3xl">
             Live synchronization of academic events, campus gatherings, and milestone markers across the institutional network.
          </p>
+         {!loading && events.length > 0 && (
+           <div className="flex items-center gap-2 pt-2">
+             <span className="text-[10px] font-black uppercase tracking-[0.3em] text-primary">{events.length} active</span>
+             <span className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/40">events on the timeline</span>
+           </div>
+         )}
       </div>
 
       {loading ? (
@@ -71,81 +77,68 @@ export default function Events() {
           </div>
         </div>
       ) : (
-        <StaggerContainer className="relative space-y-12">
-          {/* Crystalline Timeline Rail */}
-          <div className="absolute left-10 lg:left-14 top-10 bottom-10 w-1.5 rounded-full bg-gradient-to-b from-primary/40 via-violet-500/20 to-transparent shadow-[0_0_15px_rgba(var(--primary),0.2)]" />
-          
+        <StaggerContainer className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6 xl:gap-8">
           {events.map((event) => {
             const styles = getEventStyles(event.type);
-            
+            const eventDate = new Date(event.date);
+
             return (
               <StaggerItem key={event.id}>
-                 <div className="relative pl-24 lg:pl-32 group">
-                    {/* Glowing Timeline Node */}
-                    <div className={cn(
-                      "absolute left-8 lg:left-12 top-4 w-6 h-6 rounded-full border-[6px] border-[#f4f7fa] z-10 transition-all duration-500 group-hover:scale-150 group-hover:shadow-[0_0_20px_rgba(var(--primary),0.5)]",
-                      styles.color.replace('text-', 'bg-')
-                    )} />
+                <div className="crystal-glass p-7 xl:p-8 rounded-[2.5rem] relative overflow-hidden h-full flex flex-col gap-6 transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_30px_60px_-20px_rgba(99,102,241,0.25)] group">
+                  {/* Background accent — fades in on hover */}
+                  <div className={cn("absolute -top-12 -right-12 w-48 h-48 opacity-30 group-hover:opacity-60 transition-opacity rounded-full blur-3xl", styles.bg)} />
 
-                    <div className="crystal-glass p-8 md:p-12 rounded-[3.5rem] hover:translate-x-4 transition-all duration-500 group relative overflow-hidden">
-                       {/* Background Accent */}
-                       <div className={cn("absolute top-0 right-0 w-32 h-32 opacity-0 group-hover:opacity-10 transition-opacity rounded-full blur-3xl", styles.bg)} />
-                       
-                       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-8 relative z-10">
-                          <div className="space-y-4 flex-1">
-                             <div className="flex items-center gap-4">
-                                <div className={cn("p-4 rounded-2xl crystal-glow", styles.bg, styles.color)}>
-                                   {styles.icon}
-                                </div>
-                                <span className={cn("text-[10px] font-black uppercase tracking-[0.3em]", styles.color)}>
-                                   {event.type} Point Identified
-                                </span>
-                             </div>
-                             
-                             <h3 className="text-4xl font-black tracking-tight text-foreground group-hover:text-primary transition-colors leading-none">
-                                {event.title}
-                             </h3>
-                             
-                             {event.description && (
-                               <p className="text-base font-bold text-muted-foreground/70 leading-relaxed max-w-3xl">
-                                  {event.description}
-                               </p>
-                             )}
-                          </div>
-                          
-                          <div className="flex flex-col items-end gap-3 shrink-0">
-                             <div className="px-6 py-3 rounded-2xl bg-white border border-slate-100 shadow-sm font-black text-sm text-foreground flex items-center gap-3">
-                                <Calendar className="w-5 h-5 text-primary" />
-                                {new Date(event.date).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}
-                             </div>
-                             <div className="flex items-center gap-6 pr-2">
-                                <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">
-                                   <Clock className="w-4 h-4" /> {event.time}
-                                </div>
-                                <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-emerald-500">
-                                   <MapPin className="w-4 h-4" /> {event.location}
-                                </div>
-                             </div>
-                          </div>
-                       </div>
-                       
-                       <div className="mt-10 pt-8 border-t border-slate-100/50 flex items-center justify-between relative z-10">
-                          <div className="flex items-center gap-4">
-                             <div className="flex -space-x-4">
-                                {[1,2,3].map(p => (
-                                   <div key={p} className="w-10 h-10 rounded-full border-4 border-white bg-slate-100 flex items-center justify-center font-black text-xs text-muted-foreground">
-                                      ?
-                                   </div>
-                                ))}
-                             </div>
-                             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Network Presence Active</p>
-                          </div>
-                          <button className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-primary hover:gap-4 transition-all">
-                             View Protocol <ChevronRight className="w-4 h-4" />
-                          </button>
-                       </div>
+                  {/* Header row: type chip + date badge */}
+                  <div className="flex items-start justify-between gap-4 relative z-10">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={cn("p-3 rounded-2xl crystal-glow shrink-0", styles.bg, styles.color)}>
+                        {styles.icon}
+                      </div>
+                      <span className={cn("text-[10px] font-black uppercase tracking-[0.3em] truncate", styles.color)}>
+                        {event.type}
+                      </span>
                     </div>
-                 </div>
+
+                    <div className="px-4 py-2 rounded-2xl bg-white/80 backdrop-blur border border-slate-100 shadow-sm shrink-0 text-center">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">
+                        {eventDate.toLocaleDateString(undefined, { month: 'short' })}
+                      </p>
+                      <p className="text-2xl font-black text-foreground leading-none tabular-nums">
+                        {eventDate.getDate()}
+                      </p>
+                      <p className="text-[9px] font-black tracking-widest text-muted-foreground/40">
+                        {eventDate.toLocaleDateString(undefined, { year: 'numeric' })}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Title + description */}
+                  <div className="space-y-3 relative z-10 flex-1">
+                    <h3 className="text-2xl xl:text-3xl font-black tracking-tight text-foreground group-hover:text-primary transition-colors leading-tight line-clamp-2">
+                      {event.title}
+                    </h3>
+                    {event.description && (
+                      <p className="text-sm font-medium text-muted-foreground/70 leading-relaxed line-clamp-3">
+                        {event.description}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Meta row: time + location */}
+                  <div className="flex flex-wrap items-center gap-4 pt-4 border-t border-slate-100/60 relative z-10">
+                    {event.time && (
+                      <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">
+                        <Clock className="w-3.5 h-3.5" /> {event.time}
+                      </div>
+                    )}
+                    {event.location && (
+                      <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-emerald-500 min-w-0">
+                        <MapPin className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">{event.location}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </StaggerItem>
             );
           })}
