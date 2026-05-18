@@ -88,7 +88,13 @@ export default function TeacherAttendance() {
       const sClassId = s.school_class?.id ?? s.school_class_id;
       return String(sClassId) === String(targetClassId);
     });
-    return list.sort((a, b) => a.name.localeCompare(b.name));
+    // Backend assigns roll_number in alphabetical order; sort by it so the row
+    // numbers shown match the persisted roll numbers everywhere else.
+    return list.sort((a: any, b: any) => {
+      const ra = a.roll_number ?? Number.MAX_SAFE_INTEGER;
+      const rb = b.roll_number ?? Number.MAX_SAFE_INTEGER;
+      return ra - rb || a.name.localeCompare(b.name);
+    });
   }, [classDirectory, activeAssignment]);
 
   useEffect(() => {
@@ -318,7 +324,7 @@ export default function TeacherAttendance() {
                         className="group transition-all hover:bg-white/5"
                       >
                          <td className="px-10 py-6 font-black text-xs opacity-30 tracking-[0.2em] group-hover:opacity-100 group-hover:text-primary transition-all">
-                           #{ (idx + 1).toString().padStart(2, '0') }
+                           #{ (student.roll_number ?? idx + 1).toString().padStart(2, '0') }
                          </td>
                         <td className="px-10 py-6">
                            <div className="flex items-center gap-5">

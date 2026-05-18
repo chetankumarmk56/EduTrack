@@ -1,74 +1,200 @@
-import httpx
+"""
+Provider-agnostic outbound voice-call orchestrator.
+
+Responsibilities (kept out of the provider so swapping vendors stays cheap):
+  * Phone-number normalization to E.164 (with an India-first default).
+  * Retry with exponential backoff for transient provider failures.
+  * Uniform success/failure logging.
+  * Graceful no-op when the provider isn't configured (dev/test envs).
+
+Public surface:
+    call_service.trigger_call(to_number, message) -> bool
+
+Callers (fee delay reminders, scheduled call triggers, etc.) don't need to
+change. For richer integrations, use `place_call(...)` which returns a
+structured `CallResult`.
+"""
+from __future__ import annotations
+
+import asyncio
 import logging
+import re
 from typing import Optional
+
 from app.core.config import settings
+
+from .providers import (
+    CallProvider,
+    CallProviderError,
+    CallResult,
+    InvalidPhoneNumberError,
+    MissingCredentialsError,
+    TwilioCallProvider,
+)
 
 logger = logging.getLogger(__name__)
 
+# Default country code applied when a caller passes a 10-digit local Indian
+# number. Anything starting with "+" or "00" is treated as already-international
+# and passed through unchanged after stripping separators.
+_DEFAULT_COUNTRY_CODE = "+91"
+
+_SEPARATORS_RE = re.compile(r"[\s\-()]+")
+
+
 class CallService:
-    def __init__(self):
-        self.sid = settings.EXOTEL_SID
-        self.api_key = settings.EXOTEL_API_KEY
-        self.api_token = settings.EXOTEL_API_TOKEN
-        self.from_number = settings.EXOTEL_FROM_NUMBER
-        
-        # Base URL for Exotel Connect Call API
-        self.base_url = f"https://api.exotel.com/v1/Accounts/{self.sid}/Calls/connect.json"
+    """
+    Orchestrates voice-call delivery against a pluggable `CallProvider`.
+
+    Default provider is Twilio. Pass `provider=` to inject an alternative
+    (handy for tests, or future vendor swaps).
+    """
+
+    def __init__(self, provider: Optional[CallProvider] = None):
+        self.provider: CallProvider = provider or TwilioCallProvider()
+
+    # ── public API ──────────────────────────────────────────────────────────
 
     async def trigger_call(self, to_number: str, message: str) -> bool:
         """
-        Triggers an automated voice call via Exotel with Text-to-Speech.
-        
-        Note: Exotel usually requires a 'Url' parameter that serves XML (TwiML-like) 
-        containing the <Say> tag. 
-        For this implementation, we assume a flow is configured or use their TTS URL.
+        Backwards-compatible entrypoint. Returns True iff the call was queued
+        with the provider. Swallows expected failures (missing creds, bad
+        numbers, vendor errors) so callers running inside batch jobs don't
+        get blown up by a single bad row.
+
+        For visibility into *why* a call failed, use `place_call`.
         """
-        if not self.sid or not self.api_key or not self.api_token:
-            logger.warning("CALL_SERVICE: Exotel credentials not configured. Skipping call.")
-            return False
+        result = await self.place_call(to_number=to_number, message=message)
+        return result.success
 
-        # Exotel expects numbers in E.164 or local format. 
-        # We ensure it starts with 0 or +91 for India if not already.
-        clean_number = to_number.strip()
-        if not clean_number.startswith("+") and len(clean_number) == 10:
-            clean_number = f"0{clean_number}"
+    async def place_call(self, *, to_number: str, message: str) -> CallResult:
+        """
+        Place a single call and return a structured `CallResult`. Never
+        raises — all errors are folded into `CallResult.error`.
+        """
+        if not self.provider.is_configured():
+            logger.warning(
+                "CALL_SERVICE: provider %r not configured — skipping call to %s",
+                self.provider.name, _mask_number(to_number),
+            )
+            return CallResult(
+                success=False,
+                provider=self.provider.name,
+                error="provider not configured",
+            )
 
-        # Payload for Exotel API
-        # 'Url' should point to an endpoint that returns the TTS XML.
-        # Example XML: <Response><Say>Hello Parent, ...</Say></Response>
-        # We use a simulated URL here.
-        tts_url = f"http://twimlets.com/message?Message%5B0%5D={httpx.utils.quote(message)}"
+        try:
+            normalized = _normalize_to_e164(to_number)
+        except InvalidPhoneNumberError as exc:
+            logger.error("CALL_SERVICE: %s", exc)
+            return CallResult(
+                success=False,
+                provider=self.provider.name,
+                error=str(exc),
+            )
 
-        payload = {
-            "From": self.from_number,
-            "To": clean_number,
-            "CallerId": self.from_number,
-            "Url": tts_url,
-            "CallType": "transcription"
-        }
+        if not message or not message.strip():
+            logger.error("CALL_SERVICE: refusing to place call with empty message")
+            return CallResult(
+                success=False,
+                provider=self.provider.name,
+                error="empty message",
+            )
 
-        async with httpx.AsyncClient() as client:
+        return await self._dispatch_with_retry(to_number=normalized, message=message)
+
+    # ── retry orchestration ─────────────────────────────────────────────────
+
+    async def _dispatch_with_retry(self, *, to_number: str, message: str) -> CallResult:
+        max_attempts = max(1, settings.TWILIO_MAX_RETRIES)
+        backoff = max(0.0, settings.TWILIO_RETRY_BACKOFF_SECONDS)
+        last_error: Optional[CallProviderError] = None
+
+        for attempt in range(1, max_attempts + 1):
             try:
-                logger.info(f"CALL_SERVICE: Triggering call to {clean_number}...")
-                response = await client.post(
-                    self.base_url,
-                    auth=(self.api_key, self.api_token),
-                    data=payload,
-                    timeout=10.0
+                logger.info(
+                    "CALL_SERVICE: dispatch attempt %d/%d to=%s provider=%s",
+                    attempt, max_attempts, _mask_number(to_number), self.provider.name,
                 )
-                
-                if response.status_code in [200, 201]:
-                    logger.info(f"CALL_SERVICE: Call triggered successfully. SID: {response.json().get('Call', {}).get('Sid')}")
-                    return True
-                else:
-                    logger.error(f"CALL_SERVICE: API Error ({response.status_code}): {response.text}")
-                    return False
-                    
-            except httpx.RequestError as e:
-                logger.error(f"CALL_SERVICE: Request failed: {str(e)}")
-                return False
-            except Exception as e:
-                logger.error(f"CALL_SERVICE: Unexpected error: {str(e)}")
-                return False
+                return await self.provider.place_call(to_number=to_number, message=message)
+            except MissingCredentialsError as exc:
+                # No point retrying — creds aren't going to appear.
+                logger.error("CALL_SERVICE: %s", exc)
+                return CallResult(
+                    success=False, provider=self.provider.name, error=str(exc),
+                )
+            except CallProviderError as exc:
+                last_error = exc
+                if not exc.retryable or attempt >= max_attempts:
+                    logger.error(
+                        "CALL_SERVICE: giving up after %d attempt(s) — %s",
+                        attempt, exc,
+                    )
+                    return CallResult(
+                        success=False,
+                        provider=self.provider.name,
+                        error=str(exc),
+                        vendor_code=exc.vendor_code,
+                    )
+                sleep_for = backoff * (2 ** (attempt - 1))
+                logger.warning(
+                    "CALL_SERVICE: transient failure (%s) — retrying in %.1fs",
+                    exc, sleep_for,
+                )
+                await asyncio.sleep(sleep_for)
+
+        # Defensive — loop always returns above
+        return CallResult(
+            success=False,
+            provider=self.provider.name,
+            error=str(last_error) if last_error else "unknown failure",
+        )
+
+
+# ── helpers ─────────────────────────────────────────────────────────────────
+
+
+def _normalize_to_e164(raw: str) -> str:
+    """
+    Best-effort normalization to E.164. Accepts:
+      * "+919876543210" → "+919876543210"
+      * "00919876543210" → "+919876543210"
+      * "9876543210"     → "+919876543210"  (10-digit local Indian fallback)
+      * "+1 (415) 555-1234" → "+14155551234"
+    Raises `InvalidPhoneNumberError` for anything else.
+    """
+    if raw is None:
+        raise InvalidPhoneNumberError("<None>")
+
+    cleaned = _SEPARATORS_RE.sub("", raw.strip())
+    if not cleaned:
+        raise InvalidPhoneNumberError(raw)
+
+    if cleaned.startswith("+"):
+        digits = cleaned[1:]
+        if not digits.isdigit() or not (8 <= len(digits) <= 15):
+            raise InvalidPhoneNumberError(raw)
+        return "+" + digits
+
+    if cleaned.startswith("00"):
+        digits = cleaned[2:]
+        if not digits.isdigit() or not (8 <= len(digits) <= 15):
+            raise InvalidPhoneNumberError(raw)
+        return "+" + digits
+
+    if cleaned.isdigit() and len(cleaned) == 10:
+        return f"{_DEFAULT_COUNTRY_CODE}{cleaned}"
+
+    raise InvalidPhoneNumberError(raw)
+
+
+def _mask_number(number: str) -> str:
+    """Mask middle digits in logs to avoid leaking PII at scale."""
+    if not number:
+        return "<empty>"
+    if len(number) <= 4:
+        return "*" * len(number)
+    return number[:3] + "*" * (len(number) - 5) + number[-2:]
+
 
 call_service = CallService()

@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown, FadeInUp, LinearTransition } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/features/auth/hooks/useAuth';
-import { marksService, type Mark } from '../../services';
+import { marksService, directoryService, type Mark } from '../../services';
 import { Colors } from '@/shared/constants/Colors';
 import { LoadingScreen, EmptyState, ErrorState } from '@/shared/components/ui/Feedback';
 
@@ -104,6 +104,8 @@ export default function MarksScreen() {
   const { user } = useAuth();
   const [marks, setMarks] = useState<Mark[]>([]);
   const [rankings, setRankings] = useState<Rankings | null>(null);
+  const [schoolClassId, setSchoolClassId] = useState<number | null>(null);
+  const [classAvgPct, setClassAvgPct] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -116,12 +118,14 @@ export default function MarksScreen() {
     if (!studentId) return;
     setError(null);
     try {
-      const [marksData, rankData] = await Promise.all([
+      const [marksData, rankData, profile] = await Promise.all([
         marksService.getMarks(studentId),
         marksService.getRankings(studentId).catch(() => null),
+        directoryService.getMyProfile().catch(() => null),
       ]);
       setMarks(marksData || []);
       setRankings(rankData);
+      setSchoolClassId(profile?.school_class?.id ?? null);
     } catch (e: any) {
       setError(e.message || 'Failed to load marks');
     } finally {
@@ -155,6 +159,45 @@ export default function MarksScreen() {
       return { subject, tests, totalScore, maxScore, pct, best, recent };
     });
   }, [marks]);
+
+  // Fetch class averages for every subject the student has marks in.
+  // Backend returns raw average; convert to percentage using the student's
+  // per-subject average max_score so it's directly comparable to studentPct.
+  useEffect(() => {
+    if (!schoolClassId || summaries.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const results = await Promise.allSettled(
+        summaries.map((s) => marksService.getSubjectSummary(s.subject, schoolClassId)),
+      );
+      if (cancelled) return;
+      const next: Record<string, number> = {};
+      summaries.forEach((s, i) => {
+        const r = results[i];
+        if (r.status !== 'fulfilled' || !r.value.count) return;
+        const avgMax = s.tests.length > 0 ? s.maxScore / s.tests.length : 0;
+        if (avgMax > 0) {
+          next[s.subject] = Math.round((r.value.average / avgMax) * 100);
+        }
+      });
+      setClassAvgPct(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [schoolClassId, summaries]);
+
+  const comparisonChartData = useMemo(
+    () =>
+      summaries
+        .map((s) => ({
+          subject: s.subject,
+          studentPct: s.pct,
+          classPct: classAvgPct[s.subject] ?? null,
+        }))
+        .sort((a, b) => b.studentPct - a.studentPct),
+    [summaries, classAvgPct],
+  );
 
   const sortedSummaries = useMemo(() => {
     const arr = [...summaries];
@@ -255,35 +298,15 @@ export default function MarksScreen() {
                   </View>
                 </View>
 
-                {/* Subject distribution mini bars */}
-                <Text style={styles.distLabel}>SUBJECT DISTRIBUTION</Text>
-                <View style={styles.distRow}>
-                  {sortedSummaries.slice(0, 6).map((s) => (
-                    <View key={s.subject} style={styles.distCol}>
-                      <Text style={styles.distPct}>{s.pct}%</Text>
-                      <View style={styles.distBarTrack}>
-                        <View
-                          style={[
-                            styles.distBar,
-                            {
-                              height: `${Math.max(6, s.pct)}%`,
-                            },
-                          ]}
-                        />
-                      </View>
-                      <Text style={styles.distName} numberOfLines={1}>
-                        {abbreviateSubject(s.subject)}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-                {sortedSummaries.length > 6 && (
-                  <Text style={styles.distMore}>
-                    +{sortedSummaries.length - 6} more — see list below
-                  </Text>
-                )}
               </View>
             </Animated.View>
+
+            {/* Mastery Analytics — Student vs Class Avg (mirrors website) */}
+            {comparisonChartData.length > 0 && (
+              <Animated.View entering={FadeInDown.delay(120)}>
+                <SubjectComparisonChart data={comparisonChartData} />
+              </Animated.View>
+            )}
 
             {/* Top / Focus highlights */}
             {(topSubject || focusSubject) && (
@@ -572,6 +595,158 @@ function RankCard({ label, hint, rank, total, color, icon }: RankCardProps) {
   );
 }
 
+interface ChartDatum {
+  subject: string;
+  studentPct: number;
+  classPct: number | null;
+}
+
+function SubjectComparisonChart({ data }: { data: ChartDatum[] }) {
+  // Each subject group needs ~62px of horizontal space (two 22px bars + gaps + label).
+  // Scroll horizontally if there are too many to fit comfortably.
+  const COL_WIDTH = 62;
+  const Y_TICKS = [100, 75, 50, 25, 0];
+  const CHART_HEIGHT = 180;
+
+  const hasAnyClassAvg = data.some((d) => d.classPct != null);
+
+  return (
+    <View style={chartStyles.card}>
+      <View style={chartStyles.headerRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={chartStyles.title}>Mastery Analytics</Text>
+          <Text style={chartStyles.subtitle}>
+            {hasAnyClassAvg
+              ? 'Your score vs class average for each subject.'
+              : 'Subject-wise average percentage.'}
+          </Text>
+        </View>
+      </View>
+
+      <View style={chartStyles.legendRow}>
+        <View style={chartStyles.legendItem}>
+          <View style={[chartStyles.legendSwatch, { backgroundColor: Colors.primary }]} />
+          <Text style={chartStyles.legendText}>You</Text>
+        </View>
+        <View style={chartStyles.legendItem}>
+          <View style={[chartStyles.legendSwatch, { backgroundColor: '#fbbf24' }]} />
+          <Text style={chartStyles.legendText}>Class Avg</Text>
+        </View>
+      </View>
+
+      <View style={chartStyles.chartRow}>
+        {/* Y-axis labels */}
+        <View style={[chartStyles.yAxis, { height: CHART_HEIGHT }]}>
+          {Y_TICKS.map((t) => (
+            <Text key={t} style={chartStyles.yLabel}>
+              {t}
+            </Text>
+          ))}
+        </View>
+
+        {/* Plot area */}
+        <View style={chartStyles.plotWrap}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingRight: 12 }}
+          >
+            <View>
+              <View style={[chartStyles.plotArea, { height: CHART_HEIGHT }]}>
+                {/* Horizontal grid lines */}
+                {Y_TICKS.map((t, i) => (
+                  <View
+                    key={t}
+                    style={[
+                      chartStyles.gridLine,
+                      { top: (i * CHART_HEIGHT) / (Y_TICKS.length - 1) },
+                    ]}
+                  />
+                ))}
+
+                {/* Grouped bars */}
+                <View style={chartStyles.barsRow}>
+                  {data.map((d) => {
+                    const studentColor =
+                      d.studentPct >= 80
+                        ? Colors.primary
+                        : d.studentPct >= 50
+                        ? `${Colors.primary}99`
+                        : `${Colors.primary}66`;
+                    const studentH = Math.max(2, (d.studentPct / 100) * CHART_HEIGHT);
+                    const classH =
+                      d.classPct != null
+                        ? Math.max(2, (d.classPct / 100) * CHART_HEIGHT)
+                        : 0;
+                    return (
+                      <View key={d.subject} style={[chartStyles.group, { width: COL_WIDTH }]}>
+                        <View style={chartStyles.barPair}>
+                          <View style={chartStyles.barCol}>
+                            <Text style={chartStyles.barValue}>{d.studentPct}%</Text>
+                            <View
+                              style={[
+                                chartStyles.bar,
+                                { height: studentH, backgroundColor: studentColor },
+                              ]}
+                            />
+                          </View>
+                          <View style={chartStyles.barCol}>
+                            <Text
+                              style={[
+                                chartStyles.barValue,
+                                d.classPct == null && { color: Colors.textMuted },
+                              ]}
+                            >
+                              {d.classPct != null ? `${d.classPct}%` : '—'}
+                            </Text>
+                            <View
+                              style={[
+                                chartStyles.bar,
+                                {
+                                  height: classH,
+                                  backgroundColor:
+                                    d.classPct != null ? '#fbbf24' : 'transparent',
+                                  borderWidth: d.classPct == null ? 1 : 0,
+                                  borderColor: Colors.border,
+                                  borderStyle: 'dashed',
+                                },
+                              ]}
+                            />
+                          </View>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* Subject labels under the bars */}
+              <View style={chartStyles.labelRow}>
+                {data.map((d) => (
+                  <View key={d.subject} style={[chartStyles.labelCell, { width: COL_WIDTH }]}>
+                    <Text style={chartStyles.labelText} numberOfLines={1}>
+                      {abbreviateSubject(d.subject, 6)}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          </ScrollView>
+        </View>
+      </View>
+
+      {!hasAnyClassAvg && (
+        <View style={chartStyles.notice}>
+          <Ionicons name="information-circle-outline" size={13} color={Colors.textMuted} />
+          <Text style={chartStyles.noticeText}>
+            Class averages will appear once classmates have recorded marks.
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
 interface HighlightCardProps {
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
@@ -653,53 +828,6 @@ const styles = StyleSheet.create({
   },
   heroGrade: { color: Colors.white, fontSize: 28, fontWeight: '900', letterSpacing: -1 },
   heroGradeSub: { color: 'rgba(255,255,255,0.85)', fontSize: 9, fontWeight: '900', letterSpacing: 1, marginTop: -2 },
-
-  distRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    marginTop: 8,
-    gap: 6,
-  },
-  distCol: { flex: 1, alignItems: 'center' },
-  distPct: {
-    color: Colors.white,
-    fontSize: 11,
-    fontWeight: '900',
-    marginBottom: 4,
-  },
-  distBarTrack: {
-    width: '100%',
-    height: 64,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    borderRadius: 6,
-    justifyContent: 'flex-end',
-    overflow: 'hidden',
-  },
-  distBar: {
-    width: '100%',
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    borderRadius: 6,
-    minHeight: 4,
-  },
-  distName: {
-    color: Colors.white,
-    fontSize: 10,
-    fontWeight: '900',
-    marginTop: 6,
-    letterSpacing: 0.4,
-  },
-  distLabel: {
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: 10, fontWeight: '900', letterSpacing: 1,
-    marginTop: 22,
-  },
-  distMore: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 10,
-    fontWeight: '700',
-    marginTop: 8,
-  },
 
   // RANKS
   rankRow: { flexDirection: 'row', gap: 10 },
@@ -868,4 +996,102 @@ const styles = StyleSheet.create({
   testMax: { fontSize: 12, fontWeight: '700', color: Colors.textMuted },
   testPct: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
   testPctText: { fontSize: 11, fontWeight: '900' },
+});
+
+const chartStyles = StyleSheet.create({
+  card: {
+    backgroundColor: Colors.card,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 16,
+    gap: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  headerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  title: { fontSize: 16, fontWeight: '900', color: Colors.text, letterSpacing: -0.3 },
+  subtitle: { fontSize: 12, fontWeight: '600', color: Colors.textSecondary, marginTop: 2 },
+
+  legendRow: { flexDirection: 'row', gap: 14 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  legendSwatch: { width: 10, height: 10, borderRadius: 3 },
+  legendText: { fontSize: 11, fontWeight: '800', color: Colors.textSecondary, letterSpacing: 0.3 },
+
+  chartRow: { flexDirection: 'row', gap: 8 },
+  yAxis: {
+    width: 28,
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    paddingRight: 4,
+  },
+  yLabel: { fontSize: 9, fontWeight: '800', color: Colors.textMuted, letterSpacing: 0.4 },
+
+  plotWrap: { flex: 1 },
+  plotArea: {
+    position: 'relative',
+    paddingHorizontal: 4,
+  },
+  gridLine: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: Colors.divider,
+    opacity: 0.6,
+  },
+
+  barsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    height: '100%',
+  },
+  group: { alignItems: 'center', justifyContent: 'flex-end' },
+  barPair: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 4,
+    height: '100%',
+  },
+  barCol: {
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    width: 22,
+    height: '100%',
+  },
+  bar: {
+    width: 22,
+    borderTopLeftRadius: 6,
+    borderTopRightRadius: 6,
+  },
+  barValue: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: Colors.text,
+    marginBottom: 2,
+  },
+
+  labelRow: {
+    flexDirection: 'row',
+    marginTop: 6,
+    paddingHorizontal: 4,
+  },
+  labelCell: { alignItems: 'center' },
+  labelText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: Colors.textSecondary,
+    letterSpacing: 0.3,
+  },
+
+  notice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingTop: 4,
+  },
+  noticeText: { fontSize: 11, fontWeight: '700', color: Colors.textMuted, flex: 1 },
 });

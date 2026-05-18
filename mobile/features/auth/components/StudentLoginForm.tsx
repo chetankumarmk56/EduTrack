@@ -14,65 +14,38 @@ interface StudentLoginFormProps {
 export function StudentLoginForm({ fields, loading, onLogin }: StudentLoginFormProps) {
   return (
     <>
-      <Text style={styles.formTitle}>Student Portal</Text>
+      <Text style={styles.formTitle}>Parent Portal</Text>
       <Text style={styles.formSubtitle}>
-        Enter your child&apos;s school details to continue
+        Sign in with the guardian phone you gave the school and your child&apos;s date of birth.
       </Text>
 
       <View style={styles.fields}>
         <Input
-          label="Institution Code"
-          value={fields.institutionId}
-          onChangeText={fields.setInstitutionId}
-          placeholder="e.g. 1"
-          keyboardType="numeric"
-          leftIcon={<Text style={styles.inputIcon}>#</Text>}
+          label="Guardian Phone Number"
+          value={fields.parentPhone}
+          onChangeText={fields.setParentPhone}
+          placeholder="e.g. 9876543210"
+          keyboardType="phone-pad"
+          autoCorrect={false}
+          maxLength={20}
+          leftIcon={<Text style={styles.inputIcon}>📞</Text>}
         />
-        <Input
-          label="Student Name (exactly as registered)"
-          value={fields.studentName}
-          onChangeText={fields.setStudentName}
-          placeholder="e.g. John Doe"
-          autoCapitalize="words"
-          leftIcon={<Text style={styles.inputIcon}>👤</Text>}
-        />
-        <View style={styles.row}>
-          <View style={{ flex: 1 }}>
-            <Input
-              label="Grade"
-              value={fields.classLevel}
-              onChangeText={fields.setClassLevel}
-              placeholder="e.g. 10"
-              keyboardType="numeric"
-            />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Input
-              label="Section"
-              value={fields.section}
-              onChangeText={(t) => fields.setSection(t.toUpperCase())}
-              placeholder="e.g. A"
-              autoCapitalize="characters"
-              maxLength={2}
-            />
-          </View>
-        </View>
 
         <View>
           <DatePicker
-            label="Date of Birth (used as password)"
+            label="Student Date of Birth"
             value={fields.dob}
             onChange={fields.setDob}
             placeholder="Select Date of Birth"
           />
           <Text style={styles.dobHint}>
-            This is used for verification during login.
+            Used together with the guardian number to verify your identity.
           </Text>
         </View>
       </View>
 
       <Button
-        label="Access Student Portal"
+        label="Access Parent Portal"
         onPress={onLogin}
         loading={loading}
         size="lg"
@@ -86,7 +59,6 @@ const styles = StyleSheet.create({
   formTitle: { fontSize: 22, fontWeight: '800', color: Colors.text, letterSpacing: -0.5 },
   formSubtitle: { fontSize: 13, color: Colors.textSecondary, fontWeight: '500', marginTop: -8 },
   fields: { gap: 16, marginTop: 4 },
-  row: { flexDirection: 'row', gap: 12 },
   dobHint: { fontSize: 11, color: Colors.textMuted, marginTop: 8, fontWeight: '500' },
   submitBtn: { marginTop: 4 },
   inputIcon: { fontSize: 16 },

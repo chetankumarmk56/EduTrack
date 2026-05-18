@@ -7,6 +7,11 @@ class Token(BaseModel):
     token_type: str
     role: str
     institution_id: Optional[int] = None
+    # Human-readable school name, surfaced in the response so the client can
+    # render "St. Mary's High School" in the dashboard header instead of
+    # falling back to "Institution 1" (which is what the UI displayed when
+    # only institution_id was available).
+    institution_name: Optional[str] = None
     user: Optional[dict] = None
 
 class TokenPayload(BaseModel):

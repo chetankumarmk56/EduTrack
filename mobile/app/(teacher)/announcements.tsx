@@ -9,6 +9,8 @@ import {
   TextInput,
   RefreshControl,
   Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { announcementService, directoryService, type Announcement } from '../../services';
@@ -214,12 +216,20 @@ export default function TeacherAnnouncements() {
       </ScrollView>
 
       {/* ── new announcement modal ── */}
-      <Modal visible={isModalVisible} animationType="slide" transparent>
+      <Modal
+        visible={isModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setIsModalVisible(false)}
+      >
         {/* Plain View instead of Animated.View — the native Modal already
             slides the layer up from the bottom. Stacking a reanimated
             entering={SlideInUp.springify()} on top of that under the New
             Architecture freezes mid-animation and the sheet never paints. */}
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
           <View style={styles.modalSheet}>
             {/* handle bar */}
             <View style={styles.handleBar} />
@@ -361,7 +371,7 @@ export default function TeacherAnnouncements() {
               </Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -534,7 +544,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    maxHeight: '88%',
+    height: '88%',
     paddingHorizontal: 24,
     paddingBottom: 34,
     paddingTop: 12,

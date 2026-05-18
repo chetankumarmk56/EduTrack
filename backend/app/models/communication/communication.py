@@ -93,3 +93,68 @@ class CronLock(Base):
 
     name = Column(String, primary_key=True)
     locked_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class DevicePlatform(str, Enum):
+    IOS = "ios"
+    ANDROID = "android"
+    WEB = "web"
+
+
+class DeviceToken(Base, TimestampMixin):
+    """
+    Per-device Expo push token. A single user may have many active tokens
+    (phone + tablet + parent's spouse on shared login). Tokens are kept
+    `is_active=False` after Expo reports them as invalid so we can audit
+    them later without re-sending.
+    """
+    __tablename__ = "device_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    institution_id = Column(Integer, ForeignKey("institutions.id"), nullable=False, index=True)
+
+    expo_push_token = Column(String, nullable=False, unique=True, index=True)
+    platform = Column(String, nullable=False, default=DevicePlatform.ANDROID.value)
+    device_name = Column(String, nullable=True)
+
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
+    last_used_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    invalidated_at = Column(DateTime(timezone=True), nullable=True)
+
+    user = relationship("User")
+    institution = relationship("Institution")
+
+    __table_args__ = (
+        Index("ix_device_tokens_user_active", "user_id", "is_active"),
+    )
+
+
+class PushDeliveryLog(Base):
+    """
+    Per-token dispatch record. One row per (notification, device_token)
+    attempt so the operator can answer "why didn't this parent get
+    yesterday's update?" without polling Expo's receipt API directly.
+    """
+    __tablename__ = "push_delivery_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    institution_id = Column(Integer, ForeignKey("institutions.id"), nullable=False, index=True)
+
+    # Which feature emitted this notification (announcement, fee_reminder, attendance_alert, ...)
+    notification_type = Column(String, nullable=False, index=True)
+    # Free-form reference — stringified UUID/int — kept loose so different
+    # features (announcements, fees, attendance) can all log here without
+    # forcing a polymorphic FK.
+    reference_id = Column(String, nullable=True, index=True)
+
+    device_token_id = Column(Integer, ForeignKey("device_tokens.id", ondelete="SET NULL"), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    # queued | sent | failed | invalid_token
+    status = Column(String, nullable=False, default="queued", index=True)
+    expo_ticket_id = Column(String, nullable=True)
+    error_message = Column(Text, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    sent_at = Column(DateTime(timezone=True), nullable=True)

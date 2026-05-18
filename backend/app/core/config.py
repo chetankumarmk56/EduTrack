@@ -68,15 +68,64 @@ class Settings(BaseSettings):
     # Infrastructure
     PORT: int = 8000
 
-    # Exotel Configuration
-    EXOTEL_SID: Optional[str] = None
-    EXOTEL_API_KEY: Optional[str] = None
-    EXOTEL_API_TOKEN: Optional[str] = None
-    EXOTEL_FROM_NUMBER: Optional[str] = None
+    # Twilio Voice Configuration
+    # All four must be set for outbound calls to actually dispatch. When any
+    # is missing, CallService.trigger_call no-ops with a warning instead of
+    # raising, so non-prod environments can run without Twilio creds.
+    TWILIO_ACCOUNT_SID: Optional[str] = None
+    TWILIO_AUTH_TOKEN: Optional[str] = None
+    TWILIO_FROM_NUMBER: Optional[str] = None  # E.164, e.g. "+14155551234"
+    # Optional override; defaults to the public Twilio REST API host.
+    TWILIO_API_BASE_URL: str = "https://api.twilio.com"
+    # Per-attempt HTTP timeout for Twilio API calls (seconds).
+    TWILIO_REQUEST_TIMEOUT_SECONDS: float = 10.0
+    # Total retry attempts (including the first try) for transient failures.
+    TWILIO_MAX_RETRIES: int = 3
+    # Initial backoff in seconds; doubles on each retry.
+    TWILIO_RETRY_BACKOFF_SECONDS: float = 1.0
+    # Default TTS voice for inline TwiML. See Twilio <Say> voice options.
+    TWILIO_TTS_VOICE: str = "alice"
+    TWILIO_TTS_LANGUAGE: str = "en-IN"
 
     # Azure Storage
     AZURE_STORAGE_CONNECTION_STRING: Optional[str] = None
     AZURE_CONTAINER_NAME: str = "announcements"
+
+    # Expo Push Notifications
+    # Optional: only required when you've enabled "Enhanced Push Security" in
+    # the Expo dashboard. Without it, https://exp.host/--/api/v2/push/send
+    # accepts unauthenticated requests, which is fine for dev. In production
+    # set EXPO_ACCESS_TOKEN to a long-lived token from Expo so that abuse
+    # by anyone who fetches a parent's token gets blocked at the source.
+    EXPO_ACCESS_TOKEN: Optional[str] = None
+    EXPO_PUSH_URL: str = "https://exp.host/--/api/v2/push/send"
+    # Hard cap so a runaway dispatch can't tie up the worker indefinitely.
+    EXPO_REQUEST_TIMEOUT_SECONDS: float = 15.0
+    # Expo accepts up to 100 messages per request; we keep some headroom.
+    EXPO_BATCH_SIZE: int = 90
+
+    # Fee Reminder Scheduler
+    # Day-of-week / time gating happens in the configured timezone. Defaults
+    # to Asia/Kolkata since the product is India-first (Razorpay, INR copy).
+    FEE_REMINDER_TIMEZONE: str = "Asia/Kolkata"
+    # "More than a week overdue" — anything strictly greater than this many
+    # days is eligible for reminders. Stored as int days so it's easy to
+    # tune without code changes.
+    FEE_REMINDER_OVERDUE_DAYS: int = 7
+    # Cooldown between reminders to the same StudentFee row, in days. We
+    # use 6 not 7 so a Wednesday-after-DST or a single re-trigger doesn't
+    # accidentally skip a week.
+    FEE_REMINDER_COOLDOWN_DAYS: int = 6
+    # Whether to spin up the in-process Wednesday scheduler on startup.
+    # Set to false when an external cron drives the dispatch endpoint
+    # instead, or when running ad-hoc scripts/tests.
+    FEE_REMINDER_SCHEDULER_ENABLED: bool = True
+    # 24-hour clock — when in the day the reminder should fire on Wednesdays.
+    FEE_REMINDER_SEND_HOUR: int = 9
+    # Whether to additionally place a voice call (via Twilio) to the parent's
+    # phone alongside the push. When Twilio creds are missing the orchestrator
+    # already no-ops, so this flag is mostly for ops/cost control.
+    FEE_REMINDER_VOICE_CALLS_ENABLED: bool = True
     
     model_config = SettingsConfigDict(
         case_sensitive=True,

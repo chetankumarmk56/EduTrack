@@ -32,6 +32,17 @@ export default function EnrollStudentModal({ isOpen, onClose, selectedSchoolClas
     if (form.parent_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.parent_email)) {
       newErrors.parent_email = "Invalid email format.";
     }
+    // Parent phone is now compulsory at enrollment — the parent-portal
+    // login uses (guardian_phone, student_dob), so without a phone the
+    // family literally cannot sign in. Existing students missing a phone
+    // are intentionally left alone; admins can backfill via the edit
+    // modal, but every NEW enrollment must include one.
+    const phoneDigits = (form.parent_phone.match(/\d/g) || []).length;
+    if (!form.parent_phone.trim()) {
+      newErrors.parent_phone = "Parent phone is required for portal login.";
+    } else if (phoneDigits < 10) {
+      newErrors.parent_phone = "Enter a complete phone number (10 digits).";
+    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -151,8 +162,33 @@ export default function EnrollStudentModal({ isOpen, onClose, selectedSchoolClas
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-[9px] font-black uppercase tracking-[0.2em] text-text-secondary ml-4">Parent Phone Number</label>
-                      <input placeholder="+91..." className="input-obsidian" value={form.parent_phone} onChange={e => setForm({ ...form, parent_phone: e.target.value })} />
+                      <label className="text-[9px] font-black uppercase tracking-[0.2em] text-text-secondary ml-4 flex justify-between">
+                        <span>
+                          Parent Phone Number <span className="text-rose-500">*</span>
+                        </span>
+                        {errors.parent_phone && (
+                          <span className="text-rose-500 lowercase tracking-normal italic font-medium">
+                            {errors.parent_phone}
+                          </span>
+                        )}
+                      </label>
+                      <input
+                        type="tel"
+                        inputMode="tel"
+                        placeholder="+91 98765 43210"
+                        className={cn(
+                          "input-obsidian",
+                          errors.parent_phone && "border-rose-500/50 bg-rose-500/[0.02]"
+                        )}
+                        value={form.parent_phone}
+                        onChange={e => {
+                          setForm({ ...form, parent_phone: e.target.value });
+                          if (errors.parent_phone) setErrors({ ...errors, parent_phone: '' });
+                        }}
+                      />
+                      <p className="text-[10px] text-text-secondary opacity-60 ml-4">
+                        Used as the guardian's login credential. At least 10 digits.
+                      </p>
                     </div>
                   </div>
                 </div>

@@ -99,6 +99,9 @@ export interface StudentProfile {
   };
   dob?: string;
   roll_no?: string | number;
+  // Server-assigned alphabetical position within the class.
+  roll_number?: number | null;
+  parent_name?: string;
   parent_phone?: string;
   parent_email?: string;
   whatsapp?: string;

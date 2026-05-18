@@ -11,6 +11,29 @@ from app.core.logger import logger
 
 class StudentService:
     @staticmethod
+    async def _recompute_roll_numbers(db: AsyncSession, institution_id: int, school_class_id: int):
+        """Assign 1..N to students in the given class, alphabetically by name.
+
+        Ties on name are broken by student id so the ordering is deterministic.
+        Called whenever the membership or name of a class changes.
+        """
+        if not school_class_id:
+            return
+        result = await db.execute(
+            select(Student)
+            .where(
+                Student.institution_id == institution_id,
+                Student.school_class_id == school_class_id,
+            )
+        )
+        students = list(result.scalars().all())
+        students.sort(key=lambda s: ((s.name or '').lower(), s.id))
+        for idx, s in enumerate(students, start=1):
+            if s.roll_number != idx:
+                s.roll_number = idx
+        await db.flush()
+
+    @staticmethod
     async def create_student(db: AsyncSession, institution_id: int, student_data: schemas.StudentCreate):
         from app.models.academic import SchoolClass
         data = student_data.model_dump()
@@ -50,6 +73,7 @@ class StudentService:
         # AUTOMATION: Sync StudentFee if class is assigned
         if db_student.school_class_id:
             await StudentService._sync_student_fee(db, db_student.id, db_student.school_class_id, institution_id)
+            await StudentService._recompute_roll_numbers(db, institution_id, db_student.school_class_id)
 
         await db.commit()
         return await StudentService.get_student(db, institution_id, db_student.id)
@@ -95,7 +119,8 @@ class StudentService:
         
         if student:
             user_id = student.user_id
-            
+            removed_class_id = student.school_class_id
+
             # Explicitly delete dependent records to prevent ForeignKey constraint violations
             from app.models.finance import StudentFee, FeeStructure, Payment, PaymentAllocation
             from app.models.attendance import Attendance
@@ -128,11 +153,14 @@ class StudentService:
             if user_id:
                 from app.models.core import AuditLog
                 from app.models.communication import Notification
-                
+
                 await db.execute(delete(AuditLog).where(AuditLog.user_id == user_id))
                 await db.execute(delete(Notification).where(Notification.user_id == user_id))
                 await db.execute(delete(User).where(User.id == user_id))
-                
+
+            if removed_class_id:
+                await StudentService._recompute_roll_numbers(db, institution_id, removed_class_id)
+
             await db.commit()
             return True
         return False
@@ -145,7 +173,10 @@ class StudentService:
         db_student = result.scalars().first()
         if not db_student:
             return None
-            
+
+        previous_class_id = db_student.school_class_id
+        previous_name = db_student.name
+
         update_data = student_data.model_dump(exclude_unset=True)
         if "email" in update_data and update_data["email"] == "":
             update_data["email"] = None
@@ -153,7 +184,7 @@ class StudentService:
         for key, value in update_data.items():
             if hasattr(db_student, key):
                 setattr(db_student, key, value)
-        
+
         if db_student.user_id:
             user_result = await db.execute(select(User).where(User.id == db_student.user_id))
             db_user = user_result.scalars().first()
@@ -162,10 +193,22 @@ class StudentService:
                     db_user.name = update_data["name"]
                 if "email" in update_data:
                     db_user.email = update_data["email"]
-        
+
         # AUTOMATION: Sync StudentFee if class is assigned or changed
         if "school_class_id" in update_data and update_data["school_class_id"]:
             await StudentService._sync_student_fee(db, db_student.id, update_data["school_class_id"], institution_id)
+
+        # Recompute roll numbers for any class whose membership or name order shifted.
+        classes_to_recompute: set[int] = set()
+        if previous_class_id and previous_class_id != db_student.school_class_id:
+            classes_to_recompute.add(previous_class_id)
+        if db_student.school_class_id:
+            name_changed = "name" in update_data and update_data["name"] != previous_name
+            class_changed = previous_class_id != db_student.school_class_id
+            if name_changed or class_changed:
+                classes_to_recompute.add(db_student.school_class_id)
+        for cls_id in classes_to_recompute:
+            await StudentService._recompute_roll_numbers(db, institution_id, cls_id)
 
         await db.commit()
         return await StudentService.get_student(db, institution_id, db_student.id)

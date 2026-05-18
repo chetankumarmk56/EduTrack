@@ -1,11 +1,16 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Drawer } from 'expo-router/drawer';
 import { DrawerContentScrollView, DrawerItemList } from '@react-navigation/drawer';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { Colors } from '@/shared/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, usePathname } from 'expo-router';
+
+// Tracks the last non-profile route the user visited so the avatar toggle can
+// return there. Drawer screens are sibling routes, not a stack, so router.back()
+// would just unwind to the initial screen.
+let lastTeacherRoute: string = '/(teacher)/dashboard';
 
 function CustomTeacherDrawerContent(props: any) {
   const { user, logout } = useAuth();
@@ -50,10 +55,27 @@ function CustomTeacherDrawerContent(props: any) {
 function TeacherHeaderAvatar() {
   const { user } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
+  const onProfile = pathname?.endsWith('/profile');
+
+  // Remember the last non-profile route so the toggle can restore it.
+  useEffect(() => {
+    if (pathname && !pathname.endsWith('/profile')) {
+      lastTeacherRoute = pathname;
+    }
+  }, [pathname]);
+
+  const handlePress = () => {
+    if (onProfile) {
+      router.replace(lastTeacherRoute as any);
+    } else {
+      router.push('/(teacher)/profile');
+    }
+  };
 
   return (
     <TouchableOpacity
-      onPress={() => router.push('/(teacher)/profile')}
+      onPress={handlePress}
       style={styles.headerAvatar}
       activeOpacity={0.7}
     >
@@ -89,8 +111,16 @@ export default function TeacherLayout() {
         drawerItemStyle: { borderRadius: 12, marginVertical: 4, marginHorizontal: 12 },
       }}
     >
-      {/* Drawer order mirrors the centralized web sidebar config in
-          frontend/src/lib/navigation.ts → teacherNavItems. */}
+      {/* Dashboard sits at the top of the drawer so the teacher's home is
+          one tap away from every screen. */}
+      <Drawer.Screen
+        name="dashboard"
+        options={{
+          drawerLabel: 'Dashboard',
+          title: 'Teacher HQ',
+          drawerIcon: ({ color, size }) => <Ionicons name="apps-outline" size={size} color={color} />,
+        }}
+      />
       <Drawer.Screen
         name="my-attendance"
         options={{
@@ -145,17 +175,6 @@ export default function TeacherLayout() {
           drawerLabel: 'Events',
           title: 'Calendar',
           drawerIcon: ({ color, size }) => <Ionicons name="calendar-outline" size={size} color={color} />,
-        }}
-      />
-      {/* Kept as the post-login landing screen but hidden from the drawer
-          per the seven-item teacher portal spec. */}
-      <Drawer.Screen
-        name="dashboard"
-        options={{
-          drawerLabel: 'Home',
-          title: 'Teacher HQ',
-          drawerItemStyle: { display: 'none' },
-          drawerIcon: ({ color, size }) => <Ionicons name="apps-outline" size={size} color={color} />,
         }}
       />
       <Drawer.Screen

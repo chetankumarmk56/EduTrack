@@ -92,4 +92,37 @@ export const marksService = {
     if (raw && Array.isArray(raw.items)) return raw.items;
     return [];
   },
+
+  /**
+   * Create a new exam/test for a given class + subject (Teacher only).
+   */
+  createExam: async (
+    payload: { name: string; term?: string; date?: string },
+    classId: number,
+    subjectId: number,
+  ): Promise<any> => {
+    const res = await apiClient.post(
+      `marks/exams?school_class_id=${classId}&subject_id=${subjectId}`,
+      payload,
+    );
+    return res.data;
+  },
+
+  /**
+   * Rename an existing exam/test (Teacher only).
+   */
+  updateExam: async (examId: number, name: string): Promise<any> => {
+    const res = await apiClient.put(
+      `marks/exams/${examId}?name=${encodeURIComponent(name)}`,
+    );
+    return res.data;
+  },
+
+  /**
+   * Delete an exam/test and all of its marks (Teacher only).
+   */
+  deleteExam: async (examId: number): Promise<any> => {
+    const res = await apiClient.delete(`marks/exams/${examId}`);
+    return res.data;
+  },
 };

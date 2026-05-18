@@ -28,6 +28,58 @@ async def create_student(
 ):
     return await student_service.create_student(db, user.institution_id, student)
 
+@router.post("/parents/login", response_model=Token)
+async def parent_login(
+    login_data: schemas.ParentLogin,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Parent-portal login.
+
+    Credentials are the guardian phone (recorded against the student at
+    enrollment) + the student's date of birth. We deliberately do NOT
+    accept an X-Institution-Id header on this route — the institution_id
+    is derived from the matched `students` row after authentication and
+    embedded in the issued JWT, matching the teacher-login behaviour.
+
+    Tenant isolation is unchanged downstream: every authenticated
+    request still reads `current_user.institution_id` from the token
+    claim and filters its queries by it.
+    """
+    auth_data = await auth_service.authenticate_parent_by_phone(
+        db,
+        parent_phone=login_data.parent_phone,
+        dob=login_data.dob,
+    )
+    if not auth_data:
+        raise HTTPException(
+            status_code=401,
+            detail=(
+                "We couldn't find a student matching that guardian phone and date of birth. "
+                "Check the number you gave the school admin during enrollment, or contact "
+                "the school office."
+            ),
+        )
+
+    # Mirror the cookie convention used by the student endpoint so the
+    # refresh-token flow (edu_refresh_parent_*) keeps working.
+    from app.core.config import settings
+    _user_id = auth_data["user"]["id"]
+    response.set_cookie(
+        key=f"edu_refresh_parent_{_user_id}",
+        value=auth_data.pop("refresh_token"),
+        path="/api/auth/refresh",
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite="Lax",
+        domain=settings.COOKIE_DOMAIN if settings.COOKIE_DOMAIN else None,
+        max_age=7 * 24 * 60 * 60,
+    )
+
+    return auth_data
+
+
 @router.post("/students/login", response_model=Token)
 async def student_login(
     request: Request,  # ✅ NEW: Required for rate limiter
@@ -35,7 +87,13 @@ async def student_login(
     response: Response,
     db: AsyncSession = Depends(get_db)
 ):
-    """Secure endpoint for student/parent login generating JWT token structure."""
+    """
+    Legacy student/parent login (name + class/section + DOB).
+
+    Kept for backward compatibility with older clients. New clients should
+    use POST /api/directory/parents/login, which authenticates by
+    (guardian phone, student DOB) and no longer needs an Institution ID.
+    """
     from app.services.auth.auth_service import resolve_institution_id
     inst_header = request.headers.get("X-Institution-Id")
     institution_id = await resolve_institution_id(db, inst_header)

@@ -17,7 +17,6 @@ import { useDashboard } from '../../hooks';
 import {
   getAttendancePct,
   getSubjectPerformance,
-  getTimeGreeting,
 } from '@/shared/utils/formatters';
 import type { SubjectComparison } from '@/features/dashboard/hooks/useDashboard';
 
@@ -50,7 +49,8 @@ export default function DashboardScreen() {
   const unreadAnnouncements = announcements.filter((a) => !a.is_read).length;
   const latestAnnouncement = announcements[0];
 
-  const displayName = profile?.name || user?.name || 'there';
+  const parentName = profile?.parent_name?.trim() || 'Parent';
+  const studentName = profile?.name || user?.name || '';
   const gradeInfo =
     profile?.school_class?.grade?.level || profile?.class_level
       ? `Grade ${profile?.school_class?.grade?.level || profile?.class_level}${profile?.school_class?.section?.name || profile?.section || ''}`
@@ -77,8 +77,13 @@ export default function DashboardScreen() {
       >
         {/* Greeting */}
         <Animated.View entering={FadeInDown.duration(500)} style={styles.header}>
-          <Text style={styles.greeting}>Good {getTimeGreeting()},</Text>
-          <Text style={styles.userName} numberOfLines={1}>{displayName}</Text>
+          <Text style={styles.greeting}>Welcome,</Text>
+          <Text style={styles.userName} numberOfLines={1}>{parentName}</Text>
+          {studentName ? (
+            <Text style={styles.subGreeting} numberOfLines={1}>
+              Viewing {studentName}'s progress
+            </Text>
+          ) : null}
           {gradeInfo && (
             <View style={styles.badge}>
               <View style={styles.dot} />
@@ -264,6 +269,7 @@ const styles = StyleSheet.create({
   header: { marginBottom: 4 },
   greeting: { fontSize: 14, color: Colors.textSecondary, fontWeight: '600' },
   userName: { fontSize: 28, fontWeight: '900', color: Colors.text, letterSpacing: -1, marginTop: 2 },
+  subGreeting: { fontSize: 13, color: Colors.textMuted, fontWeight: '600', marginTop: 4 },
   badge: {
     flexDirection: 'row',
     alignItems: 'center',

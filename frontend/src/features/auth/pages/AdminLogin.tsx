@@ -29,7 +29,8 @@ export default function AdminLogin() {
       const data = await authApi.login({ username, password }, instId);
 
       setError(null);
-      setInstitutionName(`Institution ${instId}`);
+      // Prefer the real school name when the backend ships it back.
+      setInstitutionName(data.institution_name || `Institution ${instId}`);
       login(data.access_token, {
         ...data.user,
         role: data.role,

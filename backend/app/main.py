@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
@@ -40,11 +41,29 @@ from app.api.routes.reports import router as reports_router
 from app.api.routes.system import router as system_router
 from app.api.routes.timetable import router as timetable_router
 from app.api.routes.teacher_attendance import router as teacher_attendance_router
+from app.api.routes.devices import router as devices_router
 
 # Initialize Logging
 logger = setup_logging()
 
-app = FastAPI(title=settings.APP_NAME, version=settings.VERSION)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Lifespan hook — start the in-process Wednesday fee-reminder scheduler
+    if enabled. Cancelling it on shutdown gives the asyncio loop a clean
+    exit so uvicorn doesn't grumble about "Task was destroyed but pending".
+    """
+    from app.services.finance.fee_reminder_scheduler import start_scheduler, stop_scheduler
+
+    start_scheduler()
+    try:
+        yield
+    finally:
+        await stop_scheduler()
+
+
+app = FastAPI(title=settings.APP_NAME, version=settings.VERSION, lifespan=lifespan)
 
 # ✅ NEW: Register rate limiter with app
 app.state.limiter = limiter
@@ -225,6 +244,7 @@ app.include_router(reports_router)
 app.include_router(system_router)
 app.include_router(timetable_router)
 app.include_router(teacher_attendance_router)
+app.include_router(devices_router)
 
 @app.get("/")
 async def read_root():

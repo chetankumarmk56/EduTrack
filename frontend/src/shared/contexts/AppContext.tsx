@@ -169,6 +169,16 @@ const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
     }
   }, [activeAssignmentId]);
 
+  // Persist institutionName so the value the login flow set (the real
+  // school name returned by the server) survives a hard reload. Without
+  // this, the dashboard would briefly flash "Institution <id>" on first
+  // login and revert to the placeholder default on refresh.
+  useEffect(() => {
+    if (institutionName) {
+      localStorage.setItem('edu_institution_name', institutionName);
+    }
+  }, [institutionName]);
+
   const refreshEvents = useCallback(async () => {
     setIsEventsLoading(true);
     try {
@@ -206,7 +216,13 @@ const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
       localStorage.setItem('edu_cache_last_fetch', String(now));
 
       if (data.institution_name) {
+        // Update both storage and React state so the sidebar/dashboard
+        // refreshes immediately on first login — the previous version
+        // wrote to localStorage but never to state, which meant the UI
+        // kept showing the stale value (often "Institution 1") until a
+        // hard reload.
         localStorage.setItem('edu_institution_name', data.institution_name);
+        setInstitutionName(data.institution_name);
       }
 
       if (data.academic) {

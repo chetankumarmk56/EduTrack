@@ -1,11 +1,16 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Drawer } from 'expo-router/drawer';
 import { DrawerContentScrollView, DrawerItemList } from '@react-navigation/drawer';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { Colors } from '@/shared/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, usePathname } from 'expo-router';
+
+// Tracks the last non-profile route the user visited so the avatar toggle can
+// return there. Drawer screens are sibling routes, not a stack, so router.back()
+// would just unwind to the initial screen (dashboard).
+let lastParentRoute: string = '/(parent)/dashboard';
 
 /**
  * Custom Drawer Content
@@ -58,10 +63,27 @@ function CustomDrawerContent(props: any) {
 function HeaderAvatar() {
   const { user } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
+  const onProfile = pathname?.endsWith('/profile');
+
+  // Remember the last non-profile route so the toggle can restore it.
+  useEffect(() => {
+    if (pathname && !pathname.endsWith('/profile')) {
+      lastParentRoute = pathname;
+    }
+  }, [pathname]);
+
+  const handlePress = () => {
+    if (onProfile) {
+      router.replace(lastParentRoute as any);
+    } else {
+      router.push('/(parent)/profile');
+    }
+  };
 
   return (
     <TouchableOpacity
-      onPress={() => router.push('/(parent)/profile')}
+      onPress={handlePress}
       style={styles.headerAvatar}
       activeOpacity={0.7}
     >

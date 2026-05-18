@@ -2,10 +2,10 @@ import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useApp } from '@/shared/contexts/AppContext';
 import { useAuth } from '@/shared/contexts/AuthContext';
-import { 
+import {
   User, Mail, Phone, Heart,
-  TrendingUp, TrendingDown, Medal as MedalIcon,
-  ShieldCheck, MapPin, CalendarDays
+  TrendingUp, TrendingDown,
+  MapPin, CalendarDays
 } from 'lucide-react';
 import { StaggerContainer, StaggerItem } from '@/shared/components/ui/PageWrapper';
 
@@ -65,13 +65,9 @@ export default function Profile() {
         {/* Header Section */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div className="space-y-4">
-             <div className="flex items-center gap-2 text-primary text-xs font-black uppercase tracking-[0.3em] bg-primary/10 px-4 py-2 rounded-full border border-primary/20 w-fit">
-                <ShieldCheck className="w-4 h-4 shadow-[0_0_10px_rgba(var(--primary),0.5)]" /> Portal Security Verified
-             </div>
              <h1 className="text-6xl font-black tracking-tighter text-foreground leading-[0.9]">
-                Family <span className="text-primary italic">Nexus</span>
+                Profile
              </h1>
-             <p className="text-muted-foreground font-medium max-w-xl">Centralized overview of academic standing and institutional profile data.</p>
           </div>
         </div>
 
@@ -209,22 +205,6 @@ export default function Profile() {
                     </div>
                   </div>
                 </div>
-              </div>
-            </StaggerItem>
-
-            {/* Achievements Card */}
-            <StaggerItem>
-              <div className="premium-glass p-8 rounded-[3rem] shadow-xl">
-                 <div className="flex items-center justify-between mb-8">
-                    <h3 className="text-lg font-black text-foreground tracking-tight">Honors</h3>
-                    <MedalIcon className="w-5 h-5 text-amber-500" />
-                 </div>
-                 <div className="flex flex-col items-center py-6 text-center space-y-4">
-                    <div className="h-16 w-16 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-center">
-                       <MedalIcon className="w-8 h-8 text-slate-300" />
-                    </div>
-                    <p className="text-xs font-medium text-muted-foreground italic max-w-[180px]">No major honors recorded for the current term.</p>
-                 </div>
               </div>
             </StaggerItem>
           </StaggerContainer>

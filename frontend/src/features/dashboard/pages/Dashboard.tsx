@@ -50,7 +50,8 @@ export default function Dashboard() {
       studentAttendance: rawAttendance,
       studentEvents: rawEvents,
       fetchStudentData,
-      parentFees
+      parentFees,
+      institutionName,
    } = useApp();
 
    const [unreadCount, setUnreadCount] = useState(0);
@@ -136,11 +137,11 @@ export default function Dashboard() {
                   <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-12 relative z-10">
                      <div className="space-y-6 flex-1">
                         <div className="flex items-center gap-3 text-primary text-[11px] font-black uppercase tracking-[0.5em] bg-white/40 px-6 py-3 rounded-full border border-white/60 w-fit crystal-glow">
-                           <ShieldCheck className="w-5 h-5" /> Intelligence Command Active
+                           <ShieldCheck className="w-5 h-5" /> Parent Dashboard
                         </div>
                         <div>
-                           <h1 className="text-8xl font-black tracking-tighter text-gradient-crystal leading-[0.8] mb-6">
-                              Celestial <span className="italic opacity-80">Status</span>
+                           <h1 className="text-6xl md:text-7xl font-black tracking-tighter text-gradient-crystal leading-[0.9] mb-6">
+                              {institutionName}
                            </h1>
                            <div className="flex items-center gap-4">
                               <div className="h-14 w-14 rounded-2xl bg-gradient-to-tr from-primary to-indigo-500 p-1 shadow-2xl">
@@ -181,7 +182,7 @@ export default function Dashboard() {
                               <Activity className="w-10 h-10" />
                            </div>
                            <div>
-                              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground mb-1">Presence Index</p>
+                              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground mb-1">Attendance</p>
                               <p className="text-6xl font-black text-foreground tracking-tighter leading-none"><AnimatedCounter value={attendanceCount} suffix="%" /></p>
                            </div>
                         </motion.div>
@@ -224,8 +225,7 @@ export default function Dashboard() {
                      <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-3xl -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-700" />
                      <div className="flex items-center justify-between mb-8">
                         <div>
-                           <h2 className="text-3xl font-black text-gradient-crystal tracking-tight">Fee Nexus</h2>
-                           <p className="text-[10px] font-black uppercase text-muted-foreground/40 tracking-widest mt-1">Financial Obligation Status</p>
+                           <h2 className="text-3xl font-black text-gradient-crystal tracking-tight">Finance</h2>
                         </div>
                         <div className="p-4 rounded-2xl bg-primary/10 text-primary border border-primary/20">
                            <Activity className="w-6 h-6" />
@@ -279,8 +279,7 @@ export default function Dashboard() {
 
                   <div className="flex items-center justify-between mb-12">
                      <div>
-                        <h2 className="text-4xl font-black text-gradient-crystal tracking-tight">Intelligence Matrix</h2>
-                        <p className="text-sm font-bold text-muted-foreground/60 mt-2 uppercase tracking-widest">Cross-domain competency analysis • Live Synchronization</p>
+                        <h2 className="text-4xl font-black text-gradient-crystal tracking-tight">Academic Performance</h2>
                      </div>
                      <ArrowRight className="w-8 h-8 text-primary cursor-pointer hover:translate-x-3 transition-transform" />
                   </div>
@@ -346,7 +345,7 @@ export default function Dashboard() {
                      </svg>
                      <div className="text-center z-10">
                         <p className="text-5xl font-black text-foreground tabular-nums">{attendanceCount}%</p>
-                        <p className="text-[10px] font-black uppercase text-muted-foreground/60 tracking-[0.3em] mt-2">Presence Index</p>
+                        <p className="text-[10px] font-black uppercase text-muted-foreground/60 tracking-[0.3em] mt-2">Attendance</p>
                      </div>
                   </div>
                   <div className="relative z-10">

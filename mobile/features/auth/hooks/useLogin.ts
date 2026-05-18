@@ -14,18 +14,16 @@ export function useLogin() {
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
 
-  // Student login fields
-  const [studentName, setStudentName] = useState('');
-  const [classLevel, setClassLevel] = useState('');
-  const [section, setSection] = useState('');
-  const [dob, setDob] = useState<Date | null>(null); // Changed to Date object
-  const [institutionId, setInstitutionId] = useState('1');
+  // Parent login fields — guardian phone + student DOB. Replaces the older
+  // (name + class + section + DOB + institution code) flow; the backend now
+  // derives institution_id from the matched student record.
+  const [parentPhone, setParentPhone] = useState('');
+  const [dob, setDob] = useState<Date | null>(null);
 
-  // Teacher login fields
+  // Teacher login fields — no institution code; backend derives it.
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [teacherInstId, setTeacherInstId] = useState('1');
 
   const clearStaleSession = async () => {
     await Promise.all(
@@ -38,8 +36,17 @@ export function useLogin() {
 
   const handleStudentLogin = async () => {
     setApiError(null);
-    if (!studentName.trim() || !classLevel.trim() || !section.trim() || !dob || !institutionId) {
-      setApiError('Please fill in all fields.');
+    const phone = parentPhone.trim();
+    if (!phone || !dob) {
+      setApiError('Please enter the guardian phone and student date of birth.');
+      return;
+    }
+    // Mirrors the backend digit count so the user sees a fast local error
+    // before the round-trip. International numbers with leading + and 12+
+    // digits still pass because we count digits only.
+    const digitCount = (phone.match(/\d/g) || []).length;
+    if (digitCount < 10) {
+      setApiError('Please enter a complete phone number (10 digits).');
       return;
     }
 
@@ -55,7 +62,7 @@ export function useLogin() {
     setLoading(true);
     try {
       await clearStaleSession();
-      const data = await authService.loginStudent(studentName.trim(), classLevel.trim(), section.trim().toUpperCase(), dobString, institutionId.trim());
+      const data = await authService.loginParent(phone, dobString);
       if (!isMobileRole(data.role)) {
         setApiError('This account type is not supported in the mobile app. Please use the website.');
         return;
@@ -71,19 +78,22 @@ export function useLogin() {
 
   const handleTeacherLogin = async () => {
     setApiError(null);
-    if (!email.trim() || !password.trim() || !teacherInstId.trim()) {
-      setApiError('Please fill in all fields.');
+    if (!email.trim() || !password.trim()) {
+      setApiError('Please enter your email and password.');
       return;
     }
 
     setLoading(true);
     try {
       await clearStaleSession();
-      const data = await authService.loginTeacher(email.trim(), password, teacherInstId.trim());
+      const data = await authService.loginTeacher(email.trim(), password);
       if (data.role !== 'teacher') {
         setApiError('This account type is not supported in the mobile app. Please use the website.');
         return;
       }
+      // institution_id comes back from the server (resolved off the User
+      // record) and is what every authenticated request will send as
+      // X-Institution-Id thereafter.
       await login(data.access_token, { ...data.user, role: data.role, institution_id: data.institution_id }, String(data.institution_id));
       router.replace('/(teacher)/dashboard');
     } catch (err: any) {
@@ -98,17 +108,13 @@ export function useLogin() {
     loading,
     apiError, setApiError,
     studentFields: {
-      studentName, setStudentName,
-      classLevel, setClassLevel,
-      section, setSection,
+      parentPhone, setParentPhone,
       dob, setDob,
-      institutionId, setInstitutionId,
     },
     teacherFields: {
       email, setEmail,
       password, setPassword,
       showPassword, setShowPassword,
-      teacherInstId, setTeacherInstId,
     },
     handleStudentLogin,
     handleTeacherLogin,

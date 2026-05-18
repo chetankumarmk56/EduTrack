@@ -4,7 +4,7 @@ import { useAuth } from '@/shared/contexts/AuthContext';
 import { useApp } from '@/shared/contexts/AppContext';
 import { authApi } from '@/features/auth/api';
 import { motion } from 'framer-motion';
-import { GraduationCap, Hash, AlertCircle, ChevronDown } from 'lucide-react';
+import { GraduationCap, Phone, AlertCircle, ChevronDown } from 'lucide-react';
 
 const days = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0'));
 const months = [
@@ -19,54 +19,65 @@ const years = Array.from({ length: currentYear - 2000 + 1 }, (_, i) => String(cu
 export default function Login() {
   const { login } = useAuth();
   const { setInstitutionName } = useApp();
-  const [studentName, setStudentName] = useState('');
-  const [classLevel, setClassLevel] = useState('');
-  const [section, setSection] = useState('');
+  // New parent-portal login: guardian phone + student DOB. The school admin
+  // recorded the guardian phone against the student at enrollment time, and
+  // the (phone, DOB) pair is unique in practice — siblings share the phone
+  // but not their dates of birth. Institution ID is no longer required;
+  // backend derives it from the matched student record.
+  const [parentPhone, setParentPhone] = useState('');
   const [dobDay, setDobDay] = useState('');
   const [dobMonth, setDobMonth] = useState('');
   const [dobYear, setDobYear] = useState('');
-  const [error, setError] = useState(false);
-  const [instId, setInstId] = useState('');
-  
+  const [error, setError] = useState<string | null>(null);
+
   const navigate = useNavigate();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    const trimmedName = studentName.trim();
-    const trimmedClass = classLevel.trim();
-    const trimmedSection = section.trim();
 
-    if (!dobDay || !dobMonth || !dobYear || !trimmedName || !trimmedClass || !trimmedSection || !instId) {
-      setError(true);
+    const trimmedPhone = parentPhone.trim();
+    if (!trimmedPhone || !dobDay || !dobMonth || !dobYear) {
+      setError('Please enter the guardian phone number and a complete date of birth.');
       return;
     }
-    
-    const formattedDOB = `${dobYear}-${dobMonth}-${dobDay}`;
-    
-    try {
-      const data = await authApi.login({
-        name: trimmedName,
-        class_level: trimmedClass,
-        section: trimmedSection,
-        dob: formattedDOB,
-        role: 'parent'
-      }, instId);
+    // Reject phones with fewer than 4 digits early so the backend's
+    // validation message isn't the only feedback path.
+    const digitCount = (trimmedPhone.match(/\d/g) || []).length;
+    if (digitCount < 10) {
+      setError('Please enter a complete phone number (10 digits).');
+      return;
+    }
 
-      setError(false);
-      setInstitutionName(`Institution ${instId}`);
+    const formattedDOB = `${dobYear}-${dobMonth}-${dobDay}`;
+
+    try {
+      const data = await authApi.parentLogin({
+        parent_phone: trimmedPhone,
+        dob: formattedDOB,
+      });
+
+      setError(null);
+      // Prefer the real school name returned by the server; only fall back
+      // to the numeric id label if the backend somehow didn't include it.
+      if (data.institution_name) {
+        setInstitutionName(data.institution_name);
+      } else if (data.institution_id) {
+        setInstitutionName(`Institution ${data.institution_id}`);
+      }
       login(data.access_token, {
         ...data.user,
         role: data.role,
-        institution_id: data.institution_id
+        institution_id: data.institution_id,
       });
-      const destination = data.role === 'super_admin' ? '/superadmin/dashboard' : 
-                         data.role === 'admin' ? '/admin/directory' : 
+      const destination = data.role === 'super_admin' ? '/superadmin/dashboard' :
+                         data.role === 'admin' ? '/admin/directory' :
                          '/parent/dashboard';
       navigate(destination);
-    } catch(err) {
-      console.error("Student Login Error:", err);
-      setError(true);
+    } catch (err: any) {
+      console.error('Parent Login Error:', err);
+      // Surface the server's friendly message when present; fall back to
+      // a generic line so we don't leak whether it was the phone or DOB.
+      setError(err?.message || 'Invalid credentials. Please try again.');
     }
   };
 
@@ -132,84 +143,41 @@ export default function Login() {
 
           <form onSubmit={handleLogin} className="space-y-6">
             {error && (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="p-4 rounded-lg bg-danger/10 border border-danger/20 flex items-center gap-3 text-danger text-sm font-medium"
               >
-                <AlertCircle className="w-5 h-5" />
-                <span>Invalid credentials. Please try again.</span>
+                <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                <span>{error}</span>
               </motion.div>
             )}
 
             <div className="space-y-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                  Institution ID
+                <label className="text-sm font-medium leading-none">
+                  Guardian Phone Number
                 </label>
                 <div className="relative">
-                  <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                   <input
-                    type="text"
-                    value={instId}
-                    onChange={(e) => setInstId(e.target.value)}
-                    placeholder="e.g. stmarys2026"
-                    className="flex h-11 w-full rounded-md border border-border bg-background px-10 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-colors font-mono"
+                    type="tel"
+                    value={parentPhone}
+                    onChange={(e) => setParentPhone(e.target.value)}
+                    placeholder="e.g. 9876543210"
+                    autoComplete="tel"
+                    inputMode="tel"
+                    className="flex h-11 w-full rounded-md border border-border bg-background px-10 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 transition-colors"
                   />
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  The same guardian number you gave the school admin during enrollment.
+                </p>
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                  Student Name
-                </label>
-                <div className="relative">
-                   <div className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground font-bold italic">A</div>
-                  <input
-                    type="text"
-                    value={studentName}
-                    onChange={(e) => setStudentName(e.target.value)}
-                    placeholder="e.g. John Doe"
-                    className="flex h-11 w-full rounded-md border border-border bg-background px-10 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                  Grade Level (e.g. 8)
-                </label>
-                <div className="relative">
-                  <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                  <input
-                    type="text"
-                    value={classLevel}
-                    onChange={(e) => setClassLevel(e.target.value)}
-                    placeholder="e.g. 10"
-                    className="flex h-11 w-full rounded-md border border-border bg-background px-10 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                  Section
-                </label>
-                <div className="relative">
-                  <div className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground font-bold italic">S</div>
-                  <input
-                    type="text"
-                    value={section}
-                    onChange={(e) => setSection(e.target.value.toUpperCase())}
-                    placeholder="e.g. A"
-                    className="flex h-11 w-full rounded-md border border-border bg-background px-10 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                  Password (DOB)
+                <label className="text-sm font-medium leading-none">
+                  Student Date of Birth
                 </label>
                 <div className="grid grid-cols-3 gap-3">
                   <div className="relative">

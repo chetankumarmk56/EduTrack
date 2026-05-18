@@ -702,3 +702,33 @@ async def export_ledger(
         headers={"Content-Disposition": f'attachment; filename="{fname_base}.xlsx"'},
     )
 
+
+# ─── Fee reminder dispatcher ─────────────────────────────────────────────────
+# Manually trigger the weekly fee-due push notifications. Designed for an
+# external cron (Render Scheduled Jobs, GitHub Actions, etc.) hitting it
+# every Wednesday at 9 AM local time. The service itself enforces the day
+# guard, so a misfired trigger on Tuesday no-ops cleanly.
+#
+# The same endpoint accepts `force=true` to run dispatch ad-hoc — useful
+# for back-filling a missed week or seeding a test in staging.
+
+@router.post("/fee-reminders/dispatch")
+async def dispatch_fee_reminders(
+    force: bool = Query(False, description="Skip the Wednesday/hour guard"),
+    dry_run: bool = Query(False, description="Compute eligible rows but don't push or bump last_notified_at"),
+    db: AsyncSession = Depends(get_db),
+    admin: UserContext = Depends(require_payment_admin),
+):
+    """
+    Run the weekly fee-reminder push. Returns a summary dict the cron job
+    can log to confirm what was actually sent.
+    """
+    from app.services.finance.fee_reminder_service import fee_reminder_service
+
+    summary = await fee_reminder_service.dispatch_due_reminders(
+        db,
+        force_day=force,
+        dry_run=dry_run,
+    )
+    return summary.as_dict()
+

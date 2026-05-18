@@ -38,6 +38,102 @@ function firstDayOfMonth(): string {
   return localDateStr(new Date(d.getFullYear(), d.getMonth(), 1));
 }
 
+// Audit snapshots are stored as JSON strings in old_value / new_value.
+// The shape varies by action: CHECK_IN → { date, check_in_time }, EDIT → full
+// attendance snapshot, LEAVE actions → { leave_type, start_date, end_date, … }.
+interface AuditSnapshot {
+  date?: string;
+  status?: string;
+  check_in_time?: string | null;
+  check_out_time?: string | null;
+  remarks?: string | null;
+  leave_type?: string;
+  start_date?: string;
+  end_date?: string;
+}
+
+function parseAuditSnapshot(raw: string | null): AuditSnapshot | null {
+  if (!raw) return null;
+  try {
+    const obj = JSON.parse(raw);
+    return obj && typeof obj === 'object' ? obj : null;
+  } catch {
+    return null;
+  }
+}
+
+function deriveAuditStatus(log: AuditLogRecord, snap: AuditSnapshot): string {
+  if (snap.status && ATTENDANCE_STATUSES.includes(snap.status)) return snap.status;
+  // Leave-related entries don't carry attendance status — surface the leave state.
+  if (log.entity_type === 'LEAVE') {
+    if (log.action === 'CREATE_LEAVE') return 'ON_LEAVE';
+    if (log.action === 'APPROVE') return 'ON_LEAVE';
+    return snap.status || '';
+  }
+  if (log.action === 'CHECK_IN') return 'PRESENT';
+  return '';
+}
+
+function formatAuditTime(t: string | null | undefined): string {
+  if (!t) return '—';
+  // Accept either "HH:MM[:SS]" or a full ISO timestamp.
+  if (/^\d{2}:\d{2}/.test(t)) return t.slice(0, 5);
+  const d = new Date(t);
+  return Number.isNaN(d.getTime())
+    ? t
+    : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+// Each check-in/check-out/edit produces its own audit row in the DB. For the
+// attendance view we want a single row per (teacher, date), merging the times
+// and a single status so one full day = one line item.
+interface GroupedAuditRow {
+  key: string;
+  teacher_id: number;
+  date: string;
+  status: string;
+  check_in_time: string | null;
+  check_out_time: string | null;
+  latestAt: string | null;
+}
+
+function groupAuditLogsByDay(logs: AuditLogRecord[]): GroupedAuditRow[] {
+  // Audit log API returns rows newest-first; we walk them in that order and
+  // only fill empty fields, so the most-recent value wins per group.
+  const map = new Map<string, GroupedAuditRow>();
+  for (const log of logs) {
+    const snap = parseAuditSnapshot(log.new_value) || parseAuditSnapshot(log.old_value) || {};
+    const date =
+      snap.date || snap.start_date || (log.created_at ? log.created_at.slice(0, 10) : '');
+    if (!date) continue;
+    const key = `${log.teacher_id}_${date}`;
+
+    let g = map.get(key);
+    if (!g) {
+      g = {
+        key,
+        teacher_id: log.teacher_id,
+        date,
+        status: '',
+        check_in_time: null,
+        check_out_time: null,
+        latestAt: log.created_at,
+      };
+      map.set(key, g);
+    }
+
+    if (!g.status) {
+      const inferred = deriveAuditStatus(log, snap);
+      if (inferred) g.status = inferred;
+    }
+    if (!g.check_in_time && snap.check_in_time) g.check_in_time = snap.check_in_time;
+    if (!g.check_out_time && snap.check_out_time) g.check_out_time = snap.check_out_time;
+  }
+  return Array.from(map.values()).sort((a, b) =>
+    (b.latestAt || '').localeCompare(a.latestAt || ''),
+  );
+}
+
 interface EditModal {
   teacherId: number;
   teacherName: string;
@@ -517,33 +613,57 @@ export default function TeacherAttendanceAdmin() {
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="border-b border-white/5">
-                        {['Time', 'Teacher', 'Action', 'Type', 'Changed By', 'Old Value', 'New Value'].map(h => (
+                        {['Date', 'Teacher', 'Subject', 'Status', 'Check-In', 'Check-Out'].map(h => (
                           <th key={h} className="px-4 py-3 text-left font-black uppercase tracking-widest text-slate-500">{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {auditLogs.map((log) => (
-                        <tr key={log.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                          <td className="px-4 py-3 font-mono text-slate-400 whitespace-nowrap">
-                            {log.created_at ? new Date(log.created_at).toLocaleString() : '—'}
-                          </td>
-                          <td className="px-4 py-3 font-black text-slate-200">{log.teacher_id}</td>
-                          <td className="px-4 py-3">
-                            <span className="px-2 py-0.5 rounded border border-primary/30 text-primary text-[10px] font-black uppercase tracking-widest">
-                              {log.action}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-slate-400 uppercase font-black text-[10px]">{log.entity_type}</td>
-                          <td className="px-4 py-3 text-slate-300">{log.changed_by_name || log.changed_by_id}</td>
-                          <td className="px-4 py-3 text-slate-500 font-mono max-w-xs truncate" title={log.old_value || ''}>
-                            {log.old_value || '—'}
-                          </td>
-                          <td className="px-4 py-3 text-slate-400 font-mono max-w-xs truncate" title={log.new_value || ''}>
-                            {log.new_value || '—'}
-                          </td>
-                        </tr>
-                      ))}
+                      {groupAuditLogsByDay(auditLogs).map((row) => {
+                        const teacher = teacherDirectory.find((t: any) => t.id === row.teacher_id);
+                        const subjects = Array.from(
+                          new Set(
+                            (teacher?.assignments || [])
+                              .map((a: any) => a.subject_ref?.name || a.subject)
+                              .filter(Boolean) as string[],
+                          ),
+                        );
+                        // A teacher who has checked in for the day is PRESENT, even if
+                        // the only audit entry we have is the CHECK_IN itself.
+                        const status =
+                          row.status || (row.check_in_time ? 'PRESENT' : '');
+                        const statusColor =
+                          STATUS_COLORS[status] ||
+                          'text-slate-400 bg-slate-500/10 border-slate-500/20';
+                        return (
+                          <tr key={row.key} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                            <td className="px-4 py-3 font-mono text-slate-300 whitespace-nowrap">
+                              {row.date ? new Date(row.date).toLocaleDateString() : '—'}
+                            </td>
+                            <td className="px-4 py-3 font-black text-slate-200">
+                              {teacher?.name || `Teacher #${row.teacher_id}`}
+                            </td>
+                            <td className="px-4 py-3 text-slate-300">
+                              {subjects.length > 0 ? subjects.join(', ') : '—'}
+                            </td>
+                            <td className="px-4 py-3">
+                              {status ? (
+                                <span className={cn('px-2 py-0.5 rounded border text-[10px] font-black uppercase tracking-widest', statusColor)}>
+                                  {status.replace('_', ' ')}
+                                </span>
+                              ) : (
+                                <span className="text-slate-500">—</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 font-mono text-slate-300 whitespace-nowrap">
+                              {formatAuditTime(row.check_in_time)}
+                            </td>
+                            <td className="px-4 py-3 font-mono text-slate-300 whitespace-nowrap">
+                              {formatAuditTime(row.check_out_time)}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

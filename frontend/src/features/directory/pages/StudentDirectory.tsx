@@ -82,9 +82,17 @@ export default function StudentDirectory() {
         s.classroom?.id === selectedSchoolClassId;
     });
 
-    list.sort((a, b) => a.name.localeCompare(b.name));
+    // Backend now assigns roll_number per class (alphabetical). Fall back to a
+    // local computation for any rows that pre-date the migration backfill.
+    list.sort((a, b) =>
+      ((a.roll_number ?? Number.MAX_SAFE_INTEGER) - (b.roll_number ?? Number.MAX_SAFE_INTEGER)) ||
+      a.name.localeCompare(b.name),
+    );
 
-    let listWithRoll = list.map((s, idx) => ({ ...s, roll_number: idx + 1 }));
+    let listWithRoll = list.map((s, idx) => ({
+      ...s,
+      roll_number: s.roll_number ?? idx + 1,
+    }));
 
     if (searchTerm) {
       const lowSearch = searchTerm.toLowerCase();

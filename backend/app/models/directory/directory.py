@@ -42,6 +42,10 @@ class Student(Base, TimestampMixin):
     is_active = Column(Boolean, default=True)
     plain_password = Column(String, nullable=True)  # Admin-visible for credential recovery
 
+    # Assigned automatically from alphabetical order within the student's class.
+    # Recomputed whenever a student is added, removed, renamed, or moved between classes.
+    roll_number = Column(Integer, nullable=True, index=True)
+
     # New Integrated Parent Fields
     parent_name = Column(String, nullable=True)
     parent_email = Column(String, nullable=True)

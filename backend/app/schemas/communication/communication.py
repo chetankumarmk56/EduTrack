@@ -84,6 +84,35 @@ class AnnouncementResponse(AnnouncementBase):
     
     model_config = ConfigDict(from_attributes=True)
 
+class DevicePlatform(str, Enum):
+    IOS = "ios"
+    ANDROID = "android"
+    WEB = "web"
+
+
+class DeviceTokenRegister(BaseModel):
+    """
+    Payload from the mobile app when it asks the backend to remember the
+    device's Expo push token. We deliberately accept any well-formed
+    Expo token string here — the format check (must start with ExponentPushToken[)
+    happens server-side in the service so we can fail loudly if a stray
+    FCM/APNs token sneaks in.
+    """
+    expo_push_token: str = Field(..., min_length=10, max_length=200)
+    platform: DevicePlatform = DevicePlatform.ANDROID
+    device_name: Optional[str] = Field(None, max_length=120)
+
+
+class DeviceTokenResponse(BaseModel):
+    id: int
+    expo_push_token: str
+    platform: str
+    device_name: Optional[str] = None
+    is_active: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class AnnouncementReadCreate(BaseModel):
     announcement_id: UUID
     parent_id: int

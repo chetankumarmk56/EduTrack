@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useApp } from '@/shared/contexts/AppContext';
 import { useAuth } from '@/shared/contexts/AuthContext';
 import { motion, useInView, AnimatePresence } from 'framer-motion';
-import { BookOpen, Target, Zap, Award, BrainCircuit, X, Calendar, ChevronRight } from 'lucide-react';
+import { BookOpen, Target, Award, BrainCircuit, X, Calendar, ChevronRight } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { getPerformanceStyles } from '@/shared/lib/styleUtils';
 import { StaggerContainer, StaggerItem } from '@/shared/components/ui/PageWrapper';
@@ -153,13 +153,9 @@ export default function Academics() {
          <div className="max-w-7xl mx-auto space-y-12 py-8 px-4 sm:px-6 lg:px-8">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                <div className="space-y-4">
-                  <div className="flex items-center gap-2 text-primary text-xs font-black uppercase tracking-[0.3em] bg-primary/10 px-4 py-2 rounded-full border border-primary/20 w-fit">
-                     <Zap className="w-4 h-4 shadow-[0_0_10px_rgba(var(--primary),0.5)]" /> Academic Intelligence — Live
-                  </div>
                   <h1 className="text-6xl font-black tracking-tighter text-foreground leading-[0.9]">
-                     Performance <span className="text-primary italic">Forge</span>
+                     Academic Performance
                   </h1>
-                  <p className="text-muted-foreground font-medium max-w-xl">Deep-learning analysis of curriculum mastery for <span className="text-foreground font-black px-2 py-0.5 rounded bg-primary/5 border border-primary/10">{activeStudent?.name}</span>.</p>
                </div>
 
                <div className="flex gap-4">
@@ -208,7 +204,7 @@ export default function Academics() {
 
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-12 relative z-10 gap-6">
                      <div>
-                        <h2 className="text-3xl font-black text-foreground tracking-tight underline decoration-primary/30 underline-offset-8">Mastery Analytics</h2>
+                        <h2 className="text-3xl font-black text-foreground tracking-tight underline decoration-primary/30 underline-offset-8">Class Comparison</h2>
                         <p className="text-sm font-medium text-muted-foreground mt-4">Subject-level performance vs cohort averages.</p>
                      </div>
                      <div className="flex gap-3">

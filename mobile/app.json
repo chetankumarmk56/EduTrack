@@ -43,8 +43,21 @@
         }
       ],
       "expo-secure-store",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-notifications",
+        {
+          "color": "#0f0f1a",
+          "defaultChannel": "default"
+        }
+      ]
     ],
+    "notification": {
+      "icon": "./assets/images/icon.png",
+      "color": "#0f0f1a",
+      "androidMode": "default",
+      "androidCollapsedTitle": "EduTrack"
+    },
     "experiments": {
       "typedRoutes": true
     }

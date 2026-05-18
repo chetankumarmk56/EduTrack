@@ -10,33 +10,40 @@ import { authApi } from '@/features/auth/api';
 export default function TeacherLogin() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [instId, setInstId] = useState('');
   const [error, setError] = useState(false);
   const { login } = useAuth();
   const { setInstitutionName } = useApp();
-  
+
   const navigate = useNavigate();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmedEmail = email.trim();
-    if (!instId || !trimmedEmail || !password) {
+    // Teacher login no longer asks for an institution code — backend
+    // resolves it from the User record post-auth and embeds it in the JWT.
+    if (!trimmedEmail || !password) {
       setError(true);
       return;
     }
     try {
-      // Send trimmed email instead of raw email
-      const data = await authApi.login({ email: trimmedEmail, password }, instId);
-      
+      const data = await authApi.login({ email: trimmedEmail, password });
+
       setError(false);
-      setInstitutionName(`Institution ${instId}`);
+      // institution name comes back on the response — use the real
+      // school name when available, fall back to the numeric id only if
+      // the backend somehow didn't include it.
+      if (data.institution_name) {
+        setInstitutionName(data.institution_name);
+      } else if (data.institution_id) {
+        setInstitutionName(`Institution ${data.institution_id}`);
+      }
       login(data.access_token, {
         ...data.user,
         role: data.role,
         institution_id: data.institution_id
       });
-      const destination = data.role === 'super_admin' ? '/superadmin/dashboard' : 
-                         data.role === 'admin' ? '/admin/directory' : 
+      const destination = data.role === 'super_admin' ? '/superadmin/dashboard' :
+                         data.role === 'admin' ? '/admin/directory' :
                          '/teacher/dashboard';
       navigate(destination);
     } catch(err) {
@@ -119,19 +126,6 @@ export default function TeacherLogin() {
 
             <div className="space-y-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium leading-none">Institution ID</label>
-                <div className="relative">
-                  <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                  <input
-                    type="text"
-                    value={instId}
-                    onChange={(e) => setInstId(e.target.value)}
-                    placeholder="e.g. stmarys2026"
-                    className="flex h-11 w-full rounded-md border border-border bg-background pl-10 pr-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 transition-colors font-mono"
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
                 <label className="text-sm font-medium leading-none">Educator Email</label>
                 <div className="relative">
                   <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
@@ -140,6 +134,7 @@ export default function TeacherLogin() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="teacher.name@school.edu"
+                    autoComplete="email"
                     className="flex h-11 w-full rounded-md border border-border bg-background pl-10 pr-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 transition-colors"
                   />
                 </div>

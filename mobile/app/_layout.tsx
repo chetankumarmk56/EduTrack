@@ -5,8 +5,14 @@ import React, { Component, useEffect, type ReactNode } from 'react';
 import 'react-native-reanimated';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Text, TouchableOpacity, View, StyleSheet, ScrollView } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from '@/features/auth/hooks/useAuth';
 import { Colors } from '@/shared/constants/Colors';
+import {
+  installForegroundHandler,
+  subscribeToTokenRotation,
+  type PushNotificationData,
+} from '@/shared/services/pushNotifications';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state: { error: Error | null } = { error: null };
@@ -54,6 +60,80 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
 }
 
 /**
+ * Resolves a push payload to the right in-app destination. Centralised so
+ * that new notification types (fees, attendance) just need to set `screen`
+ * on the data payload server-side and the tap handler already routes
+ * them correctly.
+ */
+function resolveDeepLink(data: PushNotificationData, role?: string): string | null {
+  // Explicit screen wins
+  if (typeof data?.screen === 'string' && data.screen.length > 0) {
+    return data.screen;
+  }
+  // Sensible defaults per notification type. Parent and teacher portals
+  // each have their own announcements route; pick by the logged-in role.
+  if (data?.type === 'announcement') {
+    return role === 'teacher' ? '/(teacher)/announcements' : '/(parent)/announcements';
+  }
+  return null;
+}
+
+/**
+ * Handles both:
+ *   - cold start via a tapped notification (getLastNotificationResponseAsync)
+ *   - taps while the app is already running (addNotificationResponseReceivedListener)
+ *   - push-token rotation (subscribeToTokenRotation)
+ *
+ * Lives inside AuthProvider so we can read the user's role for routing.
+ */
+function NotificationDeepLinkHandler() {
+  const router = useRouter();
+  const { user, isAuthenticated } = useAuth();
+
+  // Make sure foreground display works regardless of auth state — the worst
+  // case is a stale token that Expo will already have invalidated, in which
+  // case nothing arrives.
+  useEffect(() => {
+    installForegroundHandler();
+  }, []);
+
+  // Tap handler — runs once the user is logged in (we won't deep-link into
+  // protected routes otherwise; the AuthGuard would bounce them back).
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    // Cold-start: app was launched by tapping a notification. Run after a
+    // tick so the router has mounted.
+    let cancelled = false;
+    Notifications.getLastNotificationResponseAsync().then((response) => {
+      if (cancelled || !response) return;
+      const data = response.notification?.request?.content?.data as PushNotificationData | undefined;
+      const target = data ? resolveDeepLink(data, user?.role) : null;
+      if (target) {
+        // Defer one tick so the initial route has settled.
+        setTimeout(() => router.push(target as any), 0);
+      }
+    });
+
+    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = response.notification?.request?.content?.data as PushNotificationData | undefined;
+      const target = data ? resolveDeepLink(data, user?.role) : null;
+      if (target) router.push(target as any);
+    });
+
+    const rotation = subscribeToTokenRotation();
+
+    return () => {
+      cancelled = true;
+      subscription.remove();
+      rotation.remove();
+    };
+  }, [isAuthenticated, user?.role, router]);
+
+  return null;
+}
+
+/**
  * Guards all screens inside (parent) and (teacher) — redirects unauthenticated users to /login.
  * Prevents logged-in users from seeing the /login screen.
  */
@@ -86,6 +166,7 @@ export default function RootLayout() {
         <AuthProvider>
           <View style={{ flex: 1, backgroundColor: Colors.background }}>
             <AuthGuard />
+            <NotificationDeepLinkHandler />
             <Stack
               screenOptions={{
                 headerShown: false,

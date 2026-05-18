@@ -181,7 +181,14 @@ export default function ProfileScreen() {
     return grade || user?.school_class?.display_name || '—';
   })();
 
-  const rollNo      = profile?.roll_no   ? String(profile.roll_no) : '—';
+  // Backend assigns roll_number alphabetically within a class. Old records may
+  // still carry the legacy roll_no field, so fall back to it.
+  const rollNo =
+    profile?.roll_number != null
+      ? String(profile.roll_number)
+      : profile?.roll_no
+      ? String(profile.roll_no)
+      : '—';
   const dob         = formatDOB(profile?.dob);
   const parentPhone = profile?.parent_phone || '—';
   const parentEmail = profile?.parent_email || '—';

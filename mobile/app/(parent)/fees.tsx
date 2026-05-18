@@ -8,6 +8,10 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  TextInput,
+  Keyboard,
+  Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
@@ -18,6 +22,10 @@ import { Colors } from '@/shared/constants/Colors';
 import { LoadingScreen, EmptyState, ErrorState } from '@/shared/components/ui/Feedback';
 import { PaymentModal, RazorpayOrder } from '@/features/finance/components/PaymentModal';
 import type { StudentDues } from '@/shared/types';
+
+// Razorpay's standard per-transaction ceiling (₹5,00,000). Larger dues must be
+// split across multiple payments. Higher limits exist but require merchant approval.
+const RAZORPAY_MAX_PER_TXN = 500000;
 
 interface FeeItem {
   id: number;
@@ -80,6 +88,10 @@ export default function FeesScreen() {
   const [orderLoading, setOrderLoading] = useState(false);
   const [verifying, setVerifying] = useState(false);
 
+  // Amount selector state — parent chooses how much to pay (≤ total due)
+  const [payAmountInput, setPayAmountInput] = useState<string>('');
+  const [amountTouched, setAmountTouched] = useState(false);
+
   const studentId = user?.student_id || user?.id;
 
   const fetchFees = useCallback(async () => {
@@ -125,6 +137,38 @@ export default function FeesScreen() {
     return { due, paid, total, pct };
   }, [fees]);
 
+  // Effective per-payment ceiling: smaller of (what's still due) and
+  // (Razorpay's per-transaction cap). When due > cap, parent must pay in installments.
+  const maxPayable = Math.min(totals.due, RAZORPAY_MAX_PER_TXN);
+  const dueExceedsTxnLimit = totals.due > RAZORPAY_MAX_PER_TXN;
+
+  // Seed the pay-amount input whenever the totals load/change and the user
+  // hasn't already typed something custom. Cap at Razorpay's per-txn ceiling.
+  useEffect(() => {
+    if (!amountTouched && totals.due > 0) {
+      setPayAmountInput(String(maxPayable));
+    }
+  }, [maxPayable, totals.due, amountTouched]);
+
+  const parsedPayAmount = useMemo(() => {
+    const n = parseFloat(payAmountInput.replace(/,/g, ''));
+    return Number.isFinite(n) ? n : 0;
+  }, [payAmountInput]);
+
+  const amountError = useMemo(() => {
+    if (totals.due <= 0) return null;
+    if (parsedPayAmount <= 0) return 'Enter an amount greater than ₹0';
+    if (parsedPayAmount > totals.due) {
+      return `Amount cannot exceed ₹${totals.due.toLocaleString('en-IN')}`;
+    }
+    if (parsedPayAmount > RAZORPAY_MAX_PER_TXN) {
+      return `Single payment limit is ₹${RAZORPAY_MAX_PER_TXN.toLocaleString('en-IN')}. Please pay in installments.`;
+    }
+    return null;
+  }, [parsedPayAmount, totals.due]);
+
+  const canPay = totals.due > 0 && !amountError && !orderLoading;
+
   const dueInfo = describeDueDate(dues?.due_date, dues?.is_overdue, totals.due > 0);
 
   const heroColor = totals.due === 0
@@ -136,10 +180,15 @@ export default function FeesScreen() {
     : Colors.primary;
 
   const handleInitializePayment = async () => {
-    if (totals.due <= 0 || !studentId || orderLoading) return;
+    if (!studentId || orderLoading) return;
+    if (amountError || parsedPayAmount <= 0) {
+      Alert.alert('Invalid Amount', amountError || 'Please enter an amount to pay.');
+      return;
+    }
+    Keyboard.dismiss();
     setOrderLoading(true);
     try {
-      const data = await financeService.createOrder(studentId, totals.due);
+      const data = await financeService.createOrder(studentId, parsedPayAmount);
       const rzpOrder: RazorpayOrder = {
         order_id: data.order_id,
         amount: data.amount,
@@ -173,6 +222,7 @@ export default function FeesScreen() {
       });
       setPaymentVisible(false);
       setOrder(null);
+      setAmountTouched(false);
       const rupees = (order.amount / 100).toLocaleString('en-IN');
       Alert.alert('Payment Successful', `₹${rupees} has been recorded. Your fee ledger will update now.`);
       fetchFees();
@@ -193,7 +243,7 @@ export default function FeesScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView
-        contentContainerStyle={[styles.scroll, totals.due > 0 && { paddingBottom: 100 }]}
+        contentContainerStyle={[styles.scroll, totals.due > 0 && { paddingBottom: 240 }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />
@@ -369,30 +419,113 @@ export default function FeesScreen() {
         )}
       </ScrollView>
 
-      {/* Sticky pay bar */}
+      {/* Sticky amount selector + pay bar */}
       {totals.due > 0 && (
-        <View style={styles.payBar}>
-          <View style={styles.payBarInfo}>
-            <Text style={styles.payBarLabel}>Pay Now</Text>
-            <Text style={styles.payBarAmt}>₹{totals.due.toLocaleString('en-IN')}</Text>
-          </View>
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={handleInitializePayment}
-            disabled={orderLoading}
-            style={[styles.payBtn, orderLoading && { opacity: 0.7 }]}
-          >
-            {orderLoading ? (
-              <ActivityIndicator color={Colors.white} />
-            ) : (
-              <>
-                <Ionicons name="lock-closed" size={14} color={Colors.white} />
-                <Text style={styles.payBtnText}>Pay Securely</Text>
-                <Ionicons name="arrow-forward" size={14} color={Colors.white} />
-              </>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.payBarWrap}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        >
+          <View style={styles.payBar}>
+            <View style={styles.amountRow}>
+              <View style={styles.amountLabelCol}>
+                <Text style={styles.payBarLabel}>You Pay</Text>
+                <Text style={styles.amountDueHint}>
+                  of ₹{totals.due.toLocaleString('en-IN')} due
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.amountInputWrap,
+                  amountError ? styles.amountInputError : null,
+                ]}
+              >
+                <Text style={styles.amountInputCurrency}>₹</Text>
+                <TextInput
+                  value={payAmountInput}
+                  onChangeText={(text) => {
+                    // Allow only digits and a single decimal point
+                    const cleaned = text.replace(/[^0-9.]/g, '');
+                    const parts = cleaned.split('.');
+                    const normalized =
+                      parts.length > 2 ? `${parts[0]}.${parts.slice(1).join('')}` : cleaned;
+                    setAmountTouched(true);
+                    setPayAmountInput(normalized);
+                  }}
+                  keyboardType="decimal-pad"
+                  placeholder="0"
+                  placeholderTextColor={Colors.textMuted}
+                  style={styles.amountInput}
+                  maxLength={9}
+                  returnKeyType="done"
+                  onSubmitEditing={Keyboard.dismiss}
+                />
+              </View>
+            </View>
+
+            <View style={styles.quickRow}>
+              <QuickAmountChip
+                label="Half"
+                onPress={() => {
+                  setAmountTouched(true);
+                  setPayAmountInput(String(Math.max(1, Math.round(maxPayable / 2))));
+                }}
+              />
+              <QuickAmountChip
+                label={dueExceedsTxnLimit ? 'Max' : 'Full'}
+                onPress={() => {
+                  setAmountTouched(true);
+                  setPayAmountInput(String(maxPayable));
+                }}
+              />
+              {payAmountInput !== String(maxPayable) && (
+                <QuickAmountChip
+                  label="Reset"
+                  variant="ghost"
+                  onPress={() => {
+                    setAmountTouched(false);
+                    setPayAmountInput(String(maxPayable));
+                  }}
+                />
+              )}
+            </View>
+
+            {dueExceedsTxnLimit && !amountError && (
+              <View style={styles.noticeRow}>
+                <Ionicons name="information-circle" size={13} color={Colors.warning} />
+                <Text style={styles.noticeText}>
+                  Single payment limit is ₹{RAZORPAY_MAX_PER_TXN.toLocaleString('en-IN')}. Pay the rest in another transaction.
+                </Text>
+              </View>
             )}
-          </TouchableOpacity>
-        </View>
+
+            {amountError && (
+              <View style={styles.errorRow}>
+                <Ionicons name="alert-circle" size={13} color={Colors.danger} />
+                <Text style={styles.errorText}>{amountError}</Text>
+              </View>
+            )}
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={handleInitializePayment}
+              disabled={!canPay}
+              style={[styles.payBtn, !canPay && { opacity: 0.5 }]}
+            >
+              {orderLoading ? (
+                <ActivityIndicator color={Colors.white} />
+              ) : (
+                <>
+                  <Ionicons name="lock-closed" size={14} color={Colors.white} />
+                  <Text style={styles.payBtnText}>
+                    Pay ₹{(parsedPayAmount > 0 ? parsedPayAmount : 0).toLocaleString('en-IN')}
+                  </Text>
+                  <Ionicons name="arrow-forward" size={14} color={Colors.white} />
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
       )}
 
       <PaymentModal
@@ -420,6 +553,30 @@ function SummaryTile({ label, value, color }: SummaryTileProps) {
       </Text>
       <Text style={styles.summaryLabel}>{label}</Text>
     </View>
+  );
+}
+
+interface QuickAmountChipProps {
+  label: string;
+  onPress: () => void;
+  variant?: 'solid' | 'ghost';
+}
+function QuickAmountChip({ label, onPress, variant = 'solid' }: QuickAmountChipProps) {
+  return (
+    <TouchableOpacity
+      activeOpacity={0.8}
+      onPress={onPress}
+      style={[styles.quickChip, variant === 'ghost' && styles.quickChipGhost]}
+    >
+      <Text
+        style={[
+          styles.quickChipText,
+          variant === 'ghost' && styles.quickChipTextGhost,
+        ]}
+      >
+        {label}
+      </Text>
+    </TouchableOpacity>
   );
 }
 
@@ -580,16 +737,15 @@ const styles = StyleSheet.create({
   trustText: { fontSize: 11, fontWeight: '700', color: Colors.textMuted },
 
   // PAY BAR
-  payBar: {
+  payBarWrap: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+  },
+  payBar: {
     paddingHorizontal: 18,
-    paddingTop: 12,
+    paddingTop: 14,
     paddingBottom: 24,
     backgroundColor: Colors.card,
     borderTopWidth: 1,
@@ -599,16 +755,95 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 16,
     elevation: 12,
+    gap: 12,
   },
-  payBarInfo: { flex: 1 },
+  amountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  amountLabelCol: { flex: 1 },
   payBarLabel: {
     fontSize: 10, fontWeight: '900',
     color: Colors.textMuted, letterSpacing: 0.6,
+    textTransform: 'uppercase',
   },
-  payBarAmt: { fontSize: 22, fontWeight: '900', color: Colors.text, letterSpacing: -0.8 },
+  amountDueHint: {
+    fontSize: 12, fontWeight: '700', color: Colors.textSecondary, marginTop: 2,
+  },
+  amountInputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surfaceElevated,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    minWidth: 140,
+  },
+  amountInputError: {
+    borderColor: Colors.danger,
+    backgroundColor: `${Colors.danger}10`,
+  },
+  amountInputCurrency: {
+    fontSize: 20, fontWeight: '900', color: Colors.text, marginRight: 4,
+  },
+  amountInput: {
+    flex: 1,
+    fontSize: 22,
+    fontWeight: '900',
+    color: Colors.text,
+    letterSpacing: -0.6,
+    padding: 0,
+    textAlign: 'right',
+    minWidth: 60,
+  },
+  quickRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  quickChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: `${Colors.primary}15`,
+  },
+  quickChipGhost: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  quickChipText: {
+    fontSize: 12, fontWeight: '800', color: Colors.primary, letterSpacing: 0.3,
+  },
+  quickChipTextGhost: {
+    color: Colors.textSecondary,
+  },
+  errorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  errorText: {
+    fontSize: 12, fontWeight: '700', color: Colors.danger, flex: 1,
+  },
+  noticeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: `${Colors.warning}12`,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  noticeText: {
+    fontSize: 11, fontWeight: '700', color: Colors.warning, flex: 1,
+  },
   payBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 8,
     backgroundColor: Colors.primary,
     paddingHorizontal: 18,

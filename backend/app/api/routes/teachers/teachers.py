@@ -59,25 +59,29 @@ async def teacher_login(
     request: Request,
     db: AsyncSession = Depends(get_db)
 ):
-    """Secure endpoint for faculty login generating JWT token structure."""
-    from app.services.auth.auth_service import resolve_institution_id
-    inst_header = request.headers.get("X-Institution-Id")
-    institution_id = await resolve_institution_id(db, inst_header)
-    if inst_header and institution_id is None:
-        raise HTTPException(status_code=401, detail="Unknown Institution ID. Check with your school admin.")
-    if institution_id is None:
-        institution_id = 1
-    
+    """
+    Teacher login — email + password only.
+
+    The teacher's `institution_id` is derived from their `users` row after
+    the password verifies, never trusted from a request header. We still
+    embed it in the issued JWT (and the response body) so every downstream
+    API can keep enforcing per-tenant row-level filtering, exactly as
+    before.
+
+    If a legacy client still sends `X-Institution-Id`, we ignore it for
+    teacher auth — a stale header from a parent-portal session shouldn't
+    block a teacher's login.
+    """
     auth_data = await auth_service.authenticate_portal(
-        db, 
-        institution_id, 
-        email=login_data.email, 
+        db,
+        institution_id=None,  # ← derived from User record post-auth
+        email=login_data.email,
         password=login_data.password,
-        role="teacher"
+        role="teacher",
     )
     if not auth_data:
         raise HTTPException(status_code=401, detail="Invalid educator credentials.")
-        
+
     # Set Refresh Token in HttpOnly Cookie
     response.set_cookie(
         key="edu_refresh_teacher",
@@ -87,7 +91,7 @@ async def teacher_login(
         samesite="lax",
         max_age=7 * 24 * 3600
     )
-    
+
     return auth_data
 
 @router.get("/teachers/", response_model=List[schemas.TeacherResponse])

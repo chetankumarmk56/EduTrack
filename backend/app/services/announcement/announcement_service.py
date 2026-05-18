@@ -198,55 +198,117 @@ class AnnouncementService:
 
     @staticmethod
     async def trigger_announcement_notifications(
-        db: AsyncSession, 
+        db: AsyncSession,
         announcement_id: UUID
     ):
         """
-        Identify target parents and create in-app notifications.
-        Designed to be run as a background task.
+        Resolve the target parent user-ids for an announcement, fan out
+        in-app notifications, and trigger Expo push delivery.
+
+        Runs as a FastAPI background task so the teacher's POST returns
+        instantly. Parent-side targeting honours the same rules as
+        get_announcements_for_parent: CLASS announcements reach every
+        parent of every student in the class; STUDENT announcements reach
+        only that student's parent.
+
+        Errors are swallowed and logged — a flaky Expo response should not
+        bubble up after the user got a 200 for the announcement itself.
         """
+        import logging
+        logger = logging.getLogger(__name__)
+
         # 1. Fetch announcement details
         result = await db.execute(select(Announcement).where(Announcement.id == announcement_id))
         announcement = result.scalars().first()
         if not announcement:
             return
 
-        # 2. Identify target parent user_ids
-        target_user_ids = []
+        # 2. Identify target parent user_ids + student parent_ids for CLASS targets
+        target_user_ids: list[int] = []
+        # Also resolve student-side users so a STUDENT announcement reaches
+        # the student themselves when they have a portal login. (CLASS
+        # announcements already include the parents — the student's own
+        # device is registered under the parent's user_id when they share
+        # the parent login, which is the common case per memory.)
         if announcement.type == AnnouncementType.CLASS:
-            # Find all unique parents in that class
             stmt = select(Parent.user_id).join(Student).where(
                 Student.school_class_id == announcement.class_id,
                 Student.institution_id == announcement.institution_id
             ).distinct()
             res = await db.execute(stmt)
-            target_user_ids = [row for row in res.scalars().all()]
-            
+            target_user_ids = [u for u in res.scalars().all() if u is not None]
+
         elif announcement.type == AnnouncementType.STUDENT:
-            # Find the parent of that specific student
+            # Parent of the student
             stmt = select(Parent.user_id).join(Student).where(
                 Student.id == announcement.student_id
             )
             res = await db.execute(stmt)
-            target_user_ids = [row for row in res.scalars().all()]
+            parent_ids = [u for u in res.scalars().all() if u is not None]
 
-        # 3. Create Notification records
+            # Student's own user (separate login flow)
+            stmt2 = select(Student.user_id).where(Student.id == announcement.student_id)
+            res2 = await db.execute(stmt2)
+            student_user_ids = [u for u in res2.scalars().all() if u is not None]
+
+            target_user_ids = list({*parent_ids, *student_user_ids})
+
+        if not target_user_ids:
+            return
+
+        # 3. Create in-app notifications (existing behaviour — keeps the bell icon alive)
         from app.services.notification import notification_service
+        title = f"New Announcement: {announcement.title}"
+        body = (
+            announcement.message[:100] + "..."
+            if len(announcement.message) > 100
+            else announcement.message
+        )
+
         for u_id in target_user_ids:
-            # We bypass commit for batching if we were using a different session, 
-            # but here we'll use the same session.
-            # To be robust, we'll create them.
             await notification_service.create_notification(
-                db, 
-                announcement.institution_id, 
+                db,
+                announcement.institution_id,
                 u_id,
-                title=f"New Announcement: {announcement.title}",
-                message=announcement.message[:100] + "..." if len(announcement.message) > 100 else announcement.message,
+                title=title,
+                message=body,
                 n_type="INFO"
             )
-        
-        # Commit all notifications
         await db.commit()
+
+        # 4. Fan out push notifications with deep-link payload.
+        #    Deliberately wrapped so a push failure never escapes — the
+        #    in-app notification has already landed; push is best-effort.
+        try:
+            from app.services.push import push_service, PushNotificationType
+
+            data_payload = {
+                "type": PushNotificationType.ANNOUNCEMENT.value,
+                "announcement_id": str(announcement.id),
+                "class_id": announcement.class_id,
+                "student_id": announcement.student_id,
+                "priority": announcement.priority.value if announcement.priority else "NORMAL",
+                # Mobile reads `screen` to deep-link via expo-router. Parent
+                # and student portals both have an `announcements` route.
+                "screen": "/(parent)/announcements",
+            }
+
+            await push_service.send_to_users(
+                db,
+                institution_id=announcement.institution_id,
+                user_ids=target_user_ids,
+                title=announcement.title,
+                body=body,
+                data=data_payload,
+                notification_type=PushNotificationType.ANNOUNCEMENT,
+                reference_id=str(announcement.id),
+                priority="high",
+            )
+        except Exception:
+            logger.exception(
+                "[announcement] push dispatch failed for announcement %s",
+                announcement_id,
+            )
 
     @staticmethod
     async def create_announcement(

@@ -4,7 +4,7 @@ from app.models.directory import Parent, Student, Teacher, TeacherAssignment
 from app.models.attendance import Attendance
 from app.models.mark import Mark, Exam
 from app.models.event import Event
-from app.models.communication import Announcement
+from app.models.communication import Announcement, DeviceToken, DevicePlatform, PushDeliveryLog
 from app.models.transport import Bus, Route, Stop, StudentTransport, BusLocation, NotificationLog
 from app.models.finance import FeeStructure, Payment, PaymentAllocation, FinanceLedger, LedgerEntryType
 from app.models.timetable import SchedulePeriod, TimetableSlot
@@ -21,7 +21,7 @@ __all__ = [
     "Subject", "Grade", "Section", "SchoolClass",
     "Parent", "Student", "Teacher", "TeacherAssignment",
     "Attendance", "Mark", "Exam",
-    "Event", "Announcement", "Base",
+    "Event", "Announcement", "DeviceToken", "DevicePlatform", "PushDeliveryLog", "Base",
     "Bus", "Route", "Stop", "StudentTransport", "BusLocation", "NotificationLog",
     "FeeStructure", "Payment", "PaymentAllocation", "FinanceLedger", "LedgerEntryType",
     "SchedulePeriod", "TimetableSlot",

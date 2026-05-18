@@ -2,6 +2,10 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { STORAGE_KEYS } from '@/shared/constants';
 import { Storage } from '@/shared/utils/storage';
 import apiClient, { onAuthExpired } from '@/shared/services/apiClient';
+import {
+  registerForPushNotifications,
+  unregisterPushNotifications,
+} from '@/shared/services/pushNotifications';
 
 export interface AuthUser {
   id: number;
@@ -68,11 +72,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       Storage.setItem(STORAGE_KEYS.INSTITUTION_ID, newInstitutionId),
       Storage.setItem(STORAGE_KEYS.ROLE, newUser.role),
     ]);
-    
+
     setUser(enrichedUser);
+
+    // Register for push notifications post-login. Fire-and-forget — the
+    // network call shouldn't block the navigation away from the login
+    // screen, and a failure here is non-fatal (we'll retry on next launch).
+    registerForPushNotifications().catch((err) =>
+      console.warn('[AuthContext] push registration failed:', err),
+    );
   }, [fetchProfile]);
 
   const logout = useCallback(async () => {
+    // Unregister push token first while the auth header is still valid.
+    // Best-effort: failure here just means Expo will eventually mark the
+    // token DeviceNotRegistered on its own.
+    await unregisterPushNotifications();
+
     await Promise.all([
       Storage.deleteItem(STORAGE_KEYS.ACCESS_TOKEN),
       Storage.deleteItem(STORAGE_KEYS.USER),
@@ -120,6 +136,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               await Storage.setItem(STORAGE_KEYS.USER, JSON.stringify(updated));
             }
           });
+
+          // Make sure the push token is registered for this session. Idempotent
+          // — pushNotifications.ts dedupes against the last-stored token.
+          registerForPushNotifications().catch((err) =>
+            console.warn('[AuthContext] push registration on resume failed:', err),
+          );
         }
       } catch (error) {
         console.error('[AuthContext] Session restore error:', error);

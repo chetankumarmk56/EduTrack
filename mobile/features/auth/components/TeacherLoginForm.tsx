@@ -124,14 +124,6 @@ export function TeacherLoginForm({ fields, loading, onLogin }: TeacherLoginFormP
       {/* Fields */}
       <View style={styles.fields}>
         <FieldInput
-          label="Institution Code"
-          value={fields.teacherInstId}
-          onChangeText={fields.setTeacherInstId}
-          placeholder="e.g. 1"
-          keyboardType="numeric"
-          icon="business-outline"
-        />
-        <FieldInput
           label="Email Address"
           value={fields.email}
           onChangeText={fields.setEmail}

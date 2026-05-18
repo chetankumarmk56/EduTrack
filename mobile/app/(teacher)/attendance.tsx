@@ -50,9 +50,15 @@ export default function TeacherAttendance() {
     if (!selectedClassId) return;
     try {
       const allStudents = await directoryService.getTeacherStudents();
-      const filtered = allStudents.filter(s => s.school_class?.id === selectedClassId);
+      const filtered = allStudents
+        .filter(s => s.school_class?.id === selectedClassId)
+        .sort((a, b) => {
+          const ra = a.roll_number ?? Number.MAX_SAFE_INTEGER;
+          const rb = b.roll_number ?? Number.MAX_SAFE_INTEGER;
+          return ra - rb || a.name.localeCompare(b.name);
+        });
       setStudents(filtered);
-      
+
       // Initialize attendance with Present for all (backend expects TitleCase)
       const initial: Record<number, 'Present' | 'Absent'> = {};
       filtered.forEach(s => {
@@ -139,19 +145,21 @@ export default function TeacherAttendance() {
           ))}
         </ScrollView>
 
-        <View style={styles.headerRow}>
-          <SectionHeader title={`Students (${students.length})`} />
-          <TouchableOpacity
-            style={styles.markAllBtn}
-            onPress={() => {
-              const allPresent: Record<number, 'Present' | 'Absent'> = {};
-              students.forEach(s => allPresent[s.id] = 'Present');
-              setAttendance(allPresent);
-            }}
-          >
-            <Text style={styles.markAllText}>Mark All Present</Text>
-          </TouchableOpacity>
-        </View>
+        <SectionHeader
+          title={`Students (${students.length})`}
+          rightElement={
+            <TouchableOpacity
+              style={styles.markAllBtn}
+              onPress={() => {
+                const allPresent: Record<number, 'Present' | 'Absent'> = {};
+                students.forEach(s => allPresent[s.id] = 'Present');
+                setAttendance(allPresent);
+              }}
+            >
+              <Text style={styles.markAllText}>Mark All Present</Text>
+            </TouchableOpacity>
+          }
+        />
 
         {students.length === 0 ? (
           <View style={styles.empty}>
@@ -178,7 +186,7 @@ export default function TeacherAttendance() {
                     </View>
                     <View>
                       <Text style={styles.studentName}>{student.name}</Text>
-                      <Text style={styles.rollNo}>Roll No: {student.roll_no || index + 1}</Text>
+                      <Text style={styles.rollNo}>Roll No: {student.roll_number ?? student.roll_no ?? index + 1}</Text>
                     </View>
                   </View>
                   
@@ -233,7 +241,6 @@ const styles = StyleSheet.create({
   },
   classText: { fontSize: 14, fontWeight: '700', color: Colors.textMuted },
   selectedClassText: { color: Colors.white },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   markAllBtn: { padding: 5 },
   markAllText: { fontSize: 12, color: Colors.primary, fontWeight: '700' },
   studentList: { gap: 12, marginBottom: 100 },

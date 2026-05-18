@@ -75,6 +75,8 @@ export interface Student {
   classroom?: SchoolClass;
   school_class?: SchoolClass;
   school_class_id?: number;
+  // Server-assigned alphabetical position within the class.
+  roll_number?: number | null;
   parent_name?: string;
   parent_email?: string;
   parent_phone?: string;
@@ -213,6 +215,11 @@ export interface AuthResponse {
   token_type: string;
   role: UserRole;
   institution_id?: number;
+  // Human-readable school name (e.g. "St. Mary's High School").
+  // Populated by every login endpoint; consumed by the dashboard so the
+  // sidebar shows the school name instead of falling back to
+  // "Institution <id>".
+  institution_name?: string;
   user: {
     id: number;
     name: string;

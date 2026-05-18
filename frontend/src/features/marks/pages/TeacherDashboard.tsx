@@ -108,19 +108,19 @@ export default function TeacherDashboard() {
       
       const marksData = await fetchClassMarks(subjectName, schoolClassId, activeExamId);
       
-      setStudents(filteredDB.map((student, idx) => {
+      setStudents(filteredDB.map((student: any, idx: number) => {
         const marksRecords = marksData.filter((d: any) => d.student_id === student.id);
-        const mappedMarks = marksRecords.map((m: any) => ({ 
-          test: m.exam_id || m.test_name, 
-          score: m.score 
+        const mappedMarks = marksRecords.map((m: any) => ({
+          test: m.exam_id || m.test_name,
+          score: m.score
         }));
-        return { 
-          roll: idx + 1, 
-          student_id: student.id, 
-          name: student.name, 
-          marks: mappedMarks 
+        return {
+          roll: student.roll_number ?? idx + 1,
+          student_id: student.id,
+          name: student.name,
+          marks: mappedMarks,
         };
-      })); 
+      }));
     } catch(err) {
       console.error("Failed to load marks:", err);
     } finally {
@@ -140,7 +140,13 @@ export default function TeacherDashboard() {
       const sClassId = s.school_class?.id ?? s.school_class_id;
       return String(sClassId) === String(targetClassId);
     });
-    return list.sort((a, b) => a.name.localeCompare(b.name));
+    // Order by backend-assigned roll_number; fall back to name for any rows
+    // that haven't been backfilled yet.
+    return list.sort((a: any, b: any) => {
+      const ra = a.roll_number ?? Number.MAX_SAFE_INTEGER;
+      const rb = b.roll_number ?? Number.MAX_SAFE_INTEGER;
+      return ra - rb || a.name.localeCompare(b.name);
+    });
   }, [classDirectory, activeAssignment]);
 
 
@@ -162,7 +168,7 @@ export default function TeacherDashboard() {
   useEffect(() => {
     if (activeExamId) return; // marks fetch will handle this case
     setStudents(filteredDB.map((s: any, idx: number) => ({
-      roll: idx + 1,
+      roll: s.roll_number ?? idx + 1,
       student_id: s.id,
       name: s.name,
       marks: [],

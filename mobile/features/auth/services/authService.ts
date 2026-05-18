@@ -1,12 +1,9 @@
 import apiClient from '@/shared/services/apiClient';
 
 export interface LoginPayload {
-  // Student/Parent login (DOB-based)
-  name?: string;
-  class_level?: string;
-  section?: string;
+  // Parent login (guardian phone + student DOB)
+  parent_phone?: string;
   dob?: string;
-  role?: string;
   // Teacher login
   email?: string;
   password?: string;
@@ -31,35 +28,40 @@ export interface AuthResponse {
 
 export const authService = {
   /**
-   * Student / Parent login using DOB as password.
+   * Parent-portal login.
+   *
+   * Credentials are the guardian phone the admin recorded against the
+   * student during enrollment + the student's DOB. The backend looks up
+   * the student by (parent_phone, dob), derives institution_id from the
+   * matched row, and embeds it in the JWT. No institution code is sent
+   * from the client.
    */
-  loginStudent: async (
-    name: string,
-    classLevel: string,
-    section: string,
+  loginParent: async (
+    parentPhone: string,
     dob: string,
-    institutionId: string,
   ): Promise<AuthResponse> => {
     const response = await apiClient.post<AuthResponse>(
-      'directory/students/login',
-      { name, class_level: classLevel, section, dob, role: 'student' },
-      { headers: { 'X-Institution-Id': institutionId } },
+      'directory/parents/login',
+      { parent_phone: parentPhone, dob },
     );
     return response.data;
   },
 
   /**
-   * Teacher login using email + password.
+   * Teacher login using email + password only.
+   *
+   * institution_id is intentionally not sent — the backend resolves it
+   * from the User record after authenticating, and ships it back on the
+   * response body so the mobile app can store it for downstream API calls
+   * that still rely on per-tenant filtering / X-Institution-Id headers.
    */
   loginTeacher: async (
     email: string,
     password: string,
-    institutionId: string,
   ): Promise<AuthResponse> => {
     const response = await apiClient.post<AuthResponse>(
       'directory/teachers/login',
       { email, password },
-      { headers: { 'X-Institution-Id': institutionId } },
     );
     return response.data;
   },
