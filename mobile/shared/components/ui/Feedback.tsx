@@ -1,18 +1,28 @@
 import React from 'react';
 import { View, ActivityIndicator, Text, StyleSheet, StyleProp, ViewStyle } from 'react-native';
 import { Colors } from '@/shared/constants/Colors';
+import { SkeletonPage } from './Skeleton';
 
 interface LoadingScreenProps {
+  /** Legacy prop — kept so existing call sites compile, but no longer
+   *  displayed. The new skeleton placeholder is more informative than a
+   *  message under a spinner. */
   message?: string;
+  /** Render a compact spinner instead of the full skeleton page. Useful for
+   *  inline pulls/refreshes where the surrounding layout is already mounted. */
+  variant?: 'skeleton' | 'spinner';
 }
 
-export function LoadingScreen({ message = 'Loading...' }: LoadingScreenProps) {
-  return (
-    <View style={styles.container}>
-      <ActivityIndicator size="large" color={Colors.primary} />
-      <Text style={styles.message}>{message}</Text>
-    </View>
-  );
+export function LoadingScreen({ message, variant = 'skeleton' }: LoadingScreenProps) {
+  if (variant === 'spinner') {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+        {message ? <Text style={styles.message}>{message}</Text> : null}
+      </View>
+    );
+  }
+  return <SkeletonPage />;
 }
 
 interface EmptyStateProps {

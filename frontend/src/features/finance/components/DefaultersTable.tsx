@@ -27,8 +27,8 @@ export default function DefaultersTable({ defaulters, onClearDues, grades, schoo
   });
 
   return (
-    <div className="lg:col-span-12 premium-glass p-0 rounded-[3rem] shadow-xl overflow-hidden min-h-[500px]">
-      <div className="p-10 border-b border-glass-border flex flex-col md:flex-row md:items-center justify-between gap-6">
+    <div className="lg:col-span-12 premium-glass p-0 rounded-2xl sm:rounded-[3rem] shadow-xl overflow-hidden min-h-[400px] sm:min-h-[500px]">
+      <div className="p-5 sm:p-8 md:p-10 border-b border-glass-border flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6">
         <div>
           <h3 className="text-3xl font-black text-foreground tracking-tighter mb-2">Defaulter Roster</h3>
           <p className="text-sm font-bold text-muted-foreground uppercase tracking-widest">Active collections priority queue</p>

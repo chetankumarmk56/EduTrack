@@ -10,7 +10,13 @@ ExtractionStatus = Literal["pending", "done", "failed", "skipped"]
 
 
 class UploadedFileOut(BaseModel):
-    """Public-facing representation of a stored file."""
+    """Public-facing representation of a stored file.
+
+    The same shape backs both teacher uploads (``file_type='upload'``)
+    and AI-generated artifacts (e.g. ``file_type='question_bank'``).
+    Generator rows fill in ``display_name`` + ``source_*_id`` so the UI
+    can show a clean label and deep-link back to the viewer.
+    """
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -25,6 +31,16 @@ class UploadedFileOut(BaseModel):
     last_used_at: Optional[datetime] = None
     extraction_status: ExtractionStatus
     has_text: bool = False
+
+    # Generator metadata (always present; defaults match the upload case).
+    file_type: str = "upload"
+    display_name: Optional[str] = None
+    version: int = 1
+    source_school_id: Optional[str] = None
+    source_teacher_id: Optional[str] = None
+    source_grade_id: Optional[str] = None
+    source_subject_id: Optional[str] = None
+    source_chapter_id: Optional[str] = None
 
 
 class UploadResultItem(BaseModel):

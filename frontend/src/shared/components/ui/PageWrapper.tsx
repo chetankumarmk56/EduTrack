@@ -7,15 +7,15 @@ interface PageWrapperProps {
 }
 
 export function PageWrapper({ children, speed = 'smooth' }: PageWrapperProps) {
-  const transition: any = speed === 'fast' 
-    ? { type: "spring", stiffness: 300, damping: 30 }
-    : { duration: 0.8, ease: [0.34, 1.56, 0.64, 1] }; // Premium backOut-inspired ease
+  const transition: any = speed === 'fast'
+    ? { duration: 0.15, ease: 'easeOut' }
+    : { duration: 0.22, ease: 'easeOut' };
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
+      exit={{ opacity: 0 }}
       transition={transition}
       className="w-full h-full"
     >
@@ -26,7 +26,7 @@ export function PageWrapper({ children, speed = 'smooth' }: PageWrapperProps) {
 
 export default PageWrapper;
 
-export const StaggerContainer = ({ children, delay = 0.08, className }: { children: ReactNode, delay?: number, className?: string }) => (
+export const StaggerContainer = ({ children, delay = 0.03, className }: { children: ReactNode, delay?: number, className?: string }) => (
   <motion.div
     initial="hidden"
     animate="show"
@@ -37,9 +37,9 @@ export const StaggerContainer = ({ children, delay = 0.08, className }: { childr
         opacity: 1,
         transition: {
           staggerChildren: delay,
-          delayChildren: 0.1
-        }
-      }
+          delayChildren: 0,
+        },
+      },
     }}
   >
     {children}
@@ -50,24 +50,12 @@ export const StaggerItem = ({ children, className }: { children: ReactNode, clas
   <motion.div
     className={className}
     variants={{
-      hidden: { 
-        opacity: 0, 
-        y: 40, 
-        scale: 0.92,
-        filter: "blur(10px)" 
+      hidden: { opacity: 0, y: 12 },
+      show: {
+        opacity: 1,
+        y: 0,
+        transition: { duration: 0.2, ease: 'easeOut' },
       },
-      show: { 
-        opacity: 1, 
-        y: 0, 
-        scale: 1,
-        filter: "blur(0px)",
-        transition: {
-          type: "spring",
-          stiffness: 80,
-          damping: 15,
-          mass: 1
-        }
-      }
     }}
   >
     {children}

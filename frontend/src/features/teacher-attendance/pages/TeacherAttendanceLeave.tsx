@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import { teacherAttendanceApi, type TeacherAttendanceRecord, type TeacherLeaveRecord } from '@/features/teacher-attendance/api';
+import { SkeletonStatGrid, SkeletonTable, SkeletonList } from '@/shared/components/ui/Skeleton';
 
 type DisplayStatus = 'PRESENT' | 'ABSENT' | 'HALF_DAY' | 'ON_LEAVE';
 type StatusFilter = 'ALL' | DisplayStatus;
@@ -283,13 +284,13 @@ export default function TeacherAttendanceLeave() {
         <p className="text-primary text-[10px] font-black uppercase tracking-[0.4em] bg-primary/10 px-4 py-2 rounded-full w-fit">
           My Work Record
         </p>
-        <h1 className="text-5xl font-black tracking-tighter text-foreground leading-none">
+        <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tighter text-foreground leading-none">
           Attendance <span className="text-primary italic">&amp; Leave</span>
         </h1>
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-2 p-1.5 bg-slate-900/50 backdrop-blur-md rounded-2xl border border-white/5 shadow-2xl w-fit">
+      <div className="flex items-center gap-1 sm:gap-2 p-1 sm:p-1.5 bg-slate-900/50 backdrop-blur-md rounded-2xl border border-white/5 shadow-2xl w-fit overflow-x-auto max-w-full">
         {(['today', 'history', 'leave'] as const).map((t) => (
           <button
             key={t}
@@ -314,7 +315,7 @@ export default function TeacherAttendanceLeave() {
               <h2 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-6">Today's Status</h2>
 
               {todayRecord === undefined ? (
-                <div className="flex items-center gap-3 text-slate-400"><Loader2 className="w-5 h-5 animate-spin" /> Loading...</div>
+                <SkeletonStatGrid count={4} />
               ) : todayRecord === null ? (
                 <p className="text-slate-400 text-sm">You haven't checked in yet today.</p>
               ) : (
@@ -419,7 +420,7 @@ export default function TeacherAttendanceLeave() {
 
             {/* Table */}
             {historyLoading ? (
-              <div className="flex items-center gap-3 text-slate-400 py-8"><Loader2 className="w-5 h-5 animate-spin" /> Loading history...</div>
+              <SkeletonTable rows={6} cols={5} />
             ) : filteredHistory.length === 0 ? (
               <div className="p-8 rounded-3xl bg-slate-900/60 border border-white/5 text-center text-slate-400">
                 No matching records in the selected window.
@@ -569,7 +570,7 @@ export default function TeacherAttendanceLeave() {
 
             {/* Leave list */}
             {leaveLoading ? (
-              <div className="flex items-center gap-3 text-slate-400 py-8"><Loader2 className="w-5 h-5 animate-spin" /> Loading leaves...</div>
+              <SkeletonList rows={4} />
             ) : leaves.length === 0 ? (
               <div className="p-8 rounded-3xl bg-slate-900/60 border border-white/5 text-center text-slate-400">
                 No leave requests found.

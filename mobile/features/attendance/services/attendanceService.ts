@@ -6,10 +6,10 @@ export const attendanceService = {
    * Get attendance records for a student
    */
   getAttendance: async (studentId: number): Promise<AttendanceRecord[]> => {
-    console.log('[attendanceService] Fetching attendance for student:', studentId);
+    // console.log('[attendanceService] Fetching attendance for student:', studentId);
     try {
       const res = await apiClient.get(`attendance/${studentId}`);
-      console.log('[attendanceService] Success. Records count:', res.data?.length || 0);
+      // console.log('[attendanceService] Success. Records count:', res.data?.length || 0);
       return res.data;
     } catch (error) {
       console.error('[attendanceService] Failed to fetch attendance:', error);

@@ -12,6 +12,7 @@ import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/shared/constants/Colors';
 import { LoadingScreen, ErrorState, EmptyState } from '@/shared/components/ui/Feedback';
+import { SkeletonHeader, SkeletonStatRow, SkeletonList } from '@/shared/components/ui/Skeleton';
 import { timetableService } from '@/features/timetable/services/timetableService';
 import { directoryService } from '@/features/directory/services/directoryService';
 import type {
@@ -89,7 +90,15 @@ export default function ParentTimetableScreen() {
     [dayItems],
   );
 
-  if (loading) return <LoadingScreen message="Loading timetable..." />;
+  if (loading) {
+    return (
+      <View style={{ flex: 1, padding: 20, gap: 16 }}>
+        <SkeletonHeader />
+        <SkeletonStatRow count={3} />
+        <SkeletonList rows={6} />
+      </View>
+    );
+  }
 
   const className =
     data?.school_class?.display_name ||

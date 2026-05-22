@@ -4,10 +4,11 @@ import { MapContainer, TileLayer, Marker, Polyline } from 'react-leaflet';
 import L from 'leaflet';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  MapPin, Loader2, Navigation, 
+  MapPin, Navigation,
   ChevronDown, User, ShieldCheck
 } from 'lucide-react';
 import { transportApi } from '@/features/transport/api';
+import { SkeletonList } from '@/shared/components/ui/Skeleton';
 import { useAuth } from '@/shared/contexts/AuthContext';
 import { useApp } from '@/shared/contexts/AppContext';
 import { cn } from '@/shared/lib/utils';
@@ -109,7 +110,7 @@ export default function TeacherTransport() {
       };
 
       ws.onclose = () => {
-        console.log("WebSocket disconnected. Reconnecting...");
+        // console.log("WebSocket disconnected. Reconnecting...");
         setTimeout(connectWS, 4000);
       };
     };
@@ -141,14 +142,14 @@ export default function TeacherTransport() {
   return (
     <div className="premium-page-container animate-fade-in flex flex-col gap-6 h-[calc(100vh-120px)] relative">
        {/* WIP Overlay */}
-       <div className="absolute inset-0 z-[100] backdrop-blur-md bg-slate-950/40 rounded-[3rem] flex flex-col items-center justify-center p-12 text-center border border-white/10 overflow-hidden">
+       <div className="absolute inset-0 z-[100] backdrop-blur-md bg-slate-950/40 rounded-2xl sm:rounded-[3rem] flex flex-col items-center justify-center p-6 sm:p-12 text-center border border-white/10 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-transparent to-transparent pointer-events-none" />
         <div className="relative space-y-8 max-w-2xl">
           <div className="w-24 h-24 rounded-[2.5rem] bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mx-auto animate-pulse">
             <Navigation className="w-12 h-12" />
           </div>
           <div className="space-y-4">
-            <h2 className="text-5xl font-black tracking-tighter text-white uppercase italic">Logistics <span className="text-indigo-500">Refactoring</span></h2>
+            <h2 className="text-2xl sm:text-3xl md:text-5xl font-black tracking-tighter text-white uppercase italic">Logistics <span className="text-indigo-500">Refactoring</span></h2>
             <p className="text-sm font-medium text-text-secondary leading-relaxed uppercase tracking-widest">
               The faculty logistics roster and live telemetry stream are undergoing a structural upgrade to support real-time institutional scaling.
             </p>
@@ -204,7 +205,7 @@ export default function TeacherTransport() {
                
                <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
                   {isLoading ? (
-                     <div className="py-20 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-indigo-500" /></div>
+                     <SkeletonList rows={5} />
                   ) : roster.length === 0 ? (
                      <div className="py-20 text-center opacity-30 italic font-black uppercase tracking-widest text-xs">No records found.</div>
                   ) : (

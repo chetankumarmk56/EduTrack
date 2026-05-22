@@ -59,8 +59,6 @@ export function installForegroundHandler(): void {
  */
 async function ensurePermission(): Promise<boolean> {
   if (!Device.isDevice) {
-    // Simulators / web can't receive push. Don't spam logs as an error.
-    console.log('[push] running on simulator/web — skipping permission request');
     return false;
   }
   const settings = await Notifications.getPermissionsAsync();
@@ -139,7 +137,6 @@ export async function registerForPushNotifications(): Promise<string | null> {
     });
 
     await Storage.setItem(LAST_TOKEN_KEY, token);
-    console.log('[push] device token registered with backend');
     return token;
   } catch (err) {
     console.warn('[push] registration failed:', err);
@@ -153,7 +150,6 @@ export async function registerForPushNotifications(): Promise<string | null> {
  */
 export function subscribeToTokenRotation(): { remove: () => void } {
   const sub = Notifications.addPushTokenListener(async (newToken) => {
-    console.log('[push] token rotated by Expo — re-registering');
     try {
       await apiClient.post('/devices/tokens', {
         expo_push_token: newToken.data,

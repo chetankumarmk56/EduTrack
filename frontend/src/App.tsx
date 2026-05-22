@@ -2,6 +2,7 @@ import { Component, lazy, Suspense, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from '@/shared/contexts/AuthContext';
 import { AppProvider } from '@/shared/contexts/AppContext';
+import { ThemeProvider } from '@/shared/contexts/ThemeContext';
 import ProtectedRoute from '@/shared/components/auth/ProtectedRoute';
 import GuestRoute from '@/shared/components/auth/GuestRoute';
 import { Toaster } from 'react-hot-toast';
@@ -30,8 +31,11 @@ const TeacherLayout = lazy(() => import('@/shared/components/layout/TeacherLayou
 const TeacherLogin = lazy(() => import('@/features/auth/pages/TeacherLogin'));
 const TeacherDashboard = lazy(() => import('@/features/marks/pages/TeacherDashboard'));
 const TeacherAttendance = lazy(() => import('@/features/attendance/pages/TeacherAttendance'));
-const LessonPlan = lazy(() => import('@/features/lesson-plan/pages/LessonPlan'));
+const LessonPlanDashboard = lazy(() => import('@/features/lesson-plan/ai/pages/LessonPlanDashboard'));
+const LessonPlan = lazy(() => import('@/features/lesson-plan/ai/pages/AILessonPlan'));
+const AILessonPlanResult = lazy(() => import('@/features/lesson-plan/ai/pages/AILessonPlanResult'));
 const QuestionBank = lazy(() => import('@/features/question-bank/pages/QuestionBank'));
+const QuestionBankResult = lazy(() => import('@/features/question-bank/pages/QuestionBankResult'));
 const MyFiles = lazy(() => import('@/features/my-files/pages/MyFiles'));
 const TeacherProfile = lazy(() => import('@/features/account/pages/TeacherProfile'));
 const TeacherEvents = lazy(() => import('@/features/events/pages/TeacherEvents'));
@@ -104,6 +108,7 @@ function App() {
     <ErrorBoundary>
     <BrowserRouter>
       <AuthProvider>
+        <ThemeProvider>
         <AppProvider>
           <Toaster position="top-right" />
           <Suspense fallback={<RouteFallback />}>
@@ -138,8 +143,11 @@ function App() {
               <Route index element={<Navigate to="/teacher/dashboard" replace />} />
               <Route path="dashboard" element={<TeacherDashboard />} />
               <Route path="attendance" element={<TeacherAttendance />} />
-              <Route path="lesson-plan" element={<LessonPlan />} />
+              <Route path="lesson-plan" element={<LessonPlanDashboard />} />
+              <Route path="lesson-plan/new" element={<LessonPlan />} />
+              <Route path="lesson-plan/result" element={<AILessonPlanResult />} />
               <Route path="question-bank" element={<QuestionBank />} />
+              <Route path="question-bank/result" element={<QuestionBankResult />} />
               <Route path="files" element={<MyFiles />} />
               <Route path="profile" element={<TeacherProfile />} />
               <Route path="events" element={<TeacherEvents />} />
@@ -186,6 +194,7 @@ function App() {
           </Routes>
           </Suspense>
         </AppProvider>
+        </ThemeProvider>
       </AuthProvider>
     </BrowserRouter>
     </ErrorBoundary>

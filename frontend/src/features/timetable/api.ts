@@ -65,10 +65,11 @@ export const timetableApi = {
     return response.data;
   },
 
-  getTeacherTimetable: async (teacherId: number) => {
-    const response = await client.get<TeacherTimetable>(`timetable/teacher/${teacherId}`);
-    return response.data;
-  },
+  // Unused — getMyTimetable() is used instead; nothing calls this in the frontend.
+  // getTeacherTimetable: async (teacherId: number) => {
+  //   const response = await client.get<TeacherTimetable>(`timetable/teacher/${teacherId}`);
+  //   return response.data;
+  // },
 
   // ---------- Slots ----------
   upsertSlot: async (data: TimetableSlotUpsert) => {

@@ -2,7 +2,8 @@
  * API Error Handler - Extracts meaningful error messages from API responses
  */
 
-export interface APIError {
+// Not imported outside this file — kept unexported for internal use as return type.
+interface APIError {
   message: string;
   details?: string[];
   status?: number;
@@ -57,18 +58,19 @@ export function getErrorMessage(error: any): APIError {
   };
 }
 
-export function isNetworkError(error: any): boolean {
-  return (
-    error.code === "ERR_NETWORK" ||
-    error.message === "Network Error" ||
-    !error.response
-  );
-}
+// Unused helpers — kept for reference but not imported anywhere in the codebase.
+// export function isNetworkError(error: any): boolean {
+//   return (
+//     error.code === "ERR_NETWORK" ||
+//     error.message === "Network Error" ||
+//     !error.response
+//   );
+// }
 
-export function isAuthError(error: any): boolean {
-  return error.response?.status === 401 || error.response?.status === 403;
-}
+// export function isAuthError(error: any): boolean {
+//   return error.response?.status === 401 || error.response?.status === 403;
+// }
 
-export function isValidationError(error: any): boolean {
-  return error.response?.status === 422 || error.response?.status === 400;
-}
+// export function isValidationError(error: any): boolean {
+//   return error.response?.status === 422 || error.response?.status === 400;
+// }

@@ -1,11 +1,10 @@
 import { useMemo } from 'react';
-import { motion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
-import {
-  User, Menu, ChevronDown
-} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { User, Menu, ChevronDown, Sun, Moon } from 'lucide-react';
 import { useAuth } from '@/shared/contexts/AuthContext';
 import { useApp } from '@/shared/contexts/AppContext';
+import { useTheme } from '@/shared/contexts/ThemeContext';
 import { cn } from '@/shared/lib/utils';
 
 interface TopNavProps {
@@ -15,10 +14,20 @@ interface TopNavProps {
 export default function TopNav({ onMenuClick }: TopNavProps) {
   const { user } = useAuth();
   const { teacherDirectory, classDirectory, institutionName } = useApp();
+  const { isDark, toggleTheme } = useTheme();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const isTeacher = user?.role === 'teacher';
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
+  const isPortalUser = isTeacher || isAdmin;
+
+  // Only show the toggle on teacher / admin / superadmin portals,
+  // not on the parent crystal-theme portal (already light).
+  const showThemeToggle =
+    location.pathname.startsWith('/teacher') ||
+    location.pathname.startsWith('/admin') ||
+    location.pathname.startsWith('/superadmin');
 
   const userDisplayName = useMemo(() => {
     if (isTeacher && user?.id && teacherDirectory.length) {
@@ -66,7 +75,49 @@ export default function TopNav({ onMenuClick }: TopNavProps) {
         <div className="flex-1" />
 
         {/* User Actions Segment */}
-        <div className="flex items-center gap-4 min-w-max">
+        <div className="flex items-center gap-3 min-w-max">
+          {/* Theme toggle — teacher / admin / superadmin portals only */}
+          {showThemeToggle && (
+            <motion.button
+              onClick={toggleTheme}
+              whileHover={{ scale: 1.08 }}
+              whileTap={{ scale: 0.94 }}
+              title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+              className={cn(
+                'relative h-9 w-9 rounded-xl flex items-center justify-center transition-all duration-300 border',
+                isDark
+                  ? 'bg-white/8 border-white/10 hover:bg-white/14 hover:border-white/20'
+                  : 'bg-black/5 border-black/8 hover:bg-black/10 hover:border-black/14',
+              )}
+            >
+              <AnimatePresence mode="wait" initial={false}>
+                {isDark ? (
+                  <motion.span
+                    key="sun"
+                    initial={{ opacity: 0, rotate: -30, scale: 0.7 }}
+                    animate={{ opacity: 1, rotate: 0, scale: 1 }}
+                    exit={{ opacity: 0, rotate: 30, scale: 0.7 }}
+                    transition={{ duration: 0.2 }}
+                    className="absolute"
+                  >
+                    <Sun className="h-4 w-4 text-amber-400" />
+                  </motion.span>
+                ) : (
+                  <motion.span
+                    key="moon"
+                    initial={{ opacity: 0, rotate: 30, scale: 0.7 }}
+                    animate={{ opacity: 1, rotate: 0, scale: 1 }}
+                    exit={{ opacity: 0, rotate: -30, scale: 0.7 }}
+                    transition={{ duration: 0.2 }}
+                    className="absolute"
+                  >
+                    <Moon className="h-4 w-4 text-slate-600" />
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </motion.button>
+          )}
+
           {/* Clickable Profile Area */}
           <motion.button
             whileHover={{ x: 2 }}
@@ -82,8 +133,8 @@ export default function TopNav({ onMenuClick }: TopNavProps) {
               </p>
             </div>
             <div className={cn(
-              "h-9 w-9 rounded-xl flex items-center justify-center text-primary-foreground shadow-lg overflow-hidden border border-white/20 group-hover:border-primary transition-all duration-300",
-              (isTeacher || isAdmin) ? "aurora-gradient aurora-glow shadow-primary/20" : "bg-primary shadow-black/5"
+              'h-9 w-9 rounded-xl flex items-center justify-center text-primary-foreground shadow-lg overflow-hidden border border-white/20 group-hover:border-primary transition-all duration-300',
+              (isTeacher || isAdmin) ? 'aurora-gradient aurora-glow shadow-primary/20' : 'bg-primary shadow-black/5',
             )}>
               <User className="h-4 w-4" />
             </div>

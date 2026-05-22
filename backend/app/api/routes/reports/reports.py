@@ -1,29 +1,34 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends
 from datetime import datetime
-from app.core.dependencies import require_admin, UserContext, require_payment_admin
+from app.core.dependencies import UserContext, require_payment_admin
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from app.core.database import get_db
 from app.models.finance import Payment
-from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/reports", tags=["Reporting"])
 
-class ReportRequest(BaseModel):
-    school_class_id: int
-
-@router.post("/academic-summary", status_code=status.HTTP_200_OK)
-async def trigger_academic_report(
-    request: ReportRequest,
-    admin: UserContext = Depends(require_admin)
-):
-    return {
-        "status": "completed",
-        "institution_id": admin.institution_id,
-        "school_class_id": request.school_class_id,
-        "report_url": f"https://storage.edutrack.com/reports/class_{request.school_class_id}_summary.pdf",
-        "generated_at": datetime.now().isoformat(),
-    }
+# Stub endpoint — returns a hardcoded placeholder URL; not called by any
+# frontend or mobile client. Commented out until real report generation is
+# implemented.
+#
+# from pydantic import BaseModel
+# from app.core.dependencies import require_admin
+# class ReportRequest(BaseModel):
+#     school_class_id: int
+#
+# @router.post("/academic-summary", status_code=201)
+# async def trigger_academic_report(
+#     request: ReportRequest,
+#     admin: UserContext = Depends(require_admin)
+# ):
+#     return {
+#         "status": "completed",
+#         "institution_id": admin.institution_id,
+#         "school_class_id": request.school_class_id,
+#         "report_url": f"https://storage.edutrack.com/reports/class_{request.school_class_id}_summary.pdf",
+#         "generated_at": datetime.now().isoformat(),
+#     }
 
 @router.get("/financial-summary")
 async def get_financial_summary(

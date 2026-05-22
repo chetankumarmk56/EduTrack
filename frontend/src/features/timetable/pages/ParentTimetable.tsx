@@ -10,6 +10,7 @@ import type {
   ClassTimetable, SchedulePeriod, TimetableSlot, SchedulePeriodType,
 } from '@/shared/types';
 import { useApp } from '@/shared/contexts/AppContext';
+import { SkeletonList } from '@/shared/components/ui/Skeleton';
 import { cn } from '@/shared/lib/utils';
 import {
   DAY_LABELS,
@@ -126,7 +127,7 @@ export default function ParentTimetable() {
   const room = data?.school_class?.room_number;
 
   return (
-    <div className="premium-page-container animate-fade-in flex flex-col gap-8 pb-20">
+    <div className="w-full animate-fade-in flex flex-col gap-8 pb-20">
       {/* Hero */}
       <div className="relative">
         <div
@@ -208,11 +209,7 @@ export default function ParentTimetable() {
 
       {/* Body */}
       {loading ? (
-        <div className="grid gap-3">
-          {[0, 1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="obsidian-card h-20 animate-pulse" />
-          ))}
-        </div>
+        <SkeletonList rows={6} />
       ) : !classId ? (
         <div className="obsidian-card border-dashed border-glass-border flex flex-col items-center justify-center gap-3 py-20 text-center">
           <User className="w-10 h-10 text-text-secondary/60" />
@@ -258,7 +255,7 @@ export default function ParentTimetable() {
                     className={cn(
                       'shrink-0 relative w-[72px] py-3 rounded-2xl border transition-all duration-300 text-center',
                       active
-                        ? 'bg-brand-indigo border-brand-indigo text-white shadow-[0_15px_30px_-10px_rgba(99,102,241,0.6)]'
+                        ? 'bg-[var(--brand-indigo)] border-[var(--brand-indigo)] text-white shadow-[0_15px_30px_-10px_rgba(99,102,241,0.6)]'
                         : 'bg-foreground/[0.03] border-foreground/10 text-text-secondary hover:border-foreground/20 hover:text-foreground',
                     )}
                   >
@@ -269,7 +266,7 @@ export default function ParentTimetable() {
                       <span
                         className={cn(
                           'mx-auto mt-1.5 block w-1.5 h-1.5 rounded-full',
-                          active ? 'bg-white' : 'bg-brand-indigo',
+                          active ? 'bg-white' : 'bg-[var(--brand-indigo)]',
                         )}
                       />
                     )}
@@ -279,7 +276,7 @@ export default function ParentTimetable() {
             </div>
 
             {/* View toggle */}
-            <div className="inline-flex p-1 rounded-2xl bg-white/[0.03] border border-white/10 self-start lg:self-auto">
+            <div className="inline-flex p-1 rounded-2xl bg-foreground/[0.05] border border-foreground/10 self-start lg:self-auto">
               <ToggleBtn
                 active={view === 'day'}
                 onClick={() => setView('day')}
@@ -540,7 +537,7 @@ function StatTile({
         className={cn(
           'w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 transition-colors',
           active
-            ? 'bg-brand-indigo text-white border-brand-indigo'
+            ? 'bg-[var(--brand-indigo)] text-white border-[var(--brand-indigo)]'
             : 'bg-brand-indigo/10 border-brand-indigo/20 text-brand-indigo',
         )}
       >
@@ -575,7 +572,7 @@ function ToggleBtn({
       className={cn(
         'inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all duration-300',
         active
-          ? 'bg-brand-indigo text-white shadow-[0_10px_25px_-8px_rgba(99,102,241,0.55)]'
+          ? 'bg-[var(--brand-indigo)] text-white shadow-[0_10px_25px_-8px_rgba(99,102,241,0.55)]'
           : 'text-text-secondary hover:text-foreground',
       )}
     >

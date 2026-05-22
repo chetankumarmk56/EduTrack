@@ -68,6 +68,14 @@ def _to_out(row: UploadedFile) -> UploadedFileOut:
         last_used_at=row.last_used_at,
         extraction_status=row.extraction_status,  # type: ignore[arg-type]
         has_text=bool(row.extracted_text),
+        file_type=row.file_type or "upload",
+        display_name=row.display_name,
+        version=int(row.version or 1),
+        source_school_id=row.source_school_id,
+        source_teacher_id=row.source_teacher_id,
+        source_grade_id=row.source_grade_id,
+        source_subject_id=row.source_subject_id,
+        source_chapter_id=row.source_chapter_id,
     )
 
 
@@ -273,6 +281,7 @@ class UploadedFileService:
         search: Optional[str] = None,
         subject: Optional[str] = None,
         tag: Optional[str] = None,
+        file_type: Optional[str] = None,
         limit: int = 50,
         offset: int = 0,
     ) -> Tuple[List[UploadedFileOut], int]:
@@ -287,6 +296,7 @@ class UploadedFileService:
             base = base.where(
                 or_(
                     func.lower(UploadedFile.original_filename).like(like),
+                    func.lower(UploadedFile.display_name).like(like),
                     func.lower(UploadedFile.subject).like(like),
                 )
             )
@@ -295,6 +305,8 @@ class UploadedFileService:
         if tag:
             # JSON contains a string element; portable form: cast to text and LIKE
             base = base.where(func.cast(UploadedFile.tags, str).like(f'%"{tag}"%'))
+        if file_type:
+            base = base.where(UploadedFile.file_type == file_type)
 
         total_res = await db.execute(
             select(func.count()).select_from(base.subquery())
@@ -400,8 +412,12 @@ class UploadedFileService:
         row.deleted_at = dt.datetime.utcnow()
         await db.commit()
 
-        # Best-effort physical delete. We swallow errors so the DB row stays
-        # marked deleted even if the object store is temporarily unreachable.
+        # Best-effort physical delete. Question-bank rows point at the
+        # generated S3 output JSON; we *do not* delete it from S3 because
+        # the same chapter prefix may still own metadata / input artifacts
+        # the user can re-generate from. The DB row stays soft-deleted.
+        if (row.file_type or "upload") != "upload":
+            return
         try:
             backend = get_backend_for(row.storage_backend)
             await backend.delete(row.storage_key)
@@ -409,6 +425,104 @@ class UploadedFileService:
             logger.warning(
                 "Soft-deleted file %s but object cleanup failed: %s", file_id, exc
             )
+
+    # ------------------------------------------------------------------
+    # Generator integration (Question Bank, Lesson Plan, …)
+    # ------------------------------------------------------------------
+    async def register_generated_artifact(
+        self,
+        db: AsyncSession,
+        *,
+        teacher_id: int,
+        institution_id: int,
+        file_type: str,
+        base_name: str,
+        storage_key: str,
+        storage_backend: str = "s3",
+        file_size: int = 0,
+        mime_type: str = "application/json",
+        subject: Optional[str] = None,
+        category: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        source_school_id: Optional[str] = None,
+        source_teacher_id: Optional[str] = None,
+        source_grade_id: Optional[str] = None,
+        source_subject_id: Optional[str] = None,
+        source_chapter_id: Optional[str] = None,
+    ) -> UploadedFile:
+        """Register a generator-produced artifact in the teacher file library.
+
+        ``base_name`` is the human-readable label (e.g.
+        ``"Science - Class 8 - Is Matter Around Us Pure"``). If a live
+        row with the same teacher / file_type / base name already exists,
+        a numeric suffix (``(2)``, ``(3)``, …) is appended so each run
+        gets its own My Files record — never silently overwritten.
+
+        Stores a ``filename``-style key (``<slug>_v<n>.json``) in
+        ``original_filename`` so existing list/search code keeps working
+        even for callers that ignore ``display_name``.
+        """
+        base_name = (base_name or "Untitled").strip() or "Untitled"
+
+        # Find the next free occurrence index. We look at *all* matching
+        # rows (deleted or not) so deletes don't recycle a name that the
+        # user already used — keeps version numbers monotonic.
+        res = await db.execute(
+            select(UploadedFile.display_name).where(
+                UploadedFile.teacher_id == teacher_id,
+                UploadedFile.file_type == file_type,
+                or_(
+                    UploadedFile.display_name == base_name,
+                    UploadedFile.display_name.like(f"{base_name} (%)"),
+                ),
+            )
+        )
+        existing_names = {n for (n,) in res.all() if n}
+
+        def _name_for(version: int) -> str:
+            return base_name if version == 1 else f"{base_name} ({version})"
+
+        version = 1
+        while _name_for(version) in existing_names:
+            version += 1
+        display_name = _name_for(version)
+
+        # original_filename doubles as the storage-side filename in
+        # responses; pick a slug that's safe across OSes + URLs.
+        slug = re.sub(r"[^A-Za-z0-9._\- ]+", "_", base_name)[:160].strip().rstrip(".")
+        filename = f"{slug or file_type}_v{version}.json"
+
+        row = UploadedFile(
+            teacher_id=teacher_id,
+            institution_id=institution_id,
+            storage_backend=storage_backend,
+            storage_key=storage_key,
+            original_filename=filename,
+            mime_type=mime_type,
+            file_size=int(file_size),
+            extracted_text=None,
+            extraction_status="skipped",
+            tags=list(tags or []),
+            subject=subject,
+            category=category,
+            file_type=file_type,
+            display_name=display_name,
+            version=version,
+            source_school_id=source_school_id,
+            source_teacher_id=source_teacher_id,
+            source_grade_id=source_grade_id,
+            source_subject_id=source_subject_id,
+            source_chapter_id=source_chapter_id,
+        )
+        db.add(row)
+        await db.flush()
+        return row
+
+    async def resolve_teacher_for_user(
+        self, db: AsyncSession, user: UserContext
+    ) -> int:
+        """Public wrapper around ``_resolve_teacher_id`` for generator services."""
+        return await self._resolve_teacher_id(db, user)
 
 
 uploaded_file_service = UploadedFileService()

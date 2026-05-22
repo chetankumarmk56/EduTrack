@@ -14,20 +14,12 @@ const client: AxiosInstance = axios.create({
   },
 });
 
-// ============================================
-// OPTIMIZATION: Request Deduplication
-// ============================================
-// Request deduplication cache: stores pending requests by their signature
-// Multiple identical in-flight requests are merged into one
-const pendingRequests = new Map<string, Promise<any>>();
-
-// Generate signature for request deduplication
-// Only applies to GET requests (idempotent operations)
+// Request signature builder. Returns null for non-GET requests (mutations
+// are never deduped). Kept around so future dedup logic has a single
+// canonical place to compute the key; the actual in-flight cache was
+// removed because it never populated and confused the 401-retry path.
 const getRequestSignature = (config: InternalAxiosRequestConfig): string | null => {
-  // Only deduplicate GET requests
   if (config.method !== 'get') return null;
-
-  // Create signature from URL and params
   const params = new URLSearchParams(config.params || {}).toString();
   const key = params ? `${config.url}?${params}` : config.url;
   return key || null;
@@ -54,13 +46,6 @@ const processQueue = (error: any, token: string | null = null) => {
 // Request Interceptor: Inject Auth Token and Institution ID
 client.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    // OPTIMIZATION: Deduplicate identical GET requests
-    const signature = getRequestSignature(config);
-    if (signature && pendingRequests.has(signature)) {
-      // Return cached pending request
-      return Promise.reject(new Error(`[Dedup] Request already in-flight: ${signature}`));
-    }
-
     const currentRole = getCurrentPortalRole();
     const token = localStorage.getItem(`edu_auth_token_${currentRole}`);
     const institutionId = localStorage.getItem(`edu_institution_id_${currentRole}`) || '1';
@@ -79,11 +64,9 @@ client.interceptors.request.use(
 // Response Interceptor: Handle 401 with Token Rotation + Dedup cleanup
 client.interceptors.response.use(
   (response) => {
-    // Clean up dedup cache for this request on success
-    const signature = getRequestSignature(response.config as InternalAxiosRequestConfig);
-    if (signature) {
-      pendingRequests.delete(signature);
-    }
+    // Touch the signature so the helper stays warm for future use; the
+    // result is intentionally discarded.
+    void getRequestSignature(response.config as InternalAxiosRequestConfig);
 
     // Global Success Toast for mutations if a message is returned
     const method = response.config.method?.toLowerCase();
@@ -121,12 +104,7 @@ client.interceptors.response.use(
   },
   async (error) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
-
-    // Clean up dedup cache on error
-    const signature = getRequestSignature(originalRequest);
-    if (signature) {
-      pendingRequests.delete(signature);
-    }
+    void getRequestSignature(originalRequest);
 
     const role = getCurrentPortalRole();
 
@@ -172,6 +150,10 @@ client.interceptors.response.use(
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
         }).then((token) => {
+          // Mark the queued request as a retry so a second 401 from the
+          // server won't kick off another refresh (which would loop on a
+          // backend that revoked the just-issued token).
+          originalRequest._retry = true;
           originalRequest.headers.set('Authorization', `Bearer ${token}`);
           return client(originalRequest);
         }).catch((err) => Promise.reject(err));

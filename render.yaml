@@ -17,10 +17,27 @@ services:
       - key: SECRET_KEY
         generateValue: true # Render will generate a random secret
       - key: FRONTEND_URL
-        sync: false # User will provide the Vercel URL
+        sync: false # Vercel / CDN URL for the admin web frontend (CORS)
       - key: PYTHON_VERSION
         value: 3.11
       - key: PYTHONDONTWRITEBYTECODE
         value: 1
       - key: PYTHONPYCACHEPREFIX
         value: /tmp/pycache
+      # ── Razorpay (required in prod — startup fails if missing or placeholder) ──
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+      # ── Twilio voice calls (optional — service degrades gracefully if absent) ──
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_FROM_NUMBER
+        sync: false
+      # ── AI features (optional) ──
+      - key: GOOGLE_API_KEY
+        sync: false

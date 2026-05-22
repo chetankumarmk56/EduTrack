@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Building2, Plus, Power, Activity, Globe, Server, Database, Trash2, Edit3, RotateCcw, Archive } from 'lucide-react';
 import { superAdminApi } from '@/features/super-admin/api';
 import type { Institution } from '@/shared/types';
+import { SkeletonCardGrid } from '@/shared/components/ui/Skeleton';
 import { cn } from '@/shared/lib/utils';
 
 type TrashedInstitution = Institution & { deleted_at: string; days_until_purge: number };
@@ -97,9 +98,9 @@ export default function SuperAdminDashboard() {
   };
 
   return (
-    <div className="space-y-8 pb-10">
+    <div className="space-y-6 sm:space-y-8 pb-10">
       {/* Header section with stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <motion.div 
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
           className="bg-slate-900/60 backdrop-blur-2xl border border-white/10 rounded-2xl p-6 flex items-center justify-between shadow-2xl"
@@ -290,9 +291,8 @@ export default function SuperAdminDashboard() {
           {view === 'active' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {isLoading ? (
-              <div className="col-span-full py-20 text-center">
-                <div className="inline-block h-8 w-8 border-4 border-cyan-500/20 border-t-cyan-500 rounded-full animate-spin mb-4" />
-                <p className="text-slate-500 font-mono text-xs uppercase tracking-widest">Scanning Network...</p>
+              <div className="col-span-full">
+                <SkeletonCardGrid count={4} cols="md" />
               </div>
             ) : institutions.length === 0 ? (
               <div className="col-span-full py-20 text-center bg-slate-900/40 rounded-3xl border border-dashed border-slate-800">

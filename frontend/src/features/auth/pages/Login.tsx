@@ -103,12 +103,12 @@ export default function Login() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8 }}
-          className="relative z-10 text-white max-w-lg p-12"
+          className="relative z-10 text-white max-w-lg p-8 sm:p-12"
         >
           <div className="flex h-16 w-16 mb-8 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-md shadow-lg border border-white/30">
             <GraduationCap className="h-8 w-8 text-white" />
           </div>
-          <h1 className="text-5xl font-bold tracking-tight mb-6">Empowering Parents. Navigating Success.</h1>
+          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight mb-4 sm:mb-6">Empowering Parents. Navigating Success.</h1>
           <p className="text-xl text-white/80 leading-relaxed font-medium">
             Stay connected with your child's academic journey in real-time with EduTrack's comprehensive dashboard.
           </p>
@@ -116,7 +116,7 @@ export default function Login() {
       </div>
 
       {/* Right side styling - Login Form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-8 sm:p-12 lg:p-24 bg-card">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-10 lg:p-24 bg-card min-h-screen lg:min-h-0">
         <motion.div 
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}

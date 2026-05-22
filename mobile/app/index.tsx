@@ -69,7 +69,7 @@ export default function LandingScreen() {
         <Animated.View entering={FadeInDown.delay(600)} style={styles.footer}>
           <Text style={styles.footerText}>Secure • Reliable • Smart</Text>
           <View style={styles.dot} />
-          <Text style={styles.footerText}>v2.4.0</Text>
+          <Text style={styles.footerText}>v1.0.0</Text>
         </Animated.View>
       </View>
     </View>

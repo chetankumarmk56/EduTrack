@@ -6,10 +6,10 @@ export const marksService = {
    * Get all marks for a student
    */
   getMarks: async (studentId: number): Promise<Mark[]> => {
-    console.log('[marksService] Fetching marks for student:', studentId);
+    // console.log('[marksService] Fetching marks for student:', studentId);
     try {
       const res = await apiClient.get(`marks/${studentId}`);
-      console.log('[marksService] Success. Marks count:', res.data?.length || 0);
+      // console.log('[marksService] Success. Marks count:', res.data?.length || 0);
       return res.data;
     } catch (error) {
       console.error('[marksService] Failed to fetch marks:', error);

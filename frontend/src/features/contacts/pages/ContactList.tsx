@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Phone, MessageCircle, Users, Search, GraduationCap, UserCircle2, Filter, X } from 'lucide-react';
 import { directoryApi } from '@/features/directory/api';
 import type { Student } from '@/shared/types';
+import { SkeletonList } from '@/shared/components/ui/Skeleton';
 import { cn } from '@/shared/lib/utils';
 
 interface ParentContact {
@@ -235,23 +236,7 @@ export default function ContactList() {
 
       {/* Groups */}
       {loading ? (
-        <div className="space-y-4">
-          {[1, 2].map(i => (
-            <div key={i} className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 animate-pulse">
-              <div className="h-5 w-48 bg-white/10 rounded-lg mb-4" />
-              {[1, 2, 3].map(j => (
-                <div key={j} className="flex items-center gap-4 py-3 border-t border-white/5">
-                  <div className="h-10 w-10 rounded-xl bg-white/10 shrink-0" />
-                  <div className="flex-1 space-y-2">
-                    <div className="h-3 w-32 bg-white/10 rounded" />
-                    <div className="h-3 w-24 bg-white/10 rounded" />
-                  </div>
-                  <div className="h-8 w-20 bg-white/10 rounded-xl" />
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
+        <SkeletonList rows={5} />
       ) : filteredGroups.length === 0 ? (
         <motion.div
           initial={{ opacity: 0 }} animate={{ opacity: 1 }}

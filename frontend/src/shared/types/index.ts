@@ -151,6 +151,7 @@ export interface Event {
   end_date?: string;
   time: string;
   location: string;
+  is_holiday?: boolean;
 }
 
 export interface Announcement {

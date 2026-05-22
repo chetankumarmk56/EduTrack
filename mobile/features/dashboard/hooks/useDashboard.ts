@@ -38,7 +38,7 @@ export function useDashboard() {
       return;
     }
 
-    console.log('[Dashboard] Starting fetch. studentId:', studentId);
+    // console.log('[Dashboard] Starting fetch. studentId:', studentId);
     setLoading(true);
 
     try {
@@ -48,7 +48,7 @@ export function useDashboard() {
       const actualStudentId = profileResponse.id;
       const schoolClassId: number | undefined = profileResponse?.school_class?.id;
 
-      console.log('[Dashboard] Profile loaded, using studentId:', actualStudentId);
+      // console.log('[Dashboard] Profile loaded, using studentId:', actualStudentId);
 
       // 2. Fetch other data using the verified student ID
       const [marksData, attendData, feesData, announcementData] = await Promise.allSettled([
@@ -61,7 +61,7 @@ export function useDashboard() {
       if (marksData.status === 'fulfilled') {
         const fetchedMarks = marksData.value;
         setMarks(fetchedMarks);
-        console.log('[Dashboard] Marks loaded. Count:', fetchedMarks?.length);
+        // console.log('[Dashboard] Marks loaded. Count:', fetchedMarks?.length);
 
         // 3. Build per-subject student stats, then fetch class averages in parallel
         if (schoolClassId && fetchedMarks.length > 0) {

@@ -339,7 +339,7 @@ export default function TeacherAttendanceAdmin() {
         <p className="text-primary text-[10px] font-black uppercase tracking-[0.4em] bg-primary/10 px-4 py-2 rounded-full w-fit">
           Staff Management
         </p>
-        <h1 className="text-5xl font-black tracking-tighter text-foreground leading-none">
+        <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tighter text-foreground leading-none">
           Teacher <span className="text-primary italic">Attendance</span>
         </h1>
       </div>

@@ -364,6 +364,10 @@ const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
           setTeachers(tList);
           localStorage.setItem('edu_cache_teachers', JSON.stringify(tList));
         }).catch(err => console.error("Failed to load student teachers:", err));
+
+        if (user?.role === 'parent') {
+          refreshParentFees();
+        }
       }
 
     }

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, ForeignKey, JSON, Boolean
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 from app.models.core import TimestampMixin
@@ -15,6 +15,7 @@ class Event(Base, TimestampMixin):
     end_date = Column(String, nullable=True)
     time = Column(String)
     location = Column(String)
+    is_holiday = Column(Boolean, nullable=False, default=False, server_default="false")
     
     # Target Roles for visibility: e.g. {"teacher": true, "parent": true}
     visibility = Column(JSON, default=dict) 

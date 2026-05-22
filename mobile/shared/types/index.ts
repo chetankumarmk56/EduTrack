@@ -145,9 +145,10 @@ export interface SchoolEvent {
   category?: string;
   time?: string;
   location?: string;
+  is_holiday?: boolean;
   visibility?: { parents?: boolean; teachers?: boolean; students?: boolean };
   event_date: string;
-  event_type: 'exam' | 'meeting' | 'holiday' | 'sports' | 'activity';
+  event_type: string;
   class_id?: number;
   institution_id?: number;
   created_at?: string;

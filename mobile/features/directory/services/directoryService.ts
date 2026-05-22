@@ -3,10 +3,10 @@ import { StudentProfile, Teacher } from '@/shared/types';
 
 export const directoryService = {
   getStudentProfile: async (studentId: number): Promise<StudentProfile> => {
-    console.log('[directoryService] Fetching student profile:', studentId);
+    // console.log('[directoryService] Fetching student profile:', studentId);
     try {
       const res = await apiClient.get(`directory/students/${studentId}`);
-      console.log('[directoryService] Profile fetched:', res.data?.name);
+      // console.log('[directoryService] Profile fetched:', res.data?.name);
       return res.data;
     } catch (error) {
       console.error('[directoryService] Failed to fetch profile:', error);

@@ -119,6 +119,8 @@ if settings.ADDITIONAL_CORS_ORIGINS:
 # Add localhost origins for development only
 if settings.ENVIRONMENT != "prod":
     cors_origins.extend([
+        "http://localhost",
+        "http://127.0.0.1",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:3000",
@@ -127,12 +129,14 @@ if settings.ENVIRONMENT != "prod":
         "http://localhost:8081",
     ])
 
-# Support for mobile/LAN development: Allow all subdomains of localhost if needed,
-# but for standard dev, explicit list is safer with credentials.
+# De-duplicate while preserving order. Never fall back to "*" — it's incompatible
+# with allow_credentials=True and browsers reject the response.
+cors_origins = list(dict.fromkeys(o for o in cors_origins if o))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=cors_origins if settings.ENVIRONMENT == "prod" else ["*"] if not cors_origins else cors_origins,
-    allow_credentials=True, 
+    allow_origins=cors_origins,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],

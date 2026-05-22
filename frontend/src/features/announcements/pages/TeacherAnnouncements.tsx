@@ -13,6 +13,7 @@ import { useAuth } from '@/shared/contexts/AuthContext';
 import { useApp } from '@/shared/contexts/AppContext';
 import { announcementApi, type AnnouncementCreate, type Announcement } from '@/features/announcements/api';
 import { cn } from '@/shared/lib/utils';
+import { SkeletonList } from '@/shared/components/ui/Skeleton';
 
 const PRIORITY_STYLES: Record<string, { bar: string; badge: string }> = {
   IMPORTANT: { bar: 'bg-rose-500', badge: 'bg-rose-500/10 border-rose-500/30 text-rose-400' },
@@ -183,15 +184,15 @@ export default function TeacherAnnouncements() {
   };
 
   return (
-    <div className="premium-page-container animate-fade-in flex flex-col gap-12 pb-24">
+    <div className="premium-page-container animate-fade-in flex flex-col gap-6 sm:gap-12 pb-24">
 
       {/* Header */}
-      <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-10">
-        <div className="space-y-4">
+      <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-6 sm:gap-10">
+        <div className="space-y-3 sm:space-y-4">
           <div className="inline-flex items-center gap-3 px-4 py-1.5 rounded-full bg-brand-indigo/10 border border-brand-indigo/20 text-brand-indigo text-[10px] font-black uppercase tracking-[0.3em] aurora-glow">
             <Megaphone className="w-3.5 h-3.5" /> Faculty Announcements
           </div>
-          <h1 className="text-6xl font-black tracking-tighter text-white -ml-0.5">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black tracking-tighter text-white -ml-0.5">
             Announcements
           </h1>
           <p className="text-text-secondary text-base font-medium max-w-xl leading-relaxed">
@@ -320,7 +321,7 @@ export default function TeacherAnnouncements() {
       {/* Announcement List */}
       <div className="flex flex-col gap-6">
         {error ? (
-          <div className="p-20 rounded-[3rem] bg-rose-500/5 border border-rose-500/20 flex flex-col items-center justify-center text-center gap-6">
+          <div className="p-10 sm:p-20 rounded-2xl sm:rounded-[3rem] bg-rose-500/5 border border-rose-500/20 flex flex-col items-center justify-center text-center gap-6">
             <AlertCircle className="w-12 h-12 text-rose-500" />
             <p className="text-white font-bold">{error}</p>
             <button onClick={fetchAnnouncements} className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-brand-indigo text-white font-black text-xs uppercase tracking-widest">
@@ -328,15 +329,9 @@ export default function TeacherAnnouncements() {
             </button>
           </div>
         ) : isLoading ? (
-          Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="obsidian-card p-8 animate-pulse space-y-4">
-              <div className="h-5 w-1/3 bg-white/5 rounded-lg" />
-              <div className="h-8 w-2/3 bg-white/5 rounded-xl" />
-              <div className="h-16 w-full bg-white/5 rounded-2xl" />
-            </div>
-          ))
+          <SkeletonList rows={5} />
         ) : announcements.length === 0 ? (
-          <div className="py-32 flex flex-col items-center justify-center obsidian-card border-dashed border-white/10 opacity-50">
+          <div className="py-16 sm:py-32 flex flex-col items-center justify-center obsidian-card border-dashed border-white/10 opacity-50">
             <Megaphone className="w-16 h-16 mb-6 text-brand-indigo/40" />
             <p className="text-lg font-black uppercase tracking-widest">No Announcements Yet</p>
             <p className="text-sm text-text-secondary mt-2">Create your first announcement to reach parents instantly.</p>

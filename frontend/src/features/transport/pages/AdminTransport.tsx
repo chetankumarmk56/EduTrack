@@ -250,14 +250,14 @@ export default function AdminTransport() {
   return (
     <div className="premium-page-container animate-fade-in flex flex-col gap-8 h-[calc(100vh-120px)] relative">
       {/* WIP Overlay */}
-      <div className="absolute inset-0 z-[100] backdrop-blur-md bg-slate-950/40 rounded-[3rem] flex flex-col items-center justify-center p-12 text-center border border-white/10 overflow-hidden">
+      <div className="absolute inset-0 z-[100] backdrop-blur-md bg-slate-950/40 rounded-2xl sm:rounded-[3rem] flex flex-col items-center justify-center p-6 sm:p-12 text-center border border-white/10 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-transparent to-transparent pointer-events-none" />
         <div className="relative space-y-8 max-w-2xl">
           <div className="w-24 h-24 rounded-[2.5rem] bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mx-auto animate-pulse">
             <RouteIcon className="w-12 h-12" />
           </div>
           <div className="space-y-4">
-            <h2 className="text-5xl font-black tracking-tighter text-white uppercase italic">Matrix <span className="text-indigo-500">Calibration</span></h2>
+            <h2 className="text-2xl sm:text-3xl md:text-5xl font-black tracking-tighter text-white uppercase italic">Matrix <span className="text-indigo-500">Calibration</span></h2>
             <p className="text-sm font-medium text-text-secondary leading-relaxed uppercase tracking-widest">
               Administrative transport mapping and student allocation terminals are being upgraded with advanced geospatial intelligence.
             </p>
@@ -274,7 +274,7 @@ export default function AdminTransport() {
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-[10px] font-black uppercase tracking-widest">
             <Navigation className="w-3.5 h-3.5" /> Logistic Intelligence
           </div>
-          <h1 className="text-5xl font-black tracking-tight text-white uppercase italic">Transport <span className="text-indigo-500">Mapper</span></h1>
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight text-white uppercase italic">Transport <span className="text-indigo-500">Mapper</span></h1>
         </div>
         
         {selectedRouteId && (

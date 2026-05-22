@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import { financeApi } from '@/features/finance/api';
+import { Skeleton } from '@/shared/components/ui/Skeleton';
 import type {
   LedgerEntry, LedgerListParams, LedgerSummary, LedgerFilterOptions,
 } from '@/features/finance/api';
@@ -339,8 +340,8 @@ export default function PaymentLedger() {
       </div>
 
       {/* Filters + Export */}
-      <div className="premium-glass p-6 rounded-2xl border border-white/10 space-y-4">
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
+      <div className="premium-glass p-4 sm:p-6 rounded-2xl border border-white/10 space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
           <div className="flex flex-col gap-1">
             <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
               <Calendar className="w-3 h-3" /> From
@@ -465,12 +466,12 @@ export default function PaymentLedger() {
               onClick={resetFilters}
               className="flex items-center gap-2 px-4 py-2 bg-slate-700/40 text-foreground rounded-lg text-xs font-black uppercase tracking-widest hover:bg-slate-700/60 transition-all"
             >
-              <X className="w-3.5 h-3.5" /> Clear filters ({activeFilterCount})
+              <X className="w-3.5 h-3.5" /> Clear ({activeFilterCount})
             </button>
           )}
 
-          <div className="flex items-center gap-2 ml-2 px-3 py-1.5 bg-slate-900/30 rounded-lg border border-white/5">
-            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Sort</span>
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-900/30 rounded-lg border border-white/5">
+            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground hidden sm:inline">Sort</span>
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as SortValue)}
@@ -482,8 +483,8 @@ export default function PaymentLedger() {
             </select>
           </div>
 
-          <div className="flex items-center gap-2 ml-2 px-3 py-1.5 bg-slate-900/30 rounded-lg border border-white/5">
-            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Per page</span>
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-900/30 rounded-lg border border-white/5">
+            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground hidden sm:inline">Per page</span>
             <select
               value={filters.limit ?? DEFAULT_PAGE_SIZE}
               onChange={(e) => setFilters((f) => ({ ...f, limit: Number(e.target.value), skip: 0 }))}
@@ -495,28 +496,32 @@ export default function PaymentLedger() {
             </select>
           </div>
 
-          <div className="ml-auto flex items-center gap-2">
-            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Export</span>
+          {/* Export buttons — pushed right, wrap on small screens */}
+          <div className="flex items-center gap-2 flex-wrap sm:ml-auto">
+            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground hidden sm:inline">Export</span>
             <button
               onClick={() => handleExport('excel')}
               disabled={isExporting !== null}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-black uppercase tracking-widest disabled:opacity-50 hover:scale-[1.02] active:scale-95 transition-all"
+              className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-black uppercase tracking-widest disabled:opacity-50 hover:scale-[1.02] active:scale-95 transition-all"
             >
-              {isExporting === 'excel' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileSpreadsheet className="w-3.5 h-3.5" />} Excel
+              {isExporting === 'excel' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileSpreadsheet className="w-3.5 h-3.5" />}
+              <span className="hidden sm:inline">Excel</span>
             </button>
             <button
               onClick={() => handleExport('csv')}
               disabled={isExporting !== null}
-              className="flex items-center gap-2 px-4 py-2 bg-slate-700 text-white rounded-lg text-xs font-black uppercase tracking-widest disabled:opacity-50 hover:scale-[1.02] active:scale-95 transition-all"
+              className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-slate-700 text-white rounded-lg text-xs font-black uppercase tracking-widest disabled:opacity-50 hover:scale-[1.02] active:scale-95 transition-all"
             >
-              {isExporting === 'csv' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />} CSV
+              {isExporting === 'csv' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+              <span className="hidden sm:inline">CSV</span>
             </button>
             <button
               onClick={() => handleExport('pdf')}
               disabled={isExporting !== null}
-              className="flex items-center gap-2 px-4 py-2 bg-rose-600 text-white rounded-lg text-xs font-black uppercase tracking-widest disabled:opacity-50 hover:scale-[1.02] active:scale-95 transition-all"
+              className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-rose-600 text-white rounded-lg text-xs font-black uppercase tracking-widest disabled:opacity-50 hover:scale-[1.02] active:scale-95 transition-all"
             >
-              {isExporting === 'pdf' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />} PDF
+              {isExporting === 'pdf' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+              <span className="hidden sm:inline">PDF</span>
             </button>
           </div>
         </div>
@@ -549,10 +554,15 @@ export default function PaymentLedger() {
             </thead>
             <tbody className="divide-y divide-white/5">
               {isLoading && (
-                <tr><td colSpan={10} className="px-4 py-12 text-center text-muted-foreground">
-                  <Loader2 className="w-6 h-6 animate-spin inline-block mr-2 align-middle" />
-                  Loading ledger…
-                </td></tr>
+                Array.from({ length: 6 }).map((_, i) => (
+                  <tr key={`skel-${i}`}>
+                    {Array.from({ length: 10 }).map((__, c) => (
+                      <td key={c} className="px-4 py-3">
+                        <Skeleton rounded="md" className="h-4 w-full" />
+                      </td>
+                    ))}
+                  </tr>
+                ))
               )}
 
               {!isLoading && sortedEntries.length === 0 && (

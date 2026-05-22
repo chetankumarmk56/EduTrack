@@ -1,1 +1,1 @@
-from .lesson_plan_service import *  # noqa: F401,F403
+from .lesson_plan_ai_service import lesson_plan_ai_service  # noqa: F401

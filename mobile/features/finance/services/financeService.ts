@@ -3,10 +3,10 @@ import { StudentDues, ParentFee, Payment } from '@/shared/types';
 
 export const financeService = {
   getStudentDues: async (studentId: number): Promise<StudentDues> => {
-    console.log('[financeService] Fetching student dues:', studentId);
+    // console.log('[financeService] Fetching student dues:', studentId);
     try {
       const res = await apiClient.get(`finance/students/${studentId}/dues`);
-      console.log('[financeService] Dues fetched:', res.data);
+      // console.log('[financeService] Dues fetched:', res.data);
       return res.data;
     } catch (error) {
       console.error('[financeService] Failed to fetch dues:', error);
@@ -15,10 +15,10 @@ export const financeService = {
   },
 
   getParentFees: async (): Promise<ParentFee[]> => {
-    console.log('[financeService] Fetching parent fees');
+    // console.log('[financeService] Fetching parent fees');
     try {
       const res = await apiClient.get('parent/fees');
-      console.log('[financeService] Fees fetched. Count:', res.data?.length || 0);
+      // console.log('[financeService] Fees fetched. Count:', res.data?.length || 0);
       return res.data;
     } catch (error) {
       console.error('[financeService] Failed to fetch fees:', error);
@@ -52,7 +52,7 @@ export const financeService = {
   },
 
   getFees: async (studentId: number): Promise<Payment[]> => {
-    console.log('[financeService] Fetching fees for student:', studentId);
+    // console.log('[financeService] Fetching fees for student:', studentId);
     const res = await apiClient.get(`finance/students/${studentId}/dues`);
     const breakdown: any[] = res.data?.breakdown ?? [];
     return breakdown.map((item: any, index: number) => ({

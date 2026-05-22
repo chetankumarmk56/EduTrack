@@ -17,6 +17,7 @@ import { useAuth } from '@/features/auth/hooks/useAuth';
 import { marksService, directoryService, type Mark } from '../../services';
 import { Colors } from '@/shared/constants/Colors';
 import { LoadingScreen, EmptyState, ErrorState } from '@/shared/components/ui/Feedback';
+import { Skeleton, SkeletonHeader, SkeletonStatRow, SkeletonList } from '@/shared/components/ui/Skeleton';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -238,7 +239,16 @@ export default function MarksScreen() {
     setExpanded((cur) => (cur === subject ? null : subject));
   };
 
-  if (loading) return <LoadingScreen message="Loading your marks..." />;
+  if (loading) {
+    return (
+      <View style={{ flex: 1, padding: 20, gap: 16 }}>
+        <SkeletonHeader />
+        <Skeleton height={140} borderRadius={24} />
+        <SkeletonStatRow count={3} />
+        <SkeletonList rows={4} />
+      </View>
+    );
+  }
 
   const overall = gradeFor(overallPct);
 

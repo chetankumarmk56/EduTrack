@@ -4,7 +4,7 @@ import { useApp } from '@/shared/contexts/AppContext';
 import { useAuth } from '@/shared/contexts/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Save, Plus, Hash, User, Settings, 
+  Save, Plus, Hash, User, 
   Edit3, Trash2, ChevronDown, Check, 
   AlertCircle, Clock, Users, BarChart3, 
   PieChart, ClipboardCheck 
@@ -317,7 +317,7 @@ export default function TeacherDashboard() {
             <span className="w-2 h-2 rounded-full bg-emerald-400 aurora-glow" />
             Faculty Control Center
           </div>
-          <h1 className="text-7xl font-black tracking-tighter text-white -ml-1">
+          <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black tracking-tighter text-white -ml-1">
              Marks <span className="text-emerald-400 italic">Ledger</span>
           </h1>
           <div className="flex flex-wrap items-center gap-4 mt-6">
@@ -363,7 +363,7 @@ export default function TeacherDashboard() {
           ) : (
             <Save className="w-5 h-5" />
           )}
-          {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'success' ? 'Synced!' : saveStatus === 'error' ? 'Failed' : 'Synchronize Ledger'}
+          {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'success' ? 'Saved!' : saveStatus === 'error' ? 'Failed' : 'Save'}
         </motion.button>
       </div>
 
@@ -431,11 +431,6 @@ export default function TeacherDashboard() {
                     className="w-20 h-10 text-sm font-black text-center rounded-xl bg-background/50 border border-white/10 text-primary focus:ring-2 focus:ring-primary/50 outline-none tabular-nums transition-all"
                   />
                 </div>
-                <div className="flex items-center gap-2">
-                   <button className="p-2.5 rounded-xl border border-white/5 hover:bg-muted text-muted-foreground hover:text-primary transition-all aurora-glow-hover">
-                      <Settings className="w-4.5 h-4.5" />
-                   </button>
-                </div>
               </div>
             </div>
 
@@ -468,7 +463,7 @@ export default function TeacherDashboard() {
                 <tbody className="divide-y divide-white/5">
                   <AnimatePresence mode="wait">
                     {students.length === 0 && !isFetching ? (
-                      <motion.tr 
+                      <motion.tr
                         key="empty"
                         initial={{ opacity: 0, scale: 0.98 }}
                         animate={{ opacity: 1, scale: 1 }}
@@ -483,71 +478,55 @@ export default function TeacherDashboard() {
                         </td>
                       </motion.tr>
                     ) : (
-                      <motion.tr key={activeExamId || 'list'} className="perspective-1000">
-                        <td colSpan={3} className="p-0">
-                          <table className="w-full">
-                            <tbody className="divide-y divide-white/5">
-                              {students.map((student, idx) => {
-                                const score = student.marks.find(m => m.test === activeExamId)?.score || 0;
-                                
-                                return (
-                                  <motion.tr 
-                                    layout
-                                    initial={{ opacity: 0, x: -30, rotateY: -15, scale: 0.95 }}
-                                    animate={{ opacity: 1, x: 0, rotateY: 0, scale: 1 }}
-                                    transition={{ 
-                                      duration: 0.5, 
-                                      delay: idx * 0.03,
-                                      ease: [0.23, 1, 0.32, 1] 
-                                    }}
-                                    key={student.roll} 
-                                    className="group transition-all hover:bg-white/5"
-                                  >
-                                    <td className="px-10 py-6">
-                                      <span className="text-xs font-black tabular-nums opacity-30 tracking-[0.2em] group-hover:opacity-100 group-hover:text-primary transition-all">#{student.roll.toString().padStart(2, '0')}</span>
-                                    </td>
-                                    <td className="px-10 py-6">
-                                      <div className="flex items-center gap-5">
-                                          <div className={cn(
-                                            "w-12 h-12 rounded-2xl flex items-center justify-center font-black transition-all border border-white/5 group-hover:border-primary/30 group-hover:scale-110 shadow-lg",
-                                            score > (activeMaxScore * 0.8) ? "aurora-gradient text-white aurora-glow border-none" : "bg-muted/40 text-foreground"
-                                          )}>
-                                            {student.name.charAt(0)}
-                                          </div>
-                                          <div>
-                                            <p className="font-black tracking-tight text-lg group-hover:text-primary transition-colors">{student.name}</p>
-                                            <p className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground/40 group-hover:text-primary/40 transition-colors">Registered Candidate</p>
-                                          </div>
-                                        </div>
-                                    </td>
-                                    <td className="px-10 py-6 text-right">
-                                      <div className="flex items-center justify-end gap-5">
-                                        <motion.div 
-                                          whileHover={{ scale: 1.05 }}
-                                          className="relative"
-                                        >
-                                          <input
-                                            type="number"
-                                            value={score || ''}
-                                            onChange={(e) => handleScoreChange(student.student_id, Number(e.target.value))}
-                                            className={cn(
-                                              "w-28 h-14 rounded-2xl bg-black border border-white/10 px-5 text-right font-black text-xl focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all tabular-nums aurora-glow-focus hover:border-primary/40",
-                                              score >= (activeMaxScore * 0.9) ? "text-primary glow-text" : "text-foreground"
-                                            )}
-                                          />
-                                        </motion.div>
-                                        <div className="text-muted-foreground/20 font-black text-xs uppercase tracking-[0.2em]">
-                                          / {activeMaxScore}
-                                        </div>
-                                      </div>
-                                    </td>
-                                  </motion.tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </td>
-                      </motion.tr>
+                      students.map((student, idx) => {
+                        const score = student.marks.find(m => m.test === activeExamId)?.score || 0;
+                        return (
+                          <motion.tr
+                            layout
+                            key={student.roll}
+                            initial={{ opacity: 0, x: -30, rotateY: -15, scale: 0.95 }}
+                            animate={{ opacity: 1, x: 0, rotateY: 0, scale: 1 }}
+                            transition={{ duration: 0.5, delay: idx * 0.03, ease: [0.23, 1, 0.32, 1] }}
+                            className="group transition-all hover:bg-white/5"
+                          >
+                            <td className="px-10 py-6">
+                              <span className="text-xs font-black tabular-nums opacity-30 tracking-[0.2em] group-hover:opacity-100 group-hover:text-primary transition-all">#{student.roll.toString().padStart(2, '0')}</span>
+                            </td>
+                            <td className="px-10 py-6">
+                              <div className="flex items-center gap-5">
+                                <div className={cn(
+                                  "w-12 h-12 rounded-2xl flex items-center justify-center font-black transition-all border border-white/5 group-hover:border-primary/30 group-hover:scale-110 shadow-lg",
+                                  score > (activeMaxScore * 0.8) ? "aurora-gradient text-white aurora-glow border-none" : "bg-muted/40 text-foreground"
+                                )}>
+                                  {student.name.charAt(0)}
+                                </div>
+                                <div>
+                                  <p className="font-black tracking-tight text-lg group-hover:text-primary transition-colors">{student.name}</p>
+                                  <p className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground/40 group-hover:text-primary/40 transition-colors">Registered Candidate</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-10 py-6 text-right w-48">
+                              <div className="flex items-center justify-end gap-5">
+                                <motion.div whileHover={{ scale: 1.05 }} className="relative">
+                                  <input
+                                    type="number"
+                                    value={score || ''}
+                                    onChange={(e) => handleScoreChange(student.student_id, Number(e.target.value))}
+                                    className={cn(
+                                      "w-28 h-14 rounded-2xl bg-black border border-white/10 px-5 text-right font-black text-xl focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all tabular-nums aurora-glow-focus hover:border-primary/40",
+                                      score >= (activeMaxScore * 0.9) ? "text-primary glow-text" : "text-foreground"
+                                    )}
+                                  />
+                                </motion.div>
+                                <div className="text-muted-foreground/20 font-black text-xs uppercase tracking-[0.2em]">
+                                  / {activeMaxScore}
+                                </div>
+                              </div>
+                            </td>
+                          </motion.tr>
+                        );
+                      })
                     )}
                   </AnimatePresence>
                 </tbody>

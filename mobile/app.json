@@ -12,9 +12,6 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.edutrack.mobile",
       "infoPlist": {
-        "NSAppTransportSecurity": {
-          "NSAllowsArbitraryLoads": true
-        },
         "ITSAppUsesNonExemptEncryption": false
       }
     },

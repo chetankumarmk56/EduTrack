@@ -1,11 +1,8 @@
 import client from './client';
+import type { TeacherStats } from '@/shared/types';
 
-export interface TeacherStats {
-    total_students: number;
-    active_classes: number;
-    attendance_rate: number;
-    pending_marks: number;
-}
+// Duplicate removed — TeacherStats is defined in @/shared/types/index.ts.
+// export interface TeacherStats { ... }
 
 export const statisticsApi = {
     /**

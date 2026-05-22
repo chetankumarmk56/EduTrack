@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Plus, Shield, Edit3, Trash2, Mail, Building2 } from 'lucide-react';
 import { superAdminApi } from '@/features/super-admin/api';
 import type { Institution } from '@/shared/types';
+import { Skeleton } from '@/shared/components/ui/Skeleton';
 
 interface AdminUser {
   id: number;
@@ -100,13 +101,13 @@ export default function SuperAdminCredentials() {
   };
 
   return (
-    <div className="space-y-8 pb-10">
-      <div className="flex items-center justify-between mb-2">
+    <div className="space-y-6 sm:space-y-8 pb-10">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-2">
         <div>
-          <h1 className="text-3xl font-black text-white tracking-tight">Credential Management</h1>
+          <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">Credential Management</h1>
           <p className="text-slate-400 text-sm mt-1">Manage platform-wide institutional administrator identities.</p>
         </div>
-        <div className="flex gap-4">
+        <div className="flex gap-4 shrink-0">
           <div className="bg-slate-900/40 border border-slate-800 rounded-xl px-4 py-2 flex items-center gap-3">
              <Shield className="h-5 w-5 text-cyan-400" />
              <div className="text-[10px] font-mono leading-tight">
@@ -117,7 +118,7 @@ export default function SuperAdminCredentials() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
+      <div className="grid grid-cols-1 xl:grid-cols-4 gap-5 sm:gap-8">
         {/* Provision Form */}
         <motion.div 
           initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
@@ -195,7 +196,15 @@ export default function SuperAdminCredentials() {
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   {isLoading ? (
-                    <tr><td colSpan={4} className="px-6 py-20 text-center text-slate-500 font-mono text-xs uppercase animate-pulse">Synchronizing Identities...</td></tr>
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <tr key={`skel-${i}`}>
+                        {Array.from({ length: 4 }).map((__, c) => (
+                          <td key={c} className="px-6 py-4">
+                            <Skeleton rounded="md" className="h-4 w-full" />
+                          </td>
+                        ))}
+                      </tr>
+                    ))
                   ) : admins.length === 0 ? (
                     <tr><td colSpan={4} className="px-6 py-20 text-center text-slate-500 text-sm">No administrators found.</td></tr>
                   ) : admins.map((admin, idx) => (

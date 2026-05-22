@@ -1,14 +1,16 @@
 import client from '@/shared/api/client';
 
-export interface Mark {
-    id: number;
-    student_id: number;
-    subject: string;
-    test_name: string;
-    score: number;
-    max_score: number;
-    recorded_at: string;
-}
+// Duplicate/stale — Mark is defined in @/shared/types/index.ts with a different
+// (newer) shape and is imported from there. Nothing imports this version.
+// export interface Mark {
+//     id: number;
+//     student_id: number;
+//     subject: string;
+//     test_name: string;
+//     score: number;
+//     max_score: number;
+//     recorded_at: string;
+// }
 
 export interface MarkCreate {
     student_id: number;
@@ -97,13 +99,11 @@ export const marksApi = {
         return response.data;
     },
 
-    /**
-     * Record a single mark.
-     */
-    recordMark: async (data: MarkCreate) => {
-        const response = await client.post<Mark>('marks/', data);
-        return response.data;
-    },
+    // Unused — recordMarksBatch is used instead. Not called anywhere in the frontend.
+    // recordMark: async (data: MarkCreate) => {
+    //     const response = await client.post<Mark>('marks/', data);
+    //     return response.data;
+    // },
 
     /**
      * Sync a batch of marks (Teacher bulk entry).
@@ -113,23 +113,19 @@ export const marksApi = {
         return response.data;
     },
 
-    /**
-     * Rename an assessment/test across a subject.
-     */
-    updateTestName: async (subject: string, oldName: string, newName: string) => {
-        const response = await client.put(`marks/tests/${subject}/${oldName}`, null, {
-            params: { new_name: newName }
-        });
-        return response.data;
-    },
+    // Unused — not called anywhere in the frontend.
+    // updateTestName: async (subject: string, oldName: string, newName: string) => {
+    //     const response = await client.put(`marks/tests/${subject}/${oldName}`, null, {
+    //         params: { new_name: newName }
+    //     });
+    //     return response.data;
+    // },
 
-    /**
-     * Delete an entire assessment/test.
-     */
-    deleteTest: async (subject: string, testName: string) => {
-        const response = await client.delete(`marks/tests/${subject}/${testName}`);
-        return response.data;
-    },
+    // Unused — not called anywhere in the frontend.
+    // deleteTest: async (subject: string, testName: string) => {
+    //     const response = await client.delete(`marks/tests/${subject}/${testName}`);
+    //     return response.data;
+    // },
 
     /**
      * Fetch dynamic rankings for a student.

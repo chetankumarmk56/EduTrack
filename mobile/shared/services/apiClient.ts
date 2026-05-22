@@ -16,8 +16,6 @@ function broadcastAuthExpired() {
   authListeners.forEach((fn) => fn());
 }
 
-console.log('[API Client] Initializing with BASE_URL:', API_BASE_URL);
-
 // ─── Tunables ─────────────────────────────────────────────────────────────────
 // Render.com free-tier services spin down after 15 min of inactivity and need
 // ~30–60s to wake up. The default 15s timeout was firing before the server
@@ -89,14 +87,6 @@ apiClient.interceptors.request.use(
       config.headers['X-Portal-Role'] = storedRole;
     }
 
-    // DEBUG LOGGING
-    console.log(`[API] ${config.method?.toUpperCase()} ${config.url}`, {
-      fullURL: getFullURL(config.baseURL, config.url),
-      hasToken: !!token,
-      instId: storedInstitutionId,
-      role: storedRole,
-    });
-
     return config;
   },
   (error) => {
@@ -107,10 +97,7 @@ apiClient.interceptors.request.use(
 
 // ─── Response interceptor ─────────────────────────────────────────────────────
 apiClient.interceptors.response.use(
-  (response) => {
-    console.log(`[API OK] ${response.status} ${response.config.method?.toUpperCase()} ${response.config.url}`);
-    return response;
-  },
+  (response) => response,
   async (error: AxiosError) => {
     const config = (error?.config || {}) as RetryableConfig;
     const data: any = error?.response?.data;

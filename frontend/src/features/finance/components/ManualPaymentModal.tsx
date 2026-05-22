@@ -47,7 +47,7 @@ export default function ManualPaymentModal({ isOpen, onClose, initialStudentId, 
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6">
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             onClick={onClose}
@@ -57,7 +57,7 @@ export default function ManualPaymentModal({ isOpen, onClose, initialStudentId, 
             initial={{ opacity: 0, scale: 0.9, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            className="relative w-full max-w-xl premium-glass p-12 rounded-[4rem] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] overflow-hidden"
+            className="relative w-full max-w-xl premium-glass p-6 sm:p-10 md:p-12 rounded-t-3xl sm:rounded-[3rem] md:rounded-[4rem] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] overflow-hidden max-h-[92vh] overflow-y-auto"
           >
             <button
               onClick={onClose}
@@ -70,12 +70,12 @@ export default function ManualPaymentModal({ isOpen, onClose, initialStudentId, 
               <div className="h-14 w-14 rounded-2xl bg-primary text-white flex items-center justify-center shadow-xl shadow-primary/20">
                 <Plus className="w-8 h-8" />
               </div>
-              <h2 className="text-4xl font-black text-foreground tracking-tighter">Manual <span className="text-primary italic">Entry</span></h2>
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-foreground tracking-tighter">Manual <span className="text-primary italic">Entry</span></h2>
               <p className="text-muted-foreground font-medium italic">Record physical currency or external UPI transfers safely into the ledger.</p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid grid-cols-2 gap-6">
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                 <div className="space-y-2 col-span-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-2">Scholar ID</label>
                   <input

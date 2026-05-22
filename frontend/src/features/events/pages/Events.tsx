@@ -4,6 +4,7 @@ import { eventsApi } from '@/features/events/api';
 import { type Event as SchoolEvent } from '@/shared/types';
 import { cn } from '@/shared/lib/utils';
 import { StaggerContainer, StaggerItem } from '@/shared/components/ui/PageWrapper';
+import { SkeletonCardGrid } from '@/shared/components/ui/Skeleton';
 
 export default function Events() {
   const [events, setEvents] = useState<SchoolEvent[]>([]);
@@ -23,30 +24,32 @@ export default function Events() {
     fetchEvents();
   }, []);
 
-  const getEventStyles = (type: string) => {
-    switch (type.toLowerCase()) {
-      case 'meeting':
-        return { color: 'text-indigo-500', bg: 'bg-indigo-500/10', glow: 'shadow-indigo-500/20', icon: <UserCheck className="w-5 h-5" /> };
-      case 'holiday':
-        return { color: 'text-emerald-500', bg: 'bg-emerald-500/10', glow: 'shadow-emerald-500/20', icon: <Palmtree className="w-5 h-5" /> };
-      case 'exam':
-        return { color: 'text-rose-500', bg: 'bg-rose-500/10', glow: 'shadow-rose-500/20', icon: <BookOpen className="w-5 h-5" /> };
-      case 'sports':
-        return { color: 'text-amber-500', bg: 'bg-amber-500/10', glow: 'shadow-amber-500/20', icon: <Trophy className="w-5 h-5" /> };
-      default:
-        return { color: 'text-primary', bg: 'bg-primary/10', glow: 'shadow-primary/20', icon: <Zap className="w-5 h-5" /> };
+  const getEventStyles = (event: SchoolEvent) => {
+    if (event.is_holiday) {
+      return { color: 'text-emerald-500', bg: 'bg-emerald-500/10', glow: 'shadow-emerald-500/20', icon: <Palmtree className="w-5 h-5" /> };
     }
+    const type = (event.type || '').toLowerCase();
+    if (type.includes('meeting')) {
+      return { color: 'text-indigo-500', bg: 'bg-indigo-500/10', glow: 'shadow-indigo-500/20', icon: <UserCheck className="w-5 h-5" /> };
+    }
+    if (type.includes('exam')) {
+      return { color: 'text-rose-500', bg: 'bg-rose-500/10', glow: 'shadow-rose-500/20', icon: <BookOpen className="w-5 h-5" /> };
+    }
+    if (type.includes('sport')) {
+      return { color: 'text-amber-500', bg: 'bg-amber-500/10', glow: 'shadow-amber-500/20', icon: <Trophy className="w-5 h-5" /> };
+    }
+    return { color: 'text-primary', bg: 'bg-primary/10', glow: 'shadow-primary/20', icon: <Zap className="w-5 h-5" /> };
   };
 
   return (
-    <div className="w-full px-4 md:px-8 xl:px-12 space-y-12 py-10 pb-32">
+    <div className="w-full space-y-8 sm:space-y-12 py-6 sm:py-10 pb-24">
       {/* Cinematic Header */}
       <div className="space-y-4 text-center lg:text-left">
          <div className="flex items-center justify-center lg:justify-start gap-3 text-primary text-[11px] font-black uppercase tracking-[0.5em] aurora-pulse">
             <Sparkles className="w-5 h-5 crystal-glow" />
             Institutional Timeline Active
          </div>
-         <h1 className="text-7xl font-black tracking-tighter text-gradient-crystal leading-tight">
+         <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black tracking-tighter text-gradient-crystal leading-tight">
             Upcoming <span className="italic opacity-80">Milestones</span>
          </h1>
          <p className="text-lg font-bold text-muted-foreground/60 max-w-3xl">
@@ -61,15 +64,9 @@ export default function Events() {
       </div>
 
       {loading ? (
-        <div className="flex flex-col justify-center items-center py-40 gap-6">
-          <div className="relative w-20 h-20">
-             <div className="absolute inset-0 border-4 border-primary/20 rounded-full" />
-             <div className="absolute inset-0 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-          </div>
-          <p className="text-xs font-black uppercase tracking-widest text-primary animate-pulse">Establishing Secure Stream...</p>
-        </div>
+        <SkeletonCardGrid count={6} cols="lg" />
       ) : events.length === 0 ? (
-        <div className="crystal-glass p-20 rounded-[4rem] flex flex-col items-center justify-center text-center space-y-6 border-dashed border-2 border-primary/20">
+        <div className="crystal-glass p-10 sm:p-16 md:p-20 rounded-3xl sm:rounded-[4rem] flex flex-col items-center justify-center text-center space-y-6 border-dashed border-2 border-primary/20">
           <Calendar className="w-20 h-20 text-primary opacity-20" />
           <div>
              <h3 className="text-2xl font-black text-foreground">Timeline Empty</h3>
@@ -79,7 +76,7 @@ export default function Events() {
       ) : (
         <StaggerContainer className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6 xl:gap-8">
           {events.map((event) => {
-            const styles = getEventStyles(event.type);
+            const styles = getEventStyles(event);
             const eventDate = new Date(event.date);
 
             return (
@@ -90,13 +87,18 @@ export default function Events() {
 
                   {/* Header row: type chip + date badge */}
                   <div className="flex items-start justify-between gap-4 relative z-10">
-                    <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex items-center gap-3 min-w-0 flex-wrap">
                       <div className={cn("p-3 rounded-2xl crystal-glow shrink-0", styles.bg, styles.color)}>
                         {styles.icon}
                       </div>
                       <span className={cn("text-[10px] font-black uppercase tracking-[0.3em] truncate", styles.color)}>
                         {event.type}
                       </span>
+                      {event.is_holiday && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 text-[9px] font-black uppercase tracking-widest">
+                          <Palmtree className="w-2.5 h-2.5" /> Non-Teaching Day — No Classes
+                        </span>
+                      )}
                     </div>
 
                     <div className="px-4 py-2 rounded-2xl bg-white/80 backdrop-blur border border-slate-100 shadow-sm shrink-0 text-center">

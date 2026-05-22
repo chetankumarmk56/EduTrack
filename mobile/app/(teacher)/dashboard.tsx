@@ -9,6 +9,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { dashboardService, directoryService } from '../../services';
 import { LoadingScreen } from '@/shared/components/ui/Feedback';
+import { SkeletonHeader, SkeletonStatRow, SkeletonList } from '@/shared/components/ui/Skeleton';
 
 export default function TeacherDashboard() {
   const { user, isAuthenticated } = useAuth();
@@ -52,7 +53,16 @@ export default function TeacherDashboard() {
     loadData();
   };
 
-  if (loading) return <LoadingScreen message="Initializing HQ..." />;
+  if (loading) {
+    return (
+      <View style={{ flex: 1, padding: 20, gap: 20 }}>
+        <SkeletonHeader />
+        <SkeletonStatRow count={2} />
+        <SkeletonStatRow count={2} />
+        <SkeletonList rows={3} />
+      </View>
+    );
+  }
 
   const displayStats = [
     { label: 'Assigned Classes', value: profile?.assignments?.length || '0', icon: 'school-outline', color: Colors.primary },

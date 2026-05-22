@@ -1,11 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  UserPlus,
-  Settings2,
-  LayoutGrid, List as ListIcon,
-  Filter, Search, School, Layers,
-  Hash, AlertCircle, X
+  UserPlus, LayoutGrid, List as ListIcon,
+  Search, GraduationCap, Users, AlertCircle, X, ChevronDown
 } from 'lucide-react';
 import { directoryApi } from '@/features/directory/api';
 import { useApp } from '@/shared/contexts/AppContext';
@@ -82,8 +79,6 @@ export default function StudentDirectory() {
         s.classroom?.id === selectedSchoolClassId;
     });
 
-    // Backend now assigns roll_number per class (alphabetical). Fall back to a
-    // local computation for any rows that pre-date the migration backfill.
     list.sort((a, b) =>
       ((a.roll_number ?? Number.MAX_SAFE_INTEGER) - (b.roll_number ?? Number.MAX_SAFE_INTEGER)) ||
       a.name.localeCompare(b.name),
@@ -106,8 +101,17 @@ export default function StudentDirectory() {
     return listWithRoll;
   }, [students, selectedSchoolClassId, searchTerm]);
 
+  const totalInClass = useMemo(() => {
+    if (!selectedSchoolClassId) return 0;
+    return students.filter((s: any) =>
+      s.school_class_id === selectedSchoolClassId ||
+      s.school_class?.id === selectedSchoolClassId ||
+      s.classroom?.id === selectedSchoolClassId
+    ).length;
+  }, [students, selectedSchoolClassId]);
+
   const handleDelete = async (id: number, name: string) => {
-    if (!confirm(`Remove student "${name}" from records? This action cannot be undone.`)) return;
+    if (!confirm(`Remove "${name}" from records? This cannot be undone.`)) return;
     setDeletingId(id);
     setDeleteError(null);
     try {
@@ -115,14 +119,17 @@ export default function StudentDirectory() {
       refreshStudents();
     } catch (err: any) {
       const error = getErrorMessage(err);
-      setDeleteError(error.message || 'Failed to delete student. Please try again.');
+      setDeleteError(error.message || 'Failed to remove student. Please try again.');
     } finally {
       setDeletingId(null);
     }
   };
 
+  const selectedGrade = grades.find(g => g.id === selectedGradeId);
+  const selectedClass = schoolClasses.find(sc => sc.id === selectedSchoolClassId);
+
   return (
-    <div className="premium-page-container animate-fade-in flex flex-col gap-10 pb-20">
+    <div className="w-full animate-fade-in flex flex-col gap-8 pb-20">
 
       {deleteError && (
         <div className="flex items-center gap-3 p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold">
@@ -135,122 +142,160 @@ export default function StudentDirectory() {
       )}
 
       {/* Header */}
-      <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-8">
-        <div className="space-y-3">
+      <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-6">
+        <div className="space-y-2">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-indigo/10 border border-brand-indigo/20 text-brand-indigo text-[10px] font-black uppercase tracking-widest">
-            <Filter className="w-3 h-3" /> Scholastic Registry
+            <GraduationCap className="w-3 h-3" /> Student Registry
           </div>
-          <h1 className="text-5xl font-black tracking-tight text-gradient-indigo">Student Roster</h1>
-          <p className="text-text-secondary text-base font-medium max-w-xl">
-            Coordinate student data and parent linkages within specific operational segments.
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight text-gradient-indigo">Student Roster</h1>
+          <p className="text-text-secondary text-sm font-medium max-w-xl">
+            Manage enrolled students and their parent/guardian information.
           </p>
         </div>
 
         {selectedSchoolClassId && (
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="relative group">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary group-focus-within:text-brand-indigo transition-colors" />
-              <input
-                placeholder="Search Identity..."
-                className="input-obsidian pl-11 h-[54px] w-64 text-xs font-bold uppercase tracking-widest"
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-              />
-            </div>
-            <button onClick={() => setIsAdding(true)} className="indigo-glow-button h-[54px] px-8">
-              <UserPlus className="w-4 h-4 mr-2" /> Enroll Student
-            </button>
-          </div>
+          <button onClick={() => setIsAdding(true)} className="indigo-glow-button h-[50px] px-7 self-start xl:self-auto">
+            <UserPlus className="w-4 h-4 mr-2" /> Enroll Student
+          </button>
         )}
       </div>
 
-      {/* Control Bar */}
-      <div className="p-8 obsidian-card border-brand-indigo/20 bg-brand-indigo/[0.02] relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-brand-indigo/5 blur-[80px] rounded-full pointer-events-none" />
+      {/* Filter & Search Bar */}
+      <div className="obsidian-card p-6 border-brand-indigo/15 bg-brand-indigo/[0.02]">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 relative z-10">
-          <div className="space-y-3">
-            <label className="text-[10px] font-black uppercase tracking-[0.25em] text-text-secondary ml-2 flex items-center gap-2">
-              <School className="w-3" /> Scholastic Class
+          {/* Grade selector */}
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary flex items-center gap-1.5">
+              <GraduationCap className="w-3 h-3" /> Class / Grade
             </label>
-            <select
-              className="input-obsidian cursor-pointer font-bold text-sm"
-              value={selectedGradeId || ''}
-              onChange={e => {
-                setSelectedGradeId(Number(e.target.value));
-                setSelectedSchoolClassId(null);
-              }}
-            >
-              <option value="">Select Class...</option>
-              {grades.sort((a, b) => a.level - b.level).map(g => (
-                <option key={g.id} value={g.id}>{g.name}</option>
-              ))}
-            </select>
+            <div className="relative">
+              <select
+                className="input-obsidian cursor-pointer font-semibold text-sm appearance-none pr-10"
+                value={selectedGradeId || ''}
+                onChange={e => {
+                  setSelectedGradeId(Number(e.target.value));
+                  setSelectedSchoolClassId(null);
+                  setSearchTerm('');
+                }}
+              >
+                <option value="">Select a grade...</option>
+                {grades.sort((a, b) => a.level - b.level).map(g => (
+                  <option key={g.id} value={g.id}>{g.name}</option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary pointer-events-none" />
+            </div>
           </div>
 
-          <div className="space-y-3">
-            <label className="text-[10px] font-black uppercase tracking-[0.25em] text-text-secondary ml-2 flex items-center gap-2">
-              <Layers className="w-3 h-3" /> Operational Segment
+          {/* Section selector */}
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary flex items-center gap-1.5">
+              <Users className="w-3 h-3" /> Section
             </label>
-            <select
-              className="input-obsidian cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed font-bold text-sm"
-              disabled={!selectedGradeId}
-              value={selectedSchoolClassId || ''}
-              onChange={e => setSelectedSchoolClassId(Number(e.target.value))}
-            >
-              <option value="">{selectedGradeId ? 'Choose Segment...' : 'Awaiting Class Selection'}</option>
-              {filteredSchoolClasses.map(sc => (
-                <option key={sc.id} value={sc.id}>Section {sc.display_name?.split('-').pop() || sc.section?.name}</option>
-              ))}
-            </select>
+            <div className="relative">
+              <select
+                className="input-obsidian cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed font-semibold text-sm appearance-none pr-10"
+                disabled={!selectedGradeId}
+                value={selectedSchoolClassId || ''}
+                onChange={e => { setSelectedSchoolClassId(Number(e.target.value)); setSearchTerm(''); }}
+              >
+                <option value="">{selectedGradeId ? 'Choose a section...' : 'Select grade first'}</option>
+                {filteredSchoolClasses.map(sc => (
+                  <option key={sc.id} value={sc.id}>Section {sc.display_name?.split('-').pop() || sc.section?.name}</option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary pointer-events-none" />
+            </div>
           </div>
 
-          {selectedSchoolClassId && (
-            <div className="flex items-end justify-end pb-1">
-              <div className="flex items-center bg-white/5 border border-glass-border rounded-xl p-1.5 h-[54px] shadow-inner">
+          {/* Search */}
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary">Search</label>
+            <div className="relative group">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary group-focus-within:text-brand-indigo transition-colors" />
+              <input
+                placeholder="Name, parent name or email..."
+                className="input-obsidian pl-10 text-sm"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                disabled={!selectedSchoolClassId}
+              />
+              {searchTerm && (
+                <button onClick={() => setSearchTerm('')} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-text-secondary hover:text-white transition-colors">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* View toggle + count */}
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary">View</label>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center bg-white/5 border border-glass-border rounded-xl p-1 flex-1">
                 <button
                   onClick={() => setViewMode('grid')}
-                  className={cn("p-2 px-6 rounded-lg transition-all flex items-center gap-2", viewMode === 'grid' ? "bg-brand-indigo text-white shadow-lg" : "text-text-secondary hover:text-white")}
+                  className={cn("flex-1 py-2 rounded-lg transition-all flex items-center justify-center gap-1.5", viewMode === 'grid' ? "bg-brand-indigo text-white shadow-lg" : "text-text-secondary hover:text-white")}
                 >
-                  <LayoutGrid className="w-4 h-4" />
-                  <span className="text-[10px] font-black uppercase tracking-widest">Grid</span>
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                  <span className="text-[10px] font-black uppercase tracking-wider">Grid</span>
                 </button>
                 <button
                   onClick={() => setViewMode('list')}
-                  className={cn("p-2 px-6 rounded-lg transition-all flex items-center gap-2", viewMode === 'list' ? "bg-brand-indigo text-white shadow-lg" : "text-text-secondary hover:text-white")}
+                  className={cn("flex-1 py-2 rounded-lg transition-all flex items-center justify-center gap-1.5", viewMode === 'list' ? "bg-brand-indigo text-white shadow-lg" : "text-text-secondary hover:text-white")}
                 >
-                  <ListIcon className="w-4 h-4" />
-                  <span className="text-[10px] font-black uppercase tracking-widest">List</span>
+                  <ListIcon className="w-3.5 h-3.5" />
+                  <span className="text-[10px] font-black uppercase tracking-wider">List</span>
                 </button>
               </div>
             </div>
-          )}
+          </div>
         </div>
       </div>
+
+      {/* Stats strip when class is selected */}
+      {selectedSchoolClassId && (
+        <div className="flex items-center gap-6 flex-wrap">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="font-black text-white">{totalInClass}</span>
+            <span className="text-text-secondary font-medium">students enrolled</span>
+            {selectedGrade && selectedClass && (
+              <span className="text-text-secondary opacity-50">in {selectedGrade.name} · Section {selectedClass.display_name?.split('-').pop()}</span>
+            )}
+          </div>
+          {searchTerm && filteredStudents.length !== totalInClass && (
+            <div className="flex items-center gap-2 text-xs text-brand-indigo font-bold">
+              <Search className="w-3 h-3" />
+              {filteredStudents.length} match{filteredStudents.length !== 1 ? 'es' : ''} for "{searchTerm}"
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Student Grid / Empty State */}
       <div className="min-h-[400px]">
         {selectedSchoolClassId ? (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
             <div className={cn(
-              "grid gap-8 transition-all duration-500",
+              "grid gap-5 transition-all duration-500",
               viewMode === 'grid' ? "grid-cols-1 md:grid-cols-2 xl:grid-cols-3" : "grid-cols-1"
             )}>
               {isDirectoryLoading && students.length === 0 ? (
                 Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="obsidian-card p-8 space-y-8 animate-pulse border-glass-border">
-                    <div className="flex items-center gap-5">
-                      <div className="w-16 h-16 rounded-[2rem] bg-white/5" />
+                  <div key={i} className="obsidian-card p-7 space-y-6 animate-pulse border-glass-border">
+                    <div className="flex items-center gap-4">
+                      <div className="w-14 h-14 rounded-2xl bg-white/5" />
                       <div className="space-y-2 flex-1">
-                        <div className="h-6 w-3/4 bg-white/5 rounded-lg" />
+                        <div className="h-5 w-3/4 bg-white/5 rounded-lg" />
                         <div className="h-3 w-1/3 bg-white/5 rounded-lg" />
                       </div>
                     </div>
-                    <div className="space-y-4">
-                      <div className="h-20 w-full bg-white/5 rounded-2xl" />
-                      <div className="flex justify-between items-center px-2">
-                        <div className="h-4 w-20 bg-white/5 rounded-lg" />
-                        <div className="h-4 w-20 bg-white/5 rounded-lg" />
+                    <div className="space-y-3">
+                      <div className="h-16 w-full bg-white/5 rounded-xl" />
+                      <div className="flex justify-between items-center px-1">
+                        <div className="h-3 w-16 bg-white/5 rounded-lg" />
+                        <div className="h-3 w-16 bg-white/5 rounded-lg" />
                       </div>
                     </div>
                   </div>
@@ -271,25 +316,35 @@ export default function StudentDirectory() {
               )}
             </div>
 
-            {filteredStudents.length === 0 && (
-              <div className="py-40 obsidian-card border-dashed flex flex-col items-center justify-center gap-6 opacity-20 grayscale transition-all hover:opacity-40">
-                <div className="w-20 h-20 rounded-full border-2 border-dashed border-glass-border flex items-center justify-center">
-                  <Hash className="w-10 h-10 rotate-12" />
+            {!isDirectoryLoading && filteredStudents.length === 0 && (
+              <div className="py-32 obsidian-card border-dashed flex flex-col items-center justify-center gap-5 text-center">
+                <div className="w-16 h-16 rounded-2xl bg-white/5 border border-glass-border flex items-center justify-center">
+                  <Search className="w-7 h-7 text-text-secondary opacity-40" />
                 </div>
-                <p className="text-xs font-black uppercase tracking-[0.3em]">No Active Deployments Found</p>
+                <div className="space-y-1 opacity-50">
+                  <p className="text-sm font-black uppercase tracking-widest">No students found</p>
+                  {searchTerm ? (
+                    <p className="text-xs text-text-secondary">Try a different name or clear the search</p>
+                  ) : (
+                    <p className="text-xs text-text-secondary">No students enrolled in this section yet</p>
+                  )}
+                </div>
+                {searchTerm && (
+                  <button onClick={() => setSearchTerm('')} className="text-xs text-brand-indigo font-bold hover:underline">Clear search</button>
+                )}
               </div>
             )}
           </motion.div>
         ) : (
-          <div className="h-[500px] obsidian-card border-dashed flex flex-col items-center justify-center gap-10 opacity-20 text-center bg-white/[0.01]">
-            <div className="w-32 h-32 rounded-[2.5rem] bg-white/5 border border-glass-border flex items-center justify-center relative overflow-hidden group">
-              <div className="absolute inset-0 bg-brand-indigo/10 blur-2xl group-hover:scale-150 transition-transform duration-1000" />
-              <Settings2 className="w-12 h-12 text-brand-indigo relative z-10" />
+          <div className="h-[440px] obsidian-card border-dashed flex flex-col items-center justify-center gap-8 text-center bg-white/[0.01]">
+            <div className="w-24 h-24 rounded-3xl bg-white/5 border border-glass-border flex items-center justify-center relative overflow-hidden">
+              <div className="absolute inset-0 bg-brand-indigo/10 blur-2xl" />
+              <GraduationCap className="w-10 h-10 text-brand-indigo/60 relative z-10" />
             </div>
-            <div className="space-y-4">
-              <h3 className="text-3xl font-black tracking-tight uppercase italic glow-text">Segment Calibration Required</h3>
-              <p className="text-sm font-bold max-w-sm mx-auto leading-relaxed opacity-60">
-                The scholastic registry is contextually indexed. Select an Academic Rank and Operational Segment to initialize data views.
+            <div className="space-y-2 opacity-60">
+              <h3 className="text-xl font-black tracking-tight">Select a Class & Section</h3>
+              <p className="text-sm font-medium max-w-xs mx-auto text-text-secondary leading-relaxed">
+                Choose a grade and section above to view and manage enrolled students.
               </p>
             </div>
           </div>

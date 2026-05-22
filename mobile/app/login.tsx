@@ -7,13 +7,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   TouchableOpacity,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { Colors } from '@/shared/constants/Colors';
-import { API_BASE_URL } from '@/shared/constants';
 import { useLogin, type LoginMode } from '../hooks';
 import { StudentLoginForm } from '@/features/auth/components/StudentLoginForm';
 import { TeacherLoginForm } from '@/features/auth/components/TeacherLoginForm';
@@ -42,10 +40,6 @@ export default function LoginScreen() {
   }, [params.mode]);
 
   const activeColor = MODE_CONFIG[mode].color;
-  const isNetworkError = apiError
-    ? /network|timeout|ECONNREFUSED|socket|unreachable/i.test(apiError)
-    : false;
-
   return (
     <SafeAreaView style={styles.safe}>
       {/* Decorative background blobs */}
@@ -97,14 +91,6 @@ export default function LoginScreen() {
               <Ionicons name="alert-circle" size={20} color={Colors.danger} style={{ marginTop: 1 }} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.errorText}>{apiError}</Text>
-                {isNetworkError && (
-                  <Text style={styles.errorHint}>
-                    Cannot reach server at {API_BASE_URL}.{'\n'}
-                    Check that your backend is running and update{' '}
-                    <Text style={styles.errorHintBold}>EXPO_PUBLIC_API_BASE_URL</Text> in{' '}
-                    <Text style={styles.errorHintBold}>.env</Text> with your machine&apos;s IP.
-                  </Text>
-                )}
               </View>
               <TouchableOpacity
                 onPress={() => setApiError(null)}
@@ -138,21 +124,6 @@ export default function LoginScreen() {
             )}
           </Animated.View>
 
-          {/* Server info chip */}
-          <Animated.View entering={FadeInDown.delay(420).duration(400)} style={{ alignItems: 'center' }}>
-            <TouchableOpacity
-              style={styles.serverChip}
-              onPress={() =>
-                Alert.alert(
-                  'Connected Server',
-                  `API: ${API_BASE_URL}\n\nIf on a physical device, replace "localhost" with your machine's local IP address in the .env file.`,
-                )
-              }
-            >
-              <Ionicons name="globe-outline" size={12} color={Colors.textMuted} />
-              <Text style={styles.serverChipText}>{API_BASE_URL}</Text>
-            </TouchableOpacity>
-          </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -219,8 +190,6 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   errorText: { fontSize: 14, color: Colors.danger, fontWeight: '700', lineHeight: 20 },
-  errorHint: { fontSize: 12, color: Colors.textSecondary, marginTop: 4, lineHeight: 18 },
-  errorHintBold: { fontWeight: '800', color: Colors.text },
 
   formCard: {
     backgroundColor: Colors.card,
@@ -236,16 +205,4 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
 
-  serverChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: Colors.surface,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  serverChipText: { fontSize: 11, color: Colors.textMuted, fontWeight: '600' },
 });

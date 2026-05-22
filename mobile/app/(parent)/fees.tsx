@@ -20,6 +20,7 @@ import { useAuth } from '@/features/auth/hooks/useAuth';
 import { financeService } from '@/features/finance/services/financeService';
 import { Colors } from '@/shared/constants/Colors';
 import { LoadingScreen, EmptyState, ErrorState } from '@/shared/components/ui/Feedback';
+import { Skeleton, SkeletonHeader, SkeletonStatRow, SkeletonList } from '@/shared/components/ui/Skeleton';
 import { PaymentModal, RazorpayOrder } from '@/features/finance/components/PaymentModal';
 import type { StudentDues } from '@/shared/types';
 
@@ -238,7 +239,18 @@ export default function FeesScreen() {
     handleModalClose();
   }, [handleModalClose]);
 
-  if (loading) return <LoadingScreen message="Loading your fee ledger..." />;
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safe} edges={['top']}>
+        <View style={{ padding: 18, gap: 16 }}>
+          <SkeletonHeader />
+          <Skeleton height={200} borderRadius={26} />
+          <SkeletonStatRow count={3} />
+          <SkeletonList rows={3} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>

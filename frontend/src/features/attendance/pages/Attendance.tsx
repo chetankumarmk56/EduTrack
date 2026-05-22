@@ -79,19 +79,19 @@ export default function Attendance() {
              <div className="flex items-center gap-2 text-emerald-500 text-xs font-black uppercase tracking-[0.3em] bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20 w-fit">
                 <Activity className="w-4 h-4 shadow-[0_0_10px_rgba(16,185,129,0.5)]" /> Live Attendance Matrix
              </div>
-             <h1 className="text-6xl font-black tracking-tighter text-foreground leading-[0.9]">
+             <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black tracking-tighter text-foreground leading-[0.9]">
                 Presence <span className="text-emerald-500 italic">Vault</span>
              </h1>
              <p className="text-muted-foreground font-medium max-w-xl">Real-time faculty reporting for <span className="text-foreground font-black px-2 py-0.5 rounded bg-emerald-500/5 border border-emerald-500/10">{studentProfile?.name}</span>.</p>
           </div>
 
           <div className="grid grid-cols-2 gap-4 w-full md:w-auto">
-             <div className="px-8 py-6 rounded-[2rem] premium-glass border-2 border-emerald-500/20 shadow-xl shadow-emerald-500/5 flex flex-col items-center">
-                <div className="text-4xl font-black text-emerald-500 tracking-tighter"><AnimatedCounter value={stats.rate} suffix="%" /></div>
+             <div className="px-5 sm:px-8 py-4 sm:py-6 rounded-2xl sm:rounded-[2rem] premium-glass border-2 border-emerald-500/20 shadow-xl shadow-emerald-500/5 flex flex-col items-center">
+                <div className="text-3xl sm:text-4xl font-black text-emerald-500 tracking-tighter"><AnimatedCounter value={stats.rate} suffix="%" /></div>
                 <p className="text-[10px] font-black uppercase text-muted-foreground tracking-[0.2em] mt-1">Consistency</p>
              </div>
-             <div className="px-8 py-6 rounded-[2rem] premium-glass border-2 border-primary/20 shadow-xl shadow-primary/5 flex flex-col items-center">
-                <div className="text-4xl font-black text-primary tracking-tighter"><AnimatedCounter value={stats.total} /></div>
+             <div className="px-5 sm:px-8 py-4 sm:py-6 rounded-2xl sm:rounded-[2rem] premium-glass border-2 border-primary/20 shadow-xl shadow-primary/5 flex flex-col items-center">
+                <div className="text-3xl sm:text-4xl font-black text-primary tracking-tighter"><AnimatedCounter value={stats.total} /></div>
                 <p className="text-[10px] font-black uppercase text-muted-foreground tracking-[0.2em] mt-1">Total Classes</p>
              </div>
           </div>
@@ -147,7 +147,7 @@ export default function Attendance() {
 
            {/* Results Bento */}
            <StaggerItem className="lg:col-span-9">
-              <div className="premium-glass rounded-[3rem] overflow-hidden shadow-2xl">
+              <div className="premium-glass rounded-2xl sm:rounded-[3rem] overflow-hidden shadow-2xl">
                  <div className="px-10 py-8 border-b border-glass-border flex items-center justify-between bg-slate-50">
                     <h3 className="text-xl font-black text-foreground">Class Log</h3>
                     <div className="text-xs font-black uppercase text-muted-foreground tracking-widest bg-slate-100 px-4 py-2 rounded-full">

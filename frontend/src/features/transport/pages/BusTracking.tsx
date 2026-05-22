@@ -3,10 +3,11 @@ import 'leaflet/dist/leaflet.css';
 import { MapContainer, TileLayer, Marker, Polyline, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
 import {
-   Bus, MapPin, Loader2,
+   Bus, MapPin,
    Info, Phone, ShieldCheck
 } from 'lucide-react';
 import { transportApi } from '@/features/transport/api';
+import { Skeleton, SkeletonHeader, SkeletonList } from '@/shared/components/ui/Skeleton';
 
 
 // --- Custom Leaflet Icons ---
@@ -76,7 +77,7 @@ export default function BusTracking() {
          };
 
          ws.onclose = () => {
-            console.log("WebSocket disconnected. Reconnecting...");
+            // console.log("WebSocket disconnected. Reconnecting...");
             setTimeout(connectWS, 3000);
          };
       };
@@ -87,9 +88,10 @@ export default function BusTracking() {
 
    if (isLoading) {
       return (
-         <div className="h-full flex flex-col items-center justify-center gap-4 animate-pulse">
-            <Loader2 className="w-12 h-12 text-indigo-500 animate-spin" />
-            <p className="text-[10px] uppercase font-black tracking-widest text-indigo-300">Synchronizing Logistics Stream...</p>
+         <div className="space-y-8 p-6">
+            <SkeletonHeader />
+            <Skeleton rounded="3xl" className="h-72 w-full" />
+            <SkeletonList rows={3} />
          </div>
       );
    }
@@ -120,14 +122,14 @@ export default function BusTracking() {
    return (
       <div className="premium-page-container animate-fade-in flex flex-col gap-6 h-[calc(100vh-120px)] relative">
          {/* WIP Overlay */}
-         <div className="absolute inset-0 z-[100] backdrop-blur-md bg-slate-950/40 rounded-[3rem] flex flex-col items-center justify-center p-12 text-center border border-white/10 overflow-hidden">
+         <div className="absolute inset-0 z-[100] backdrop-blur-md bg-slate-950/40 rounded-2xl sm:rounded-[3rem] flex flex-col items-center justify-center p-6 sm:p-12 text-center border border-white/10 overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-transparent to-transparent pointer-events-none" />
-            <div className="relative space-y-8 max-w-2xl">
-               <div className="w-24 h-24 rounded-[2.5rem] bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mx-auto animate-pulse">
-                  <Bus className="w-12 h-12" />
+            <div className="relative space-y-6 sm:space-y-8 max-w-2xl">
+               <div className="w-16 h-16 sm:w-24 sm:h-24 rounded-3xl sm:rounded-[2.5rem] bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mx-auto animate-pulse">
+                  <Bus className="w-8 h-8 sm:w-12 sm:h-12" />
                </div>
-               <div className="space-y-4">
-                  <h2 className="text-5xl font-black tracking-tighter text-white uppercase italic">Module <span className="text-indigo-500">Optimizing</span></h2>
+               <div className="space-y-3 sm:space-y-4">
+                  <h2 className="text-2xl sm:text-3xl md:text-5xl font-black tracking-tighter text-white uppercase italic">Module <span className="text-indigo-500">Optimizing</span></h2>
                   <p className="text-sm font-medium text-text-secondary leading-relaxed uppercase tracking-widest">
                      Live telemetry and route mapping protocols are currently being fine-tuned to ensure high-fidelity logistics tracking.
                   </p>
@@ -164,7 +166,7 @@ export default function BusTracking() {
 
          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 min-h-0">
             {/* Map Viewport */}
-            <div className="lg:col-span-8 rounded-[2.5rem] border border-glass-border overflow-hidden shadow-2xl relative bg-slate-900/40 z-0">
+            <div className="lg:col-span-8 rounded-2xl sm:rounded-[2.5rem] border border-glass-border overflow-hidden shadow-2xl relative bg-slate-900/40 z-0">
                <MapContainer
                   center={mapCenter}
                   zoom={15}

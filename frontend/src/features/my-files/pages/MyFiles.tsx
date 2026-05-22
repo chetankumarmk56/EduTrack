@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   CloudUpload,
@@ -12,9 +13,12 @@ import {
   ArrowDownUp,
   Zap,
   AlertCircle,
+  ExternalLink,
+  Sparkles,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { formatBytes, formatDateTime, formatRelative } from '@/shared/lib/format';
+import { SkeletonList } from '@/shared/components/ui/Skeleton';
 import { StaggerContainer, StaggerItem } from '@/shared/components/ui/PageWrapper';
 import { FilePicker } from '@/shared/components/FilePicker/FilePicker';
 import {
@@ -23,12 +27,44 @@ import {
 } from '@/features/my-files/api';
 
 type SortKey = 'date_desc' | 'date_asc' | 'name_asc' | 'size_desc';
+type FilterTab = 'all' | 'upload' | 'question_bank';
+
+function isGenerated(f: UploadedFile): boolean {
+  return f.file_type !== 'upload';
+}
+
+function displayLabel(f: UploadedFile): string {
+  return f.display_name || f.original_filename;
+}
+
+function questionBankResultUrl(f: UploadedFile): string | null {
+  if (
+    f.file_type !== 'question_bank' ||
+    !f.source_school_id ||
+    !f.source_teacher_id ||
+    !f.source_grade_id ||
+    !f.source_subject_id ||
+    !f.source_chapter_id
+  ) {
+    return null;
+  }
+  const params = new URLSearchParams({
+    school_id: f.source_school_id,
+    teacher_id: f.source_teacher_id,
+    grade_id: f.source_grade_id,
+    subject_id: f.source_subject_id,
+    chapter_id: f.source_chapter_id,
+  });
+  return `/teacher/question-bank/result?${params.toString()}`;
+}
 
 export default function MyFiles() {
+  const navigate = useNavigate();
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('date_desc');
+  const [filter, setFilter] = useState<FilterTab>('all');
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<UploadedFile | null>(null);
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
@@ -49,12 +85,25 @@ export default function MyFiles() {
     refresh();
   }, [refresh]);
 
+  const counts = useMemo(
+    () => ({
+      all: files.length,
+      upload: files.filter((f) => f.file_type === 'upload').length,
+      question_bank: files.filter((f) => f.file_type === 'question_bank').length,
+    }),
+    [files],
+  );
+
   const displayed = useMemo(() => {
     let items = files;
+    if (filter !== 'all') {
+      items = items.filter((f) => f.file_type === filter);
+    }
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       items = items.filter(
         (f) =>
+          displayLabel(f).toLowerCase().includes(q) ||
           f.original_filename.toLowerCase().includes(q) ||
           (f.subject ?? '').toLowerCase().includes(q) ||
           f.tags.some((t) => t.toLowerCase().includes(q)),
@@ -65,7 +114,7 @@ export default function MyFiles() {
         case 'date_asc':
           return new Date(a.uploaded_at).getTime() - new Date(b.uploaded_at).getTime();
         case 'name_asc':
-          return a.original_filename.localeCompare(b.original_filename);
+          return displayLabel(a).localeCompare(displayLabel(b));
         case 'size_desc':
           return b.file_size - a.file_size;
         case 'date_desc':
@@ -74,7 +123,7 @@ export default function MyFiles() {
       }
     });
     return items;
-  }, [files, search, sortKey]);
+  }, [files, search, sortKey, filter]);
 
   const totalSize = useMemo(
     () => files.reduce((sum, f) => sum + f.file_size, 0),
@@ -122,7 +171,7 @@ export default function MyFiles() {
             <Zap className="h-3.5 w-3.5 fill-primary" />
             Private File Library
           </div>
-          <h1 className="text-5xl font-black tracking-tighter text-foreground -mb-1">My Files</h1>
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tighter text-foreground -mb-1">My Files</h1>
           <p className="text-muted-foreground font-medium text-sm">
             Upload syllabi & reference docs once, then reuse them in any generator.
           </p>
@@ -141,9 +190,33 @@ export default function MyFiles() {
         <StatPill label="Files" value={String(files.length)} />
         <StatPill label="Total size" value={formatBytes(totalSize)} />
         <StatPill
-          label="Ready for reuse"
-          value={String(files.filter((f) => f.has_text).length)}
+          label="Question Banks"
+          value={String(counts.question_bank)}
         />
+      </div>
+
+      {/* Filter tabs */}
+      <div className="flex flex-wrap items-center gap-2">
+        {([
+          { id: 'all', label: 'All', count: counts.all },
+          { id: 'upload', label: 'Uploads', count: counts.upload },
+          { id: 'question_bank', label: 'Question Banks', count: counts.question_bank },
+        ] as { id: FilterTab; label: string; count: number }[]).map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setFilter(tab.id)}
+            className={`h-10 px-4 rounded-xl border text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2 transition-all ${
+              filter === tab.id
+                ? 'bg-primary/15 border-primary/40 text-primary'
+                : 'bg-black/30 border-white/5 text-muted-foreground hover:border-primary/20 hover:text-foreground'
+            }`}
+          >
+            <span>{tab.label}</span>
+            <span className="px-1.5 rounded-md text-[10px] font-black tabular-nums bg-white/5">
+              {tab.count}
+            </span>
+          </button>
+        ))}
       </div>
 
       {/* Toolbar */}
@@ -154,7 +227,7 @@ export default function MyFiles() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by filename, subject, or tag…"
+            placeholder="Search by name, subject, or tag…"
             className="w-full h-12 pl-11 pr-4 rounded-2xl border border-white/5 bg-black/40 outline-none font-medium text-sm focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition-all"
           />
         </div>
@@ -175,10 +248,7 @@ export default function MyFiles() {
 
       {/* List */}
       {isLoading ? (
-        <div className="flex items-center justify-center py-24 text-muted-foreground gap-3">
-          <Loader2 className="w-5 h-5 animate-spin" />
-          <span className="text-sm font-bold">Loading your library…</span>
-        </div>
+        <SkeletonList rows={6} />
       ) : displayed.length === 0 ? (
         <div className="text-center py-24 bg-card/10 rounded-3xl border-2 border-dashed border-white/5">
           <FolderOpen className="w-16 h-16 mx-auto opacity-10 mb-4" />
@@ -196,69 +266,110 @@ export default function MyFiles() {
         </div>
       ) : (
         <StaggerContainer className="grid gap-3">
-          {displayed.map((f) => (
-            <StaggerItem key={f.id}>
-              <div className="group flex items-center gap-4 p-4 rounded-2xl bg-card/40 border border-white/5 hover:border-primary/20 transition-all">
-                <div className="p-3 rounded-xl bg-primary/10 text-primary flex-shrink-0">
-                  <FileText className="w-5 h-5" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-black truncate">{f.original_filename}</h3>
-                    {f.extraction_status === 'failed' && (
-                      <span
-                        title="Could not extract text — this file is downloadable but generators can't reuse it without re-uploading."
-                        className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full"
-                      >
-                        <AlertCircle className="w-3 h-3" /> no text
-                      </span>
-                    )}
-                    {f.subject && (
-                      <span className="inline-flex text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full">
-                        {f.subject}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-3 mt-1 text-[11px] text-muted-foreground tabular-nums">
-                    <span>{formatBytes(f.file_size)}</span>
-                    <span>·</span>
-                    <span title={formatDateTime(f.uploaded_at)}>{formatRelative(f.uploaded_at)}</span>
-                    <span>·</span>
-                    <span className="uppercase">
-                      {f.original_filename.split('.').pop() || '—'}
-                    </span>
-                    {f.last_used_at && (
-                      <>
-                        <span>·</span>
-                        <span className="text-primary/60">last used {formatRelative(f.last_used_at)}</span>
-                      </>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={() => handleDownload(f)}
-                    disabled={downloadingId === f.id}
-                    className="p-2 rounded-lg border border-white/10 bg-white/5 hover:bg-primary/10 hover:border-primary/40 hover:text-primary transition-colors disabled:opacity-50"
-                    title="Download"
+          {displayed.map((f) => {
+            const generated = isGenerated(f);
+            const isQB = f.file_type === 'question_bank';
+            const resultUrl = isQB ? questionBankResultUrl(f) : null;
+            const label = displayLabel(f);
+            return (
+              <StaggerItem key={f.id}>
+                <div className="group flex items-center gap-4 p-4 rounded-2xl bg-card/40 border border-white/5 hover:border-primary/20 transition-all">
+                  <div
+                    className={`p-3 rounded-xl flex-shrink-0 ${
+                      generated
+                        ? 'bg-violet-500/10 text-violet-300'
+                        : 'bg-primary/10 text-primary'
+                    }`}
                   >
-                    {downloadingId === f.id ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
+                    {generated ? (
+                      <Sparkles className="w-5 h-5" />
                     ) : (
-                      <Download className="w-4 h-4" />
+                      <FileText className="w-5 h-5" />
                     )}
-                  </button>
-                  <button
-                    onClick={() => setPendingDelete(f)}
-                    className="p-2 rounded-lg border border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition-colors"
-                    title="Delete"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-sm font-black truncate">{label}</h3>
+                      {isQB && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.2em] text-violet-300 bg-violet-500/10 border border-violet-400/20 px-2 py-0.5 rounded-full">
+                          <Sparkles className="w-3 h-3" /> Question Bank
+                        </span>
+                      )}
+                      {generated && f.version > 1 && (
+                        <span className="inline-flex text-[10px] font-bold text-muted-foreground bg-white/5 px-2 py-0.5 rounded-full tabular-nums">
+                          v{f.version}
+                        </span>
+                      )}
+                      {!generated && f.extraction_status === 'failed' && (
+                        <span
+                          title="Could not extract text — this file is downloadable but generators can't reuse it without re-uploading."
+                          className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full"
+                        >
+                          <AlertCircle className="w-3 h-3" /> no text
+                        </span>
+                      )}
+                      {f.subject && (
+                        <span className="inline-flex text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+                          {f.subject}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 mt-1 text-[11px] text-muted-foreground tabular-nums">
+                      {f.file_size > 0 && <span>{formatBytes(f.file_size)}</span>}
+                      {f.file_size > 0 && <span>·</span>}
+                      <span title={formatDateTime(f.uploaded_at)}>
+                        {generated ? 'Generated' : 'Uploaded'} {formatRelative(f.uploaded_at)}
+                      </span>
+                      {!generated && (
+                        <>
+                          <span>·</span>
+                          <span className="uppercase">
+                            {f.original_filename.split('.').pop() || '—'}
+                          </span>
+                        </>
+                      )}
+                      {f.last_used_at && (
+                        <>
+                          <span>·</span>
+                          <span className="text-primary/60">last used {formatRelative(f.last_used_at)}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {resultUrl && (
+                      <button
+                        onClick={() => navigate(resultUrl)}
+                        className="p-2 rounded-lg border border-violet-400/20 bg-violet-500/10 text-violet-300 hover:bg-violet-500 hover:text-white transition-colors"
+                        title="Open generated question bank"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleDownload(f)}
+                      disabled={downloadingId === f.id}
+                      className="p-2 rounded-lg border border-white/10 bg-white/5 hover:bg-primary/10 hover:border-primary/40 hover:text-primary transition-colors disabled:opacity-50"
+                      title={generated ? 'Download JSON' : 'Download'}
+                    >
+                      {downloadingId === f.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Download className="w-4 h-4" />
+                      )}
+                    </button>
+                    <button
+                      onClick={() => setPendingDelete(f)}
+                      className="p-2 rounded-lg border border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            </StaggerItem>
-          ))}
+              </StaggerItem>
+            );
+          })}
         </StaggerContainer>
       )}
 
@@ -300,7 +411,7 @@ export default function MyFiles() {
                 <div>
                   <h3 className="text-xl font-black mb-1">Delete this file?</h3>
                   <p className="text-sm text-muted-foreground">
-                    "<span className="font-bold text-foreground">{pendingDelete.original_filename}</span>"
+                    "<span className="font-bold text-foreground">{displayLabel(pendingDelete)}</span>"
                     will be removed from your library and from storage. This cannot be undone.
                   </p>
                 </div>

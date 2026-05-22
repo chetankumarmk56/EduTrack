@@ -11,26 +11,26 @@ export default function ClassesOverview({ summary, classBreakdown }: ClassesOver
   return (
     <div className="space-y-8">
       {/* Grand Totals */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
         {[
           { label: 'Classes with Fees', value: classBreakdown?.total_classes_with_fee ?? '—', color: 'text-indigo-500', bg: 'bg-indigo-500/10' },
           { label: 'Total Collected', value: summary ? `₹${summary.total_collected.toLocaleString()}` : '—', color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
           { label: 'Total Expected', value: classBreakdown ? `₹${classBreakdown.grand_total_expected.toLocaleString()}` : '—', color: 'text-amber-500', bg: 'bg-amber-500/10' },
           { label: 'Total Pending', value: classBreakdown ? `₹${classBreakdown.grand_total_pending.toLocaleString()}` : '—', color: 'text-rose-500', bg: 'bg-rose-500/10' },
         ].map((s, i) => (
-          <div key={i} className="premium-glass p-8 rounded-[2.5rem] border-glass-border shadow-xl">
-            <div className={cn('h-10 w-10 rounded-xl flex items-center justify-center mb-4', s.bg)}>
-              <TrendingUp className={cn('w-5 h-5', s.color)} />
+          <div key={i} className="premium-glass p-4 sm:p-6 md:p-8 rounded-2xl sm:rounded-[2.5rem] border-glass-border shadow-xl">
+            <div className={cn('h-9 w-9 rounded-xl flex items-center justify-center mb-3', s.bg)}>
+              <TrendingUp className={cn('w-4 h-4', s.color)} />
             </div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">{s.label}</p>
-            <p className={cn('text-3xl font-black', s.color)}>{s.value}</p>
+            <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">{s.label}</p>
+            <p className={cn('text-xl sm:text-2xl md:text-3xl font-black break-all', s.color)}>{s.value}</p>
           </div>
         ))}
       </div>
 
       {/* Per-class table */}
-      <div className="premium-glass rounded-[3rem] overflow-hidden shadow-xl">
-        <div className="p-8 border-b border-glass-border">
+      <div className="premium-glass rounded-2xl sm:rounded-[3rem] overflow-hidden shadow-xl">
+        <div className="p-5 sm:p-8 border-b border-glass-border">
           <h3 className="text-2xl font-black text-foreground">Class-wise Fee Breakdown</h3>
           <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mt-1">Live data — updates on every sync</p>
         </div>

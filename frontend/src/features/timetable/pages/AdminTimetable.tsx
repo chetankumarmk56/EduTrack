@@ -253,14 +253,14 @@ export default function AdminTimetable() {
   );
 
   return (
-    <div className="premium-page-container animate-fade-in flex flex-col gap-10 pb-20">
+    <div className="w-full animate-fade-in flex flex-col gap-10 pb-20">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div className="space-y-4">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-indigo/10 border border-brand-indigo/20 text-brand-indigo text-[10px] font-black uppercase tracking-widest">
             <CalendarRange className="w-3.5 h-3.5" /> Weekly Schedule
           </div>
-          <h1 className="text-5xl font-black tracking-tight text-gradient-indigo">Timetable</h1>
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight text-gradient-indigo">Timetable</h1>
           <p className="text-text-secondary text-lg font-medium max-w-2xl">
             Configure the institutional bell schedule once, then assemble each class's weekly timetable across all seven days.
           </p>

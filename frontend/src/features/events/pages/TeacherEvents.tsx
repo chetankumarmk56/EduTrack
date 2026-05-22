@@ -1,45 +1,41 @@
 import { motion } from 'framer-motion';
 import { MapPin, Clock, Calendar, BookOpen, UserCheck, Trophy, Palmtree, ArrowRight, Info } from 'lucide-react';
 import { useApp } from '@/shared/contexts/AppContext';
+import { SkeletonCardGrid } from '@/shared/components/ui/Skeleton';
+import type { Event as SchoolEvent } from '@/shared/types';
 
 export default function TeacherEvents() {
   const { events, isEventsLoading: loading } = useApp();
 
-  const getEventStyles = (type: string) => {
-    switch (type.toLowerCase()) {
-      case 'meeting':
-        return { color: 'bg-blue-600 text-blue-600 border-blue-200', icon: <UserCheck className="w-4 h-4" /> };
-      case 'holiday':
-        return { color: 'bg-emerald-600 text-emerald-600 border-emerald-200', icon: <Palmtree className="w-4 h-4" /> };
-      case 'exam':
-        return { color: 'bg-rose-600 text-rose-600 border-rose-200', icon: <BookOpen className="w-4 h-4" /> };
-      case 'sports':
-        return { color: 'bg-amber-600 text-amber-600 border-amber-200', icon: <Trophy className="w-4 h-4" /> };
-      default:
-        return { color: 'bg-slate-600 text-slate-600 border-slate-200', icon: <Calendar className="w-4 h-4" /> };
+  const getEventStyles = (event: SchoolEvent) => {
+    if (event.is_holiday) {
+      return { color: 'bg-emerald-600 text-emerald-600 border-emerald-200', icon: <Palmtree className="w-4 h-4" /> };
     }
+    const type = (event.type || '').toLowerCase();
+    if (type.includes('meeting')) return { color: 'bg-blue-600 text-blue-600 border-blue-200', icon: <UserCheck className="w-4 h-4" /> };
+    if (type.includes('exam')) return { color: 'bg-rose-600 text-rose-600 border-rose-200', icon: <BookOpen className="w-4 h-4" /> };
+    if (type.includes('sport')) return { color: 'bg-amber-600 text-amber-600 border-amber-200', icon: <Trophy className="w-4 h-4" /> };
+    return { color: 'bg-slate-600 text-slate-600 border-slate-200', icon: <Calendar className="w-4 h-4" /> };
   };
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto">
+    <div className="space-y-8">
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-bold tracking-tight text-foreground">Teacher Event Calendar</h1>
         <p className="text-muted-foreground italic">Stay synchronized with the school's academic and extracurricular master schedule.</p>
       </div>
 
       {loading ? (
-        <div className="flex justify-center items-center py-20">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div>
-        </div>
+        <SkeletonCardGrid count={6} cols="lg" />
       ) : events.length === 0 ? (
-        <div className="flex flex-col items-center justify-center p-20 text-muted-foreground italic border-2 border-dashed border-border rounded-2xl bg-muted/30">
+        <div className="flex flex-col items-center justify-center p-10 sm:p-20 text-muted-foreground italic border-2 border-dashed border-border rounded-2xl bg-muted/30">
           <Calendar className="w-12 h-12 mb-4 opacity-20" />
           <p>No master events found in the database. Contact Administration if this is an error.</p>
         </div>
       ) : (
         <div className="relative border-l-2 border-emerald-100 ml-4 pl-8 space-y-10 py-4">
           {events.map((event, index) => {
-            const styles = getEventStyles(event.type);
+            const styles = getEventStyles(event);
             const isMultiDay = !!event.end_date;
 
             return (
@@ -66,11 +62,18 @@ export default function TeacherEvents() {
                         </p>
                       )}
                     </div>
-                    <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider w-fit
-                      ${styles.color.split(' ').slice(1).join(' ')} ${styles.color.split(' ')[0]}/10 border ${styles.color.split(' ')[2]}`}>
-                      {styles.icon}
-                      {event.type}
-                    </span>
+                    <div className="flex flex-wrap gap-2 w-fit">
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider w-fit
+                        ${styles.color.split(' ').slice(1).join(' ')} ${styles.color.split(' ')[0]}/10 border ${styles.color.split(' ')[2]}`}>
+                        {styles.icon}
+                        {event.type}
+                      </span>
+                      {event.is_holiday && (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-100 text-emerald-700 border border-emerald-200">
+                          <Palmtree className="w-3.5 h-3.5" /> Non-Teaching Day
+                        </span>
+                      )}
+                    </div>
                   </div>
                   
                   <div className="flex flex-wrap gap-x-8 gap-y-4 text-sm text-muted-foreground mt-6 pt-4 border-t border-border/50">

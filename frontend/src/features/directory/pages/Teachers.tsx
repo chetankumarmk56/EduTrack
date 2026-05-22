@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { directoryApi, type TeacherWithPassword } from '@/features/directory/api';
 import { cn } from '@/shared/lib/utils';
+import { SkeletonCardGrid } from '@/shared/components/ui/Skeleton';
 
 const AVATAR_PALETTE = [
   { from: '#6366f1', to: '#a855f7' },
@@ -122,7 +123,7 @@ export default function Teachers() {
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-indigo/10 border border-brand-indigo/20 text-brand-indigo text-[10px] font-black uppercase tracking-widest">
             <Sparkles className="w-3.5 h-3.5" /> Faculty Directory
           </div>
-          <h1 className="text-5xl md:text-6xl font-black tracking-tight text-gradient-indigo leading-[1.05]">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black tracking-tight text-gradient-indigo leading-[1.05]">
             Meet Your Teachers
           </h1>
           <p className="text-text-secondary text-lg font-medium max-w-2xl">
@@ -193,30 +194,7 @@ export default function Teachers() {
       )}
 
       {/* Loading */}
-      {loading && (
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {[0, 1, 2, 3, 4, 5].map((i) => (
-            <div
-              key={i}
-              className="obsidian-card p-6 animate-pulse h-[230px] flex flex-col gap-4"
-            >
-              <div className="flex gap-4 items-center">
-                <div className="h-14 w-14 rounded-2xl bg-white/5" />
-                <div className="flex-1 space-y-2">
-                  <div className="h-3.5 w-2/3 bg-white/5 rounded" />
-                  <div className="h-2.5 w-1/2 bg-white/5 rounded" />
-                </div>
-              </div>
-              <div className="h-2.5 w-full bg-white/5 rounded" />
-              <div className="h-2.5 w-3/4 bg-white/5 rounded" />
-              <div className="mt-auto flex gap-2">
-                <div className="flex-1 h-10 bg-white/5 rounded-xl" />
-                <div className="flex-1 h-10 bg-white/5 rounded-xl" />
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      {loading && <SkeletonCardGrid count={6} cols="xl" />}
 
       {/* Empty */}
       {!loading && teachers.length === 0 && (
@@ -420,7 +398,7 @@ export default function Teachers() {
                         onClick={() =>
                           setExpandedId((cur) => (cur === teacher.id ? null : teacher.id))
                         }
-                        className="self-start inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-text-secondary hover:text-white transition-colors"
+                        className="self-start inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-text-secondary hover:text-foreground transition-colors"
                       >
                         {isOpen ? 'Hide details' : 'View details'}
                         <ChevronDown
@@ -511,8 +489,8 @@ function FilterPill({
       className={cn(
         'shrink-0 px-3.5 py-1.5 rounded-full text-[11px] font-black uppercase tracking-widest border transition-all duration-300',
         active
-          ? 'bg-brand-indigo border-brand-indigo text-white shadow-[0_8px_20px_-8px_rgba(99,102,241,0.6)]'
-          : 'bg-white/[0.03] border-white/10 text-text-secondary hover:border-white/20 hover:text-white',
+          ? 'bg-[var(--brand-indigo)] border-[var(--brand-indigo)] text-white shadow-[0_8px_20px_-8px_rgba(99,102,241,0.6)]'
+          : 'bg-foreground/[0.05] border-foreground/10 text-text-secondary hover:border-foreground/20 hover:text-foreground',
       )}
     >
       {label}

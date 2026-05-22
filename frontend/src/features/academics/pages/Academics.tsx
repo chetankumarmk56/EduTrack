@@ -153,7 +153,7 @@ export default function Academics() {
          <div className="max-w-7xl mx-auto space-y-12 py-8 px-4 sm:px-6 lg:px-8">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                <div className="space-y-4">
-                  <h1 className="text-6xl font-black tracking-tighter text-foreground leading-[0.9]">
+                  <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black tracking-tighter text-foreground leading-[0.9]">
                      Academic Performance
                   </h1>
                </div>
@@ -199,7 +199,7 @@ export default function Academics() {
 
             {/* Intelligence Visualization */}
             <div className="grid lg:grid-cols-12 gap-8 items-stretch">
-               <StaggerItem className="lg:col-span-8 premium-glass p-10 rounded-[3rem] relative overflow-hidden group border-glass-border shadow-2xl">
+               <StaggerItem className="lg:col-span-8 premium-glass p-5 sm:p-8 md:p-10 rounded-2xl sm:rounded-[3rem] relative overflow-hidden group border-glass-border shadow-2xl">
                   <div className="absolute top-0 right-0 w-80 h-80 bg-primary/5 rounded-full blur-[100px] -mr-40 -mt-40" />
 
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-12 relative z-10 gap-6">
@@ -249,7 +249,7 @@ export default function Academics() {
                <StaggerItem className="lg:col-span-4 flex flex-col gap-8">
                   <motion.div
                      whileHover={{ y: -5 }}
-                     className="flex-1 p-12 rounded-[3rem] bg-indigo-600 text-white shadow-2xl shadow-indigo-500/30 relative overflow-hidden flex flex-col justify-between"
+                     className="flex-1 p-6 sm:p-8 md:p-12 rounded-2xl sm:rounded-[3rem] bg-indigo-600 text-white shadow-2xl shadow-indigo-500/30 relative overflow-hidden flex flex-col justify-between"
                   >
                      <div className="absolute inset-0 bg-gradient-to-br from-white/20 via-transparent to-black/10 pointer-events-none" />
                      <div className="relative z-10">
@@ -290,7 +290,7 @@ export default function Academics() {
                               onClick={() => setSelectedSubjectName(subj.subject)}
                               whileHover={{ y: -10, scale: 1.02 }}
                               whileTap={{ scale: 0.98 }}
-                              className={cn("premium-glass p-10 rounded-[3rem] relative group border-t-[12px] transition-all duration-300 shadow-xl w-full text-left cursor-pointer", styles.card, "border-opacity-100")}
+                              className={cn("premium-glass p-5 sm:p-8 md:p-10 rounded-2xl sm:rounded-[3rem] relative group border-t-[8px] sm:border-t-[12px] transition-all duration-300 shadow-xl w-full text-left cursor-pointer", styles.card, "border-opacity-100")}
                            >
                               <div className="flex justify-between items-start mb-10">
                                  <div className={cn("p-5 rounded-[1.5rem] bg-white dark:bg-card shadow-lg", styles.icon)}>
@@ -344,16 +344,16 @@ export default function Academics() {
                      initial={{ opacity: 0, scale: 0.9, y: 20 }}
                      animate={{ opacity: 1, scale: 1, y: 0 }}
                      exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                     className="relative w-full max-w-4xl bg-white rounded-[4rem] shadow-[0_40px_100px_-20px_rgba(0,0,0,0.2)] border border-white/50 overflow-hidden flex flex-col max-h-[90vh]"
+                     className="relative w-full max-w-4xl bg-white rounded-2xl sm:rounded-[4rem] shadow-[0_40px_100px_-20px_rgba(0,0,0,0.2)] border border-white/50 overflow-hidden flex flex-col max-h-[92vh] mx-2 sm:mx-0"
                   >
                      {/* Modal Header */}
-                     <div className="px-12 py-10 flex items-center justify-between border-b border-slate-100 bg-slate-50/50">
-                        <div className="flex items-center gap-6">
-                           <div className="h-16 w-16 rounded-[2rem] bg-primary flex items-center justify-center text-white shadow-xl shadow-primary/20">
-                              <BookOpen className="w-8 h-8" />
+                     <div className="px-5 sm:px-10 md:px-12 py-5 sm:py-8 md:py-10 flex items-center justify-between border-b border-slate-100 bg-slate-50/50">
+                        <div className="flex items-center gap-4 sm:gap-6 min-w-0">
+                           <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-2xl sm:rounded-[2rem] bg-primary flex items-center justify-center text-white shadow-xl shadow-primary/20 shrink-0">
+                              <BookOpen className="w-6 h-6 sm:w-8 sm:h-8" />
                            </div>
-                           <div>
-                              <h2 className="text-4xl font-black text-foreground tracking-tighter">Subject: {selectedSubjectName}</h2>
+                           <div className="min-w-0">
+                              <h2 className="text-xl sm:text-2xl md:text-4xl font-black text-foreground tracking-tighter truncate">Subject: {selectedSubjectName}</h2>
                               <p className="text-xs font-black uppercase text-muted-foreground tracking-[0.2em] mt-1">Detailed Assessment Matrix</p>
                            </div>
                         </div>
@@ -366,7 +366,7 @@ export default function Academics() {
                      </div>
 
                      {/* Modal Body - Scrollable */}
-                     <div className="flex-1 overflow-y-auto px-12 py-10 space-y-8">
+                     <div className="flex-1 overflow-y-auto px-5 sm:px-8 md:px-12 py-5 sm:py-8 md:py-10 space-y-8">
                         <div className="grid grid-cols-3 gap-6">
                            <div className="p-8 rounded-[2.5rem] bg-indigo-50 border border-indigo-100">
                               <p className="text-[10px] font-black uppercase text-indigo-400 tracking-widest mb-2">Subject Percentage</p>
@@ -444,9 +444,9 @@ export default function Academics() {
                      initial={{ opacity: 0, scale: 0.9, y: 20 }}
                      animate={{ opacity: 1, scale: 1, y: 0 }}
                      exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                     className="relative w-full max-w-2xl bg-white rounded-[3rem] shadow-2xl border border-white/20 overflow-hidden flex flex-col max-h-[85vh]"
+                     className="relative w-full max-w-2xl mx-2 sm:mx-0 bg-white rounded-2xl sm:rounded-[3rem] shadow-2xl border border-white/20 overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[85vh]"
                   >
-                     <div className="px-10 py-8 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                     <div className="px-5 sm:px-8 md:px-10 py-5 sm:py-8 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
                         <div className="flex items-center gap-4">
                            <div className="h-12 w-12 rounded-2xl bg-indigo-600 flex items-center justify-center text-white shadow-lg">
                               <Award className="w-6 h-6" />

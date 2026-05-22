@@ -1,6 +1,7 @@
 import client from '@/shared/api/client';
 
 export type ExtractionStatus = 'pending' | 'done' | 'failed' | 'skipped';
+export type FileType = 'upload' | 'question_bank' | string;
 
 export interface UploadedFile {
   id: number;
@@ -14,6 +15,15 @@ export interface UploadedFile {
   last_used_at: string | null;
   extraction_status: ExtractionStatus;
   has_text: boolean;
+  // Generator metadata — defaults match a regular upload.
+  file_type: FileType;
+  display_name: string | null;
+  version: number;
+  source_school_id: string | null;
+  source_teacher_id: string | null;
+  source_grade_id: string | null;
+  source_subject_id: string | null;
+  source_chapter_id: string | null;
 }
 
 export interface UploadResultItem {
@@ -72,6 +82,7 @@ export const uploadedFilesApi = {
     search?: string;
     subject?: string;
     tag?: string;
+    file_type?: FileType;
     limit?: number;
     offset?: number;
   } = {}): Promise<FileListResponse> => {

@@ -1,7 +1,6 @@
 import os
 import asyncio
 import datetime
-from typing import Optional
 from fastapi import UploadFile, HTTPException, status
 from app.core.config import settings
 from app.core.logger import logger
@@ -13,13 +12,6 @@ try:
     CLOUDINARY_AVAILABLE = True
 except ImportError:
     CLOUDINARY_AVAILABLE = False
-
-# ─── Azure (legacy fallback) ──────────────────────────────────────────────────
-try:
-    from azure.storage.blob import BlobServiceClient, ContentSettings
-    AZURE_AVAILABLE = True
-except ImportError:
-    AZURE_AVAILABLE = False
 
 
 class StorageService:
@@ -60,21 +52,11 @@ class StorageService:
             except Exception as e:
                 logger.error(f"Cloudinary init error: {e}")
 
-        # ── Azure init (legacy) ────────────────────────────────────────────
-        self._azure_client = None
-        if AZURE_AVAILABLE and getattr(settings, "AZURE_STORAGE_CONNECTION_STRING", None):
-            try:
-                self._azure_client = BlobServiceClient.from_connection_string(
-                    settings.AZURE_STORAGE_CONNECTION_STRING
-                )
-            except Exception as e:
-                logger.error(f"Azure Storage Init Error: {e}")
-
     # ──────────────────────────────────────────────────────────────────────────
     async def upload_file(self, file: UploadFile) -> str:
         """
         Upload a file and return a permanent public URL.
-        Priority: Cloudinary → Azure → Local (ephemeral, dev-only)
+        Priority: Cloudinary → Local (ephemeral, dev-only)
         """
         # 1. Validate extension
         ext = os.path.splitext(file.filename or "")[1].lower()
@@ -115,32 +97,7 @@ class StorageService:
             except Exception as e:
                 logger.warning(f"Cloudinary upload failed, trying fallback: {e}")
 
-        # 4. Azure upload (legacy fallback)
-        if self._azure_client:
-            try:
-                container = getattr(settings, "AZURE_CONTAINER_NAME", "announcements")
-                container_client = self._azure_client.get_container_client(container)
-                try:
-                    await asyncio.to_thread(container_client.get_container_properties)
-                except Exception:
-                    await asyncio.to_thread(
-                        container_client.create_container, public_access="blob"
-                    )
-                blob_client = self._azure_client.get_blob_client(
-                    container=container, blob=unique_name
-                )
-                await asyncio.to_thread(
-                    blob_client.upload_blob,
-                    contents,
-                    overwrite=True,
-                    content_settings=ContentSettings(content_type=file.content_type),
-                )
-                logger.info(f"☁️  Azure upload success: {blob_client.url}")
-                return blob_client.url
-            except Exception as e:
-                logger.warning(f"Azure upload failed, falling back to local: {e}")
-
-        # 5. Local storage (dev/fallback — ephemeral on Render free tier)
+        # 4. Local storage (dev/fallback — ephemeral on Render free tier)
         file_path = os.path.join(self.upload_dir, unique_name)
         try:
             with open(file_path, "wb") as f:
@@ -152,11 +109,7 @@ class StorageService:
 
     # ──────────────────────────────────────────────────────────────────────────
     async def verify_file_exists(self, file_url: str) -> bool:
-        """
-        Verify a file URL is reachable.
-        Cloudinary URLs are always valid after a successful upload,
-        so we only verify non-Cloudinary URLs.
-        """
+        """Verify a file URL is reachable."""
         if not file_url:
             return False
 
@@ -164,7 +117,7 @@ class StorageService:
         if "cloudinary.com" in file_url:
             return True
 
-        # Azure blob URLs or any HTTPS — do a HEAD check
+        # Any other HTTPS URL — do a HEAD check
         if file_url.startswith("https://") or file_url.startswith("http://"):
             try:
                 import httpx

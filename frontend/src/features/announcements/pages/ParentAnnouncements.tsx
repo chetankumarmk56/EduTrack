@@ -12,6 +12,7 @@ import {
 import { announcementApi, type Announcement } from '@/features/announcements/api';
 import { cn } from '@/shared/lib/utils';
 import { StaggerContainer, StaggerItem } from '@/shared/components/ui/PageWrapper';
+import { SkeletonHeader, SkeletonList } from '@/shared/components/ui/Skeleton';
 
 type Priority = 'IMPORTANT' | 'NORMAL';
 type Scope = 'CLASS' | 'STUDENT';
@@ -32,7 +33,7 @@ const PRIORITY_THEMES: Record<Priority, {
     border: 'border-primary/20',
     bg: 'bg-primary/8',
     text: 'text-primary',
-    solid: 'bg-primary',
+    solid: 'bg-[hsl(var(--primary))]',
     rail: 'from-primary to-indigo-400',
     chip: 'bg-primary/10 text-primary border-primary/20',
   },
@@ -268,12 +269,8 @@ export default function ParentAnnouncements() {
   if (isLoading && !announcements.length) {
     return (
       <div className="w-full px-6 py-8 space-y-8">
-        <div className="h-48 w-full rounded-[3rem] bg-slate-200/50 animate-pulse" />
-        <div className="grid grid-cols-1 gap-4">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="h-32 rounded-[2rem] bg-slate-200/50 animate-pulse" />
-          ))}
-        </div>
+        <SkeletonHeader />
+        <SkeletonList rows={5} />
       </div>
     );
   }
@@ -291,7 +288,7 @@ export default function ParentAnnouncements() {
                 <div className="flex items-center gap-2 text-primary text-xs font-black uppercase tracking-[0.3em] bg-white/60 px-4 py-2 rounded-full border border-white/80 w-fit">
                   <Bell className="w-4 h-4" /> Announcements
                 </div>
-                <h1 className="text-5xl sm:text-6xl font-black tracking-tighter text-slate-900 leading-[0.95]">
+                <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black tracking-tighter text-slate-900 leading-[0.95]">
                   School <span className="text-primary italic">Updates</span>
                 </h1>
                 <p className="text-slate-500 font-medium text-base sm:text-lg">
@@ -434,7 +431,7 @@ export default function ParentAnnouncements() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 8 }}
               transition={{ type: 'spring', stiffness: 320, damping: 28 }}
-              className="relative w-full max-w-3xl bg-white rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[88vh]"
+              className="relative w-full max-w-3xl bg-white rounded-2xl sm:rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[88vh] mx-2 sm:mx-0"
             >
               {/* Priority accent bar — only colored when important */}
               <div className={cn(
@@ -444,7 +441,7 @@ export default function ParentAnnouncements() {
                   : PRIORITY_THEMES.NORMAL.rail,
               )} />
 
-              <div className="px-8 py-7 flex items-start justify-between gap-4 border-b border-slate-100 shrink-0">
+              <div className="px-5 sm:px-8 py-5 sm:py-7 flex items-start justify-between gap-4 border-b border-slate-100 shrink-0">
                 <div className="flex items-start gap-4 min-w-0">
                   <div className={cn(
                     'h-14 w-14 rounded-2xl flex items-center justify-center text-white shadow-md shrink-0',
@@ -547,7 +544,7 @@ function FilterChip({
 }) {
   const activeClasses = {
     default: 'bg-slate-900 text-white border-slate-900 shadow-sm',
-    primary: 'bg-primary text-white border-primary shadow-md shadow-primary/20',
+    primary: 'bg-[hsl(var(--primary))] text-white border-[hsl(var(--primary))] shadow-md',
     rose: 'bg-rose-500 text-white border-rose-500 shadow-md shadow-rose-500/20',
   }[tone];
 
@@ -684,7 +681,7 @@ function AnnouncementCard({ a, onClick }: { a: Announcement; onClick: () => void
               {isUnread && (
                 <span className={cn(
                   'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-white text-[10px] font-black uppercase tracking-widest',
-                  isImportant ? 'bg-rose-500' : 'bg-primary',
+                  isImportant ? 'bg-rose-500' : 'bg-[hsl(var(--primary))]',
                 )}>
                   <Sparkles className="w-3.5 h-3.5" /> New
                 </span>

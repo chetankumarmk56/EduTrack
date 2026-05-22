@@ -1,11 +1,10 @@
-import { useState, useEffect } from 'react';
-import { 
-  motion, 
-  useMotionValue, 
-  useSpring, 
+import { useEffect } from 'react';
+import {
+  motion,
+  useMotionValue,
+  useSpring,
   useTransform,
   useMotionTemplate,
-  AnimatePresence 
 } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { GraduationCap, BookOpen, ShieldAlert, Sparkles, ArrowRight, Target, Star } from 'lucide-react';
@@ -14,27 +13,35 @@ import { useAuth } from '@/shared/contexts/AuthContext';
 export default function Landing() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  
-  // Mouse Tracking Logic
+
+  // Mouse Tracking — single rAF-throttled listener, no React state churn.
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
-  
+
   const springConfig = { damping: 25, stiffness: 150 };
   const smoothX = useSpring(mouseX, springConfig);
   const smoothY = useSpring(mouseY, springConfig);
 
   useEffect(() => {
+    let rafId = 0;
+    let pendingX = 0;
+    let pendingY = 0;
     const handleMouseMove = (e: MouseEvent) => {
-      const { clientX, clientY } = e;
-      const { innerWidth, innerHeight } = window;
-      const xPercent = (clientX / innerWidth) - 0.5;
-      const yPercent = (clientY / innerHeight) - 0.5;
-      mouseX.set(xPercent);
-      mouseY.set(yPercent);
+      pendingX = (e.clientX / window.innerWidth) - 0.5;
+      pendingY = (e.clientY / window.innerHeight) - 0.5;
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => {
+        mouseX.set(pendingX);
+        mouseY.set(pendingY);
+        rafId = 0;
+      });
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mousemove', handleMouseMove, { passive: true });
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      if (rafId) cancelAnimationFrame(rafId);
+    };
   }, []);
 
   // Parallax Transforms
@@ -43,23 +50,10 @@ export default function Landing() {
   const auroraX = useTransform(smoothX, [-0.5, 0.5], [120, -120]);
   const auroraY = useTransform(smoothY, [-0.5, 0.5], [120, -120]);
 
-  // Cursor Trail Logic
-  const [trail, setTrail] = useState<{ x: number, y: number, id: number }[]>([]);
-  
-  useEffect(() => {
-    const handleTrailMove = (e: MouseEvent) => {
-      const newPoint = { x: e.clientX, y: e.clientY, id: Date.now() };
-      setTrail(prev => [...prev.slice(-30), newPoint]);
-    };
-
-    window.addEventListener('mousemove', handleTrailMove);
-    return () => window.removeEventListener('mousemove', handleTrailMove);
-  }, []);
-
   // Dynamic Background Gradient based on mouse
   const bgGradient = useMotionTemplate`radial-gradient(circle at ${useTransform(smoothX, [-0.5, 0.5], [20, 80])}% ${useTransform(smoothY, [-0.5, 0.5], [20, 80])}%, rgba(99,102,241,0.08) 0%, transparent 50%)`;
 
-  const particles = Array.from({ length: 60 });
+  const particles = Array.from({ length: 14 });
 
   const portalCards = [
     { 
@@ -140,31 +134,10 @@ export default function Landing() {
         />
       </div>
 
-      {/* Interactive Cursor Trail & Glow */}
+      {/* Soft cursor-following glow (single element, no per-move state) */}
       <div className="fixed inset-0 z-[9999] pointer-events-none">
-        <AnimatePresence mode="popLayout">
-          {trail.map((point) => (
-            <motion.div
-              key={point.id}
-              initial={{ opacity: 0.8, scale: 0.5, filter: 'blur(4px)' }}
-              animate={{ opacity: 0, scale: 2, filter: 'blur(12px)' }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 1.2, ease: "easeOut" }}
-              style={{
-                position: 'fixed',
-                left: point.x - 20,
-                top: point.y - 20,
-                width: 40,
-                height: 40,
-                borderRadius: '50%',
-                background: 'radial-gradient(circle, rgba(99, 102, 241, 0.3) 0%, transparent 70%)',
-                boxShadow: '0 0 30px rgba(99, 102, 241, 0.4)',
-              }}
-            />
-          ))}
-        </AnimatePresence>
-        <motion.div 
-          style={{ 
+        <motion.div
+          style={{
             x: useTransform(smoothX, [-0.5, 0.5], [window.innerWidth * 0.2, window.innerWidth * 0.8]),
             y: useTransform(smoothY, [-0.5, 0.5], [window.innerHeight * 0.2, window.innerHeight * 0.8]),
           }}
@@ -255,7 +228,7 @@ export default function Landing() {
           </div>
 
           <motion.h1 
-            className="text-7xl md:text-9xl font-black text-white tracking-tighter mb-8 leading-none select-none"
+            className="text-5xl sm:text-7xl md:text-8xl lg:text-9xl font-black text-white tracking-tighter mb-6 sm:mb-8 leading-none select-none"
           >
             {"EduTrack".split("").map((char, i) => (
               <motion.span
@@ -283,7 +256,7 @@ export default function Landing() {
           </motion.p>
         </motion.div>
 
-        <div className="grid lg:grid-cols-3 gap-10 px-6">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-8 md:gap-10 px-3 sm:px-6">
           {portalCards.map((item, i) => (
             <motion.div
               key={i}
@@ -301,7 +274,7 @@ export default function Landing() {
               <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500/20 to-transparent rounded-[3rem] blur-2xl opacity-0 group-hover:opacity-100 transition duration-700" />
               <button
                 onClick={() => handlePortalClick(item)}
-                className="relative w-full h-full text-left p-12 rounded-[3rem] bg-white/[0.01] border border-white/5 backdrop-blur-3xl transition-all duration-700 hover:bg-white/[0.03] hover:border-white/20 overflow-hidden shadow-2xl"
+                className="relative w-full h-full text-left p-6 sm:p-10 md:p-12 rounded-2xl sm:rounded-[3rem] bg-white/[0.01] border border-white/5 backdrop-blur-3xl transition-all duration-700 hover:bg-white/[0.03] hover:border-white/20 overflow-hidden shadow-2xl"
                 style={{ transformStyle: 'preserve-3d' }}
               >
                 {/* Specular Highlight Overlay */}
@@ -340,7 +313,7 @@ export default function Landing() {
           transition={{ delay: 1.5 }}
           className="mt-32 text-center"
         >
-          <div className="inline-flex items-center gap-10 px-12 py-5 rounded-[2.5rem] bg-white/[0.02] border border-white/5 backdrop-blur-xl shadow-2xl">
+          <div className="inline-flex flex-wrap justify-center items-center gap-5 sm:gap-10 px-6 sm:px-12 py-4 sm:py-5 rounded-2xl sm:rounded-[2.5rem] bg-white/[0.02] border border-white/5 backdrop-blur-xl shadow-2xl">
              <div className="flex flex-col items-center">
                 <span className="text-3xl font-black text-white">9+</span>
                 <span className="text-[10px] uppercase font-black tracking-[0.3em] text-slate-500">Expert Faculty</span>

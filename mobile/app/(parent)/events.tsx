@@ -14,11 +14,17 @@ import { Colors } from '@/shared/constants/Colors';
 import { LoadingScreen, ErrorState, EmptyState } from '@/shared/components/ui/Feedback';
 import { eventsService, type SchoolEvent } from '../../services';
 
-type EventType = 'exam' | 'meeting' | 'holiday' | 'sports' | 'activity';
-type FilterKey = 'all' | EventType;
+type FilterKey = 'all' | 'holiday' | 'working';
 type Scope = 'upcoming' | 'all' | 'past';
 
-const TYPE_META: Record<EventType, {
+const HOLIDAY_META = {
+  color: Colors.success,
+  bg: '#f0fdf4',
+  icon: 'sunny' as keyof typeof Ionicons.glyphMap,
+  label: 'Non-Teaching',
+};
+
+const TYPE_META: Record<string, {
   color: string;
   bg: string;
   icon: keyof typeof Ionicons.glyphMap;
@@ -26,7 +32,6 @@ const TYPE_META: Record<EventType, {
 }> = {
   exam:     { color: Colors.danger,  bg: '#fef2f2', icon: 'document-text', label: 'Exam' },
   meeting:  { color: Colors.primary, bg: '#eff6ff', icon: 'people',        label: 'Meeting' },
-  holiday:  { color: Colors.success, bg: '#f0fdf4', icon: 'sunny',         label: 'Holiday' },
   sports:   { color: Colors.warning, bg: '#fffbeb', icon: 'football',      label: 'Sports' },
   activity: { color: Colors.info,    bg: '#eff6ff', icon: 'sparkles',      label: 'Activity' },
 };
@@ -36,10 +41,16 @@ const META_FALLBACK = {
   icon: 'calendar' as keyof typeof Ionicons.glyphMap, label: 'Event',
 };
 
-function metaFor(type: string | undefined) {
+function metaFor(event: SchoolEvent) {
+  if (event.is_holiday) return HOLIDAY_META;
+  const type = (event.event_type || event.type || '').toString().toLowerCase();
   if (!type) return META_FALLBACK;
-  const key = type.toLowerCase() as EventType;
-  return TYPE_META[key] ?? META_FALLBACK;
+  if (TYPE_META[type]) return TYPE_META[type];
+  if (type.includes('exam')) return TYPE_META.exam;
+  if (type.includes('meeting')) return TYPE_META.meeting;
+  if (type.includes('sport')) return TYPE_META.sports;
+  if (type.includes('activity')) return TYPE_META.activity;
+  return { ...META_FALLBACK, label: event.event_type || event.type || 'Event' };
 }
 
 function startOfDay(d: Date) { const x = new Date(d); x.setHours(0,0,0,0); return x; }
@@ -120,19 +131,20 @@ export default function EventsScreen() {
   const featured = upcoming[0];
 
   const counts = useMemo(() => {
-    const c: Record<string, number> = { all: events.length };
-    for (const e of events) {
-      const t = (e.event_type || '').toLowerCase();
-      c[t] = (c[t] || 0) + 1;
-    }
-    return c;
+    const holiday = events.filter((e) => e.is_holiday).length;
+    return {
+      all: events.length,
+      holiday,
+      working: events.length - holiday,
+    };
   }, [events]);
 
   const filteredAll = useMemo(() => {
     const base =
       scope === 'upcoming' ? upcoming : scope === 'past' ? past : [...upcoming, ...past];
-    if (filter === 'all') return base;
-    return base.filter((e) => (e.event_type || '').toLowerCase() === filter);
+    if (filter === 'holiday') return base.filter((e) => e.is_holiday);
+    if (filter === 'working') return base.filter((e) => !e.is_holiday);
+    return base;
   }, [upcoming, past, filter, scope]);
 
   const grouped = useMemo(() => {
@@ -164,7 +176,7 @@ export default function EventsScreen() {
 
   if (loading) return <LoadingScreen message="Loading events..." />;
 
-  const featuredMeta = featured ? metaFor(featured.event_type) : null;
+  const featuredMeta = featured ? metaFor(featured) : null;
   const featuredRel = featured ? relativeLabel(new Date(featured.event_date), today) : null;
 
   return (
@@ -199,7 +211,7 @@ export default function EventsScreen() {
             <EmptyState
               icon={<Ionicons name="sparkles-outline" size={48} color={Colors.textMuted} />}
               title="No events on the calendar"
-              subtitle="When your school schedules events, exams or holidays they'll show up here."
+              subtitle="When your school schedules events, exams or non-teaching days they'll show up here."
             />
           </View>
         ) : (
@@ -265,7 +277,7 @@ export default function EventsScreen() {
                   {strip.map((d, i) => {
                     const hasEvent = d.events.length > 0;
                     const isToday = i === 0;
-                    const accent = hasEvent ? metaFor(d.events[0].event_type).color : null;
+                    const accent = hasEvent ? metaFor(d.events[0]).color : null;
                     return (
                       <View
                         key={d.date.toISOString()}
@@ -294,7 +306,7 @@ export default function EventsScreen() {
                                 key={idx}
                                 style={[
                                   styles.stripDot,
-                                  { backgroundColor: isToday ? Colors.white : metaFor(e.event_type).color },
+                                  { backgroundColor: isToday ? Colors.white : metaFor(e).color },
                                 ]}
                               />
                             ))
@@ -350,21 +362,26 @@ export default function EventsScreen() {
                   color={Colors.primary}
                   icon="apps"
                 />
-                {(Object.keys(TYPE_META) as EventType[]).map((key) => {
-                  if (!counts[key]) return null;
-                  const m = TYPE_META[key];
-                  return (
-                    <FilterPill
-                      key={key}
-                      active={filter === key}
-                      onPress={() => setFilter(key)}
-                      label={m.label}
-                      count={counts[key]}
-                      color={m.color}
-                      icon={m.icon}
-                    />
-                  );
-                })}
+                {counts.working > 0 && (
+                  <FilterPill
+                    active={filter === 'working'}
+                    onPress={() => setFilter('working')}
+                    label="Working"
+                    count={counts.working}
+                    color={Colors.primary}
+                    icon="briefcase"
+                  />
+                )}
+                {counts.holiday > 0 && (
+                  <FilterPill
+                    active={filter === 'holiday'}
+                    onPress={() => setFilter('holiday')}
+                    label="Non-Teaching"
+                    count={counts.holiday}
+                    color={HOLIDAY_META.color}
+                    icon={HOLIDAY_META.icon}
+                  />
+                )}
               </ScrollView>
             </Animated.View>
 
@@ -386,7 +403,7 @@ export default function EventsScreen() {
                       </View>
                     </View>
                     {g.items.map((event, idx) => {
-                      const m = metaFor(event.event_type);
+                      const m = metaFor(event);
                       const date = new Date(event.event_date);
                       const rel = relativeLabel(date, today);
                       const isPast = daysBetween(date, today) < 0;

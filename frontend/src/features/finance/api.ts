@@ -87,10 +87,11 @@ export const financeApi = {
   },
 
   // Parent Methods
-  getStudentDues: async (studentId: number) => {
-    const response = await client.get<StudentDuesResponse>(`finance/students/${studentId}/dues`);
-    return response.data;
-  },
+  // Unused — getMyDues() is used instead; nothing calls this in the frontend.
+  // getStudentDues: async (studentId: number) => {
+  //   const response = await client.get<StudentDuesResponse>(`finance/students/${studentId}/dues`);
+  //   return response.data;
+  // },
 
   getParentFees: async () => {
     const response = await client.get<any[]>('parent/fees');
@@ -138,15 +139,16 @@ export const financeApi = {
     return response.data;
   },
 
-  getAllPayments: async (params?: {
-    mode?: string;
-    status?: string;
-    skip?: number;
-    limit?: number;
-  }) => {
-    const response = await client.get('finance/payments', { params });
-    return response.data;
-  },
+  // Unused — not called anywhere in the frontend (getLedger is used instead).
+  // getAllPayments: async (params?: {
+  //   mode?: string;
+  //   status?: string;
+  //   skip?: number;
+  //   limit?: number;
+  // }) => {
+  //   const response = await client.get('finance/payments', { params });
+  //   return response.data;
+  // },
 
   getDefaulters: async () => {
     const response = await client.get<DefaulterResponse[]>('finance/defaulters');
@@ -180,10 +182,11 @@ export const financeApi = {
     return response.data;
   },
 
-  getLedgerSummary: async (params: { date_from?: string; date_to?: string; academic_year?: string } = {}) => {
-    const response = await client.get<LedgerSummary>('finance/ledger/summary', { params });
-    return response.data;
-  },
+  // Unused — not called anywhere in the frontend (summary is part of PaginatedLedgerResponse).
+  // getLedgerSummary: async (params: { date_from?: string; date_to?: string; academic_year?: string } = {}) => {
+  //   const response = await client.get<LedgerSummary>('finance/ledger/summary', { params });
+  //   return response.data;
+  // },
 
   exportLedger: async (params: LedgerExportParams) => {
     const response = await client.get('finance/ledger/export', {

@@ -89,7 +89,7 @@ export default function TeacherEvents() {
 
         {/* ── Event Cards ── */}
         {events.map((event, index) => {
-          const typeColor = getEventTypeColor(event.event_type);
+          const typeColor = event.is_holiday ? Colors.success : getEventTypeColor(event.event_type);
           const dateObj = new Date(event.event_date);
           const dayNum = dateObj.toLocaleDateString('en-US', { day: '2-digit' });
           const monthStr = dateObj.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
@@ -108,7 +108,7 @@ export default function TeacherEvents() {
                   <Text style={styles.dateMonth}>{monthStr}</Text>
                   <View style={styles.dateDivider} />
                   <Ionicons
-                    name={getEventTypeIcon(event.event_type)}
+                    name={event.is_holiday ? 'sunny-outline' : getEventTypeIcon(event.event_type)}
                     size={16}
                     color="rgba(255,255,255,0.7)"
                   />
@@ -116,16 +116,31 @@ export default function TeacherEvents() {
 
                 {/* ── Right Content ── */}
                 <View style={styles.cardContent}>
-                  {/* Type badge */}
-                  <View
-                    style={[
-                      styles.typeBadge,
-                      { backgroundColor: `${typeColor}18` },
-                    ]}
-                  >
-                    <Text style={[styles.typeBadgeText, { color: typeColor }]}>
-                      {typeLabel}
-                    </Text>
+                  {/* Type badge + holiday flag */}
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                    <View
+                      style={[
+                        styles.typeBadge,
+                        { backgroundColor: `${typeColor}18` },
+                      ]}
+                    >
+                      <Text style={[styles.typeBadgeText, { color: typeColor }]}>
+                        {typeLabel}
+                      </Text>
+                    </View>
+                    {event.is_holiday && (
+                      <View
+                        style={[
+                          styles.typeBadge,
+                          { backgroundColor: `${Colors.success}18`, flexDirection: 'row', alignItems: 'center', gap: 4 },
+                        ]}
+                      >
+                        <Ionicons name="sunny" size={10} color={Colors.success} />
+                        <Text style={[styles.typeBadgeText, { color: Colors.success }]}>
+                          NON-TEACHING DAY · NO CLASSES
+                        </Text>
+                      </View>
+                    )}
                   </View>
 
                   {/* Title */}

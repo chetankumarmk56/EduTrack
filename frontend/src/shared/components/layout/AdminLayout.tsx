@@ -5,32 +5,36 @@ import Sidebar from '../ui/Sidebar';
 import TopNav from '../ui/TopNav';
 import PageWrapper from '../ui/PageWrapper';
 import TeacherAurora from '../ui/TeacherAurora';
+import { useTheme } from '@/shared/contexts/ThemeContext';
 
 export default function AdminLayout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
+  const { isDark } = useTheme();
 
   useEffect(() => {
-    document.documentElement.classList.add('dark', 'teacher-theme');
-    document.documentElement.classList.remove('crystal-theme');
+    if (isDark) {
+      document.documentElement.classList.add('dark', 'teacher-theme');
+      document.documentElement.classList.remove('crystal-theme', 'teacher-light-theme');
+    } else {
+      document.documentElement.classList.add('teacher-light-theme');
+      document.documentElement.classList.remove('dark', 'teacher-theme', 'crystal-theme');
+    }
     return () => {
-      document.documentElement.classList.remove('dark', 'teacher-theme');
+      document.documentElement.classList.remove(
+        'dark', 'teacher-theme', 'teacher-light-theme', 'crystal-theme',
+      );
     };
-  }, []);
+  }, [isDark]);
 
   return (
-    <div className="min-h-screen bg-background text-foreground transition-colors duration-500 font-sans selection:bg-primary/30 selection:text-primary">
-      <TeacherAurora />
-
+    <div className="min-h-screen bg-background text-foreground transition-colors duration-500 font-sans selection:bg-primary/30 selection:text-primary overflow-x-hidden">
+      <TeacherAurora isDark={isDark} />
       <div className="relative z-10">
-        {/* Desktop Sidebar (Role-aware — shows Admin nav for admin routes) */}
-        <Sidebar />
-
-        {/* Main Content Area */}
+        <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
         <div className="md:ml-72 flex min-h-screen flex-col pr-4">
-          <TopNav onMenuClick={() => setMobileMenuOpen(!mobileMenuOpen)} />
-
-          <main className="flex-1 p-4 md:p-6 overflow-y-auto pb-32 md:pb-8">
+          <TopNav onMenuClick={() => setMobileMenuOpen(prev => !prev)} />
+          <main className="flex-1 p-3 sm:p-4 md:p-6 overflow-y-auto pb-24 md:pb-8">
             <AnimatePresence mode="wait">
               <PageWrapper key={location.pathname} speed="fast">
                 <Outlet />

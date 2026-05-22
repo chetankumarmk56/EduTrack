@@ -34,10 +34,26 @@ class Settings(BaseSettings):
     JWT_SECRET: Optional[str] = None
     JWT_ALGORITHM: Optional[str] = None
     
-    # AI (Optional)
+    # AI (Optional) — used by Question Bank only. Lesson plan generation
+    # lives in an external microservice; this codebase never calls it.
     GOOGLE_API_KEY: Optional[str] = None
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_MODEL: str = "gpt-4o-mini"
+
+    # External Lesson Plan AI microservice
+    # POST {LESSON_PLAN_AI_SERVICE_URL} receives the metadata JSON and
+    # S3 output key; the service writes output/lesson_plan.json to S3
+    # and returns only after the file is saved.
+    LESSON_PLAN_AI_SERVICE_URL: Optional[str] = None
+    # Seconds to wait for the AI service (generation can take minutes).
+    LESSON_PLAN_AI_SERVICE_TIMEOUT: float = 300.0
+
+    # External Question Bank AI microservice (same service as Lesson Plan).
+    # The microservice routes by ``type`` in the request body. Leave unset
+    # to reuse LESSON_PLAN_AI_SERVICE_URL; set to a different URL only if
+    # you've split the deployments.
+    QUESTION_BANK_AI_SERVICE_URL: Optional[str] = None
+    QUESTION_BANK_AI_SERVICE_TIMEOUT: float = 300.0
 
     # Cloudinary (File Storage)
     CLOUDINARY_CLOUD_NAME: Optional[str] = None
@@ -86,10 +102,6 @@ class Settings(BaseSettings):
     # Default TTS voice for inline TwiML. See Twilio <Say> voice options.
     TWILIO_TTS_VOICE: str = "alice"
     TWILIO_TTS_LANGUAGE: str = "en-IN"
-
-    # Azure Storage
-    AZURE_STORAGE_CONNECTION_STRING: Optional[str] = None
-    AZURE_CONTAINER_NAME: str = "announcements"
 
     # Expo Push Notifications
     # Optional: only required when you've enabled "Enhanced Push Security" in

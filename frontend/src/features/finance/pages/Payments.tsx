@@ -8,6 +8,7 @@ import { cn } from '@/shared/lib/utils';
 import type { StudentDuesResponse } from '@/features/finance/api';
 import { financeApi } from '@/features/finance/api';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Skeleton, SkeletonHeader, SkeletonStatGrid, SkeletonList } from '@/shared/components/ui/Skeleton';
 
 declare global {
   interface Window { Razorpay: any; }
@@ -100,7 +101,7 @@ export default function Payments() {
         theme: { color: '#4f46e5' },
         modal: {
           ondismiss: async () => {
-            console.log("Payment modal dismissed by user.");
+            // console.log("Payment modal dismissed by user.");
             try {
               await financeApi.cancelPayment({
                 razorpay_order_id: order.order_id,
@@ -123,8 +124,11 @@ export default function Payments() {
 
   if (isLoading) {
     return (
-      <div className="h-full flex items-center justify-center pt-32">
-        <Loader2 className="w-10 h-10 animate-spin text-primary" />
+      <div className="space-y-8 p-6">
+        <SkeletonHeader />
+        <SkeletonStatGrid count={3} />
+        <Skeleton rounded="3xl" className="h-48 w-full" />
+        <SkeletonList rows={4} />
       </div>
     );
   }
@@ -150,14 +154,14 @@ export default function Payments() {
             <div className="flex items-center gap-2 text-primary text-xs font-black uppercase tracking-[0.3em] bg-primary/10 px-4 py-2 rounded-full border border-primary/20 w-fit">
               <Zap className="w-4 h-4" /> Financial Terminal — Secure
             </div>
-            <h1 className="text-5xl font-black tracking-tighter text-foreground leading-[0.9]">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tighter text-foreground leading-[0.9]">
               Fees &amp; <span className="text-primary italic">Payments</span>
             </h1>
           </div>
 
           {/* Account Status badge */}
           <div className={cn(
-            'px-6 py-4 rounded-[2rem] premium-glass flex items-center gap-4 border-2 shadow-xl transition-all duration-500',
+            'px-4 sm:px-6 py-3 sm:py-4 rounded-2xl sm:rounded-[2rem] premium-glass flex items-center gap-3 sm:gap-4 border-2 shadow-xl transition-all duration-500',
             isOverdue ? 'border-rose-500/40 shadow-rose-500/10'
               : noDues ? 'border-emerald-500/20 shadow-emerald-500/5'
               : 'border-primary/20 shadow-primary/5'
@@ -278,7 +282,7 @@ export default function Payments() {
 
         {/* No record state */}
         {noRecord && (
-          <div className="premium-glass rounded-[3rem] p-12 text-center space-y-4">
+          <div className="premium-glass rounded-2xl sm:rounded-[3rem] p-8 sm:p-12 text-center space-y-4">
             <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto" />
             <h2 className="text-2xl font-black text-foreground">No Fee Record Found</h2>
             <p className="text-muted-foreground max-w-md mx-auto">
@@ -290,7 +294,7 @@ export default function Payments() {
         {/* Fee Breakdown + Payment */}
         {!noRecord && (
           <div className="grid lg:grid-cols-12 gap-8 items-stretch">
-            <div className="lg:col-span-8 premium-glass p-10 rounded-[3rem] relative overflow-hidden border-glass-border shadow-2xl">
+            <div className="lg:col-span-8 premium-glass p-5 sm:p-8 md:p-10 rounded-2xl sm:rounded-[3rem] relative overflow-hidden border-glass-border shadow-2xl">
               <div className="absolute top-0 right-0 w-80 h-80 bg-primary/5 rounded-full blur-[100px] -mr-40 -mt-40" />
               <div className="relative z-10 space-y-8">
                 <div className="flex items-center justify-between">
@@ -371,7 +375,7 @@ export default function Payments() {
             <div className="lg:col-span-4 flex flex-col gap-6">
               {/* Due date card */}
               <div className={cn(
-                'p-8 rounded-[3rem] border-2 shadow-xl relative overflow-hidden',
+                'p-5 sm:p-8 rounded-2xl sm:rounded-[3rem] border-2 shadow-xl relative overflow-hidden',
                 isOverdue ? 'bg-rose-600 border-rose-500 text-white' : 'premium-glass border-glass-border'
               )}>
                 {isOverdue && <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-black/10 pointer-events-none" />}
@@ -393,7 +397,7 @@ export default function Payments() {
               </div>
 
               {/* Security info */}
-              <div className="flex-1 p-8 rounded-[3rem] bg-indigo-600 text-white shadow-2xl shadow-indigo-500/30 relative overflow-hidden flex flex-col justify-between">
+              <div className="flex-1 p-5 sm:p-8 rounded-2xl sm:rounded-[3rem] bg-indigo-600 text-white shadow-2xl shadow-indigo-500/30 relative overflow-hidden flex flex-col justify-between">
                 <div className="absolute inset-0 bg-gradient-to-br from-white/20 via-transparent to-black/10 pointer-events-none" />
                 <div className="relative z-10">
                   <div className="h-12 w-12 rounded-2xl bg-white/20 flex items-center justify-center mb-6 border border-white/30">
@@ -414,7 +418,7 @@ export default function Payments() {
         )}
 
         {/* Payment History — always shown */}
-        <div className="premium-glass rounded-[3rem] overflow-hidden shadow-xl">
+        <div className="premium-glass rounded-2xl sm:rounded-[3rem] overflow-hidden shadow-xl">
           <div className="p-8 border-b border-glass-border flex items-center gap-4">
             <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
               <History className="w-5 h-5 text-primary" />

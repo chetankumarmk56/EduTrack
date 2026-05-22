@@ -188,7 +188,7 @@ export default function TeacherAttendance() {
             <CheckCircle2 className="h-3.5 w-3.5 fill-primary" />
             Registry Hub
           </div>
-          <h1 className="text-5xl font-black tracking-tighter text-foreground -mb-1">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tighter text-foreground -mb-1">
             Student Attendance
           </h1>
           <div className="flex flex-wrap items-center gap-4 mt-6">
@@ -247,7 +247,7 @@ export default function TeacherAttendance() {
             ) : (
               <Save className="w-5 h-5" />
             )}
-            {isSaving ? 'Encrypting...' : saveStatus === 'success' ? 'Validated!' : 'Commit Attendance'}
+            {isSaving ? 'Saving...' : saveStatus === 'success' ? 'Saved!' : 'Save'}
           </motion.button>
         </div>
       </div>

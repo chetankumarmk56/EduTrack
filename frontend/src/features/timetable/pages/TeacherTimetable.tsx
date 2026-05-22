@@ -12,6 +12,7 @@ import type {
   SchedulePeriodType,
 } from '@/shared/types';
 import { cn } from '@/shared/lib/utils';
+import { SkeletonStatGrid, SkeletonTable } from '@/shared/components/ui/Skeleton';
 import {
   DAY_LABELS,
   DAY_FULL,
@@ -112,13 +113,13 @@ export default function TeacherTimetable() {
   }, [sortedPeriods, slotByCoord, today, data]);
 
   return (
-    <div className="premium-page-container animate-fade-in flex flex-col gap-8 pb-20">
+    <div className="w-full animate-fade-in flex flex-col gap-8 pb-20">
       {/* Header */}
       <div className="space-y-4">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-indigo/10 border border-brand-indigo/20 text-brand-indigo text-[10px] font-black uppercase tracking-widest">
           <CalendarRange className="w-3.5 h-3.5" /> My Timetable
         </div>
-        <h1 className="text-5xl font-black tracking-tight text-gradient-indigo">Schedule</h1>
+        <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight text-gradient-indigo">Schedule</h1>
         <p className="text-text-secondary text-lg font-medium max-w-2xl">
           {view === 'mine'
             ? 'Your complete weekly teaching schedule — today is highlighted.'
@@ -127,7 +128,10 @@ export default function TeacherTimetable() {
       </div>
 
       {loading ? (
-        <div className="py-20 text-center text-text-secondary">Loading...</div>
+        <div className="space-y-6">
+          <SkeletonStatGrid count={3} />
+          <SkeletonTable rows={7} cols={8} />
+        </div>
       ) : !data || data.periods.length === 0 ? (
         <div className="py-20 obsidian-card border-dashed border-glass-border flex flex-col items-center justify-center gap-3 opacity-50">
           <Clock className="w-10 h-10" />
@@ -244,13 +248,13 @@ export default function TeacherTimetable() {
                             className={cn(
                               'px-3 py-3 text-[10px] font-black uppercase tracking-widest text-center transition-colors',
                               idx === today
-                                ? 'text-brand-indigo bg-brand-indigo/[0.08]'
+                                ? 'text-amber-400 bg-amber-400/20 border-b-2 border-amber-400'
                                 : 'text-text-secondary'
                             )}
                           >
                             {day}
                             {idx === today && (
-                              <div className="text-[8px] text-brand-indigo">Today</div>
+                              <div className="text-[8px] text-amber-400 font-black">Today</div>
                             )}
                           </th>
                         ))}
@@ -272,9 +276,15 @@ export default function TeacherTimetable() {
                                   </div>
                                 </div>
                               </td>
-                              <td colSpan={7} className="px-3 py-2 border-t border-glass-border text-center text-[10px] font-bold uppercase tracking-widest text-amber-500/60 italic">
-                                — {period.name} —
-                              </td>
+                              {DAY_LABELS.map((_, day) => (
+                                <td
+                                  key={day}
+                                  className={cn(
+                                    'px-3 py-2 border-t border-l border-glass-border',
+                                    day === today && 'bg-amber-400/10'
+                                  )}
+                                />
+                              ))}
                             </tr>
                           );
                         }
@@ -300,8 +310,7 @@ export default function TeacherTimetable() {
                                   key={day}
                                   className={cn(
                                     'px-2 py-2 border-t border-l border-glass-border align-top min-w-[110px]',
-                                    isToday && 'bg-brand-indigo/[0.05]',
-                                    slot?.subject && !isToday && 'bg-white/[0.02]'
+                                    isToday ? 'bg-amber-400/10' : slot?.subject && 'bg-white/[0.02]'
                                   )}
                                 >
                                   {slot?.subject ? (
@@ -385,13 +394,13 @@ export default function TeacherTimetable() {
                                 className={cn(
                                   'px-3 py-3 text-[10px] font-black uppercase tracking-widest text-center transition-colors',
                                   idx === today
-                                    ? 'text-brand-indigo bg-brand-indigo/[0.08]'
+                                    ? 'text-amber-400 bg-amber-400/20 border-b-2 border-amber-400'
                                     : 'text-text-secondary'
                                 )}
                               >
                                 {day}
                                 {idx === today && (
-                                  <div className="text-[8px] text-brand-indigo">Today</div>
+                                  <div className="text-[8px] text-amber-400 font-black">Today</div>
                                 )}
                               </th>
                             ))}
@@ -413,9 +422,15 @@ export default function TeacherTimetable() {
                                       </div>
                                     </div>
                                   </td>
-                                  <td colSpan={7} className="px-3 py-2 border-t border-glass-border text-center text-[10px] font-bold uppercase tracking-widest text-amber-500/60 italic">
-                                    — {period.name} —
-                                  </td>
+                                  {DAY_LABELS.map((_, day) => (
+                                    <td
+                                      key={day}
+                                      className={cn(
+                                        'px-3 py-2 border-t border-l border-glass-border',
+                                        day === today && 'bg-amber-400/10'
+                                      )}
+                                    />
+                                  ))}
                                 </tr>
                               );
                             }
@@ -444,9 +459,9 @@ export default function TeacherTimetable() {
                                       className={cn(
                                         'px-2 py-2 border-t border-l border-glass-border align-top min-w-[110px]',
                                         isMine
-                                          ? 'bg-brand-indigo/[0.12] ring-1 ring-inset ring-brand-indigo/40'
+                                          ? 'bg-brand-indigo/[0.18] ring-1 ring-inset ring-brand-indigo/40'
                                           : isToday
-                                            ? 'bg-brand-indigo/[0.05]'
+                                            ? 'bg-amber-400/10'
                                             : slot?.subject && 'bg-white/[0.02]',
                                       )}
                                     >

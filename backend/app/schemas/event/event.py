@@ -10,6 +10,7 @@ class EventBase(BaseModel):
     end_date: Optional[str] = None
     time: str
     location: Optional[str] = None
+    is_holiday: Optional[bool] = False
     visibility: Optional[Dict[str, bool]] = {"parents": True, "teachers": True, "students": True}
 
 class EventCreate(EventBase):
@@ -24,6 +25,7 @@ class EventUpdate(BaseModel):
     end_date: Optional[str] = None
     time: Optional[str] = None
     location: Optional[str] = None
+    is_holiday: Optional[bool] = None
     visibility: Optional[Dict[str, bool]] = None
 
 class EventResponse(EventBase):

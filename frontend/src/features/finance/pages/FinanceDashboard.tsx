@@ -3,6 +3,7 @@ import { Plus, AlertCircle, CheckCircle2, X, Loader2, RefreshCw } from 'lucide-r
 import { motion, AnimatePresence } from 'framer-motion';
 import type { FinanceSummaryResponse, DefaulterResponse, ClassFinanceBreakdownResponse } from '@/features/finance/api';
 import { financeApi } from '@/features/finance/api';
+import { SkeletonHeader, SkeletonStatGrid, SkeletonTable } from '@/shared/components/ui/Skeleton';
 import { cn } from '@/shared/lib/utils';
 import { useApp } from '@/shared/contexts/AppContext';
 import ClassesOverview from '@/features/finance/components/ClassesOverview';
@@ -69,41 +70,44 @@ export default function FinanceDashboard() {
 
   if (isLoading) {
     return (
-      <div className="h-full flex flex-col items-center justify-center pt-32 p-4 text-center">
-        <Loader2 className="w-12 h-12 animate-spin text-primary mb-4" />
-        <h2 className="text-2xl font-black text-foreground">Syncing Financial Ledger</h2>
+      <div className="space-y-8 p-4 sm:p-6">
+        <SkeletonHeader />
+        <SkeletonStatGrid count={4} />
+        <SkeletonTable rows={8} cols={6} />
       </div>
     );
   }
 
   return (
-    <div className="space-y-10 pb-20">
+    <div className="space-y-6 sm:space-y-10 pb-20">
       {/* Header & Tabs */}
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-6">
+      <div className="flex flex-col gap-4 sm:gap-6">
         <div className="space-y-2">
           <p className="text-primary text-[10px] font-black uppercase tracking-[0.4em] bg-primary/10 px-4 py-2 rounded-full w-fit">
             Institutional Terminal Active
           </p>
-          <h1 className="text-6xl font-black tracking-tighter text-foreground leading-none">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black tracking-tighter text-foreground leading-none">
             Finance <span className="text-primary italic">Command</span>
           </h1>
         </div>
 
-        <div className="flex items-center gap-2 p-1.5 bg-slate-900/50 backdrop-blur-md rounded-2xl border border-white/5 shadow-2xl">
-          {(['classes', 'ledger', 'defaulters'] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={cn(
-                "px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all duration-300",
-                activeTab === tab
-                  ? "bg-primary text-white shadow-lg shadow-primary/20 scale-105"
-                  : "text-slate-400 hover:text-white hover:bg-white/5"
-              )}
-            >
-              {tab}
-            </button>
-          ))}
+        {/* Tab bar + action buttons — scrollable on small screens */}
+        <div className="overflow-x-auto -mx-1 px-1 pb-1">
+          <div className="flex items-center gap-2 p-1.5 bg-slate-900/50 backdrop-blur-md rounded-2xl border border-white/5 shadow-2xl w-max min-w-full sm:w-auto sm:min-w-0">
+            {(['classes', 'ledger', 'defaulters'] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={cn(
+                  'px-4 sm:px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all duration-300 whitespace-nowrap',
+                  activeTab === tab
+                    ? 'bg-primary text-white shadow-lg shadow-primary/20 scale-105'
+                    : 'text-slate-400 hover:text-white hover:bg-white/5',
+                )}
+              >
+                {tab}
+              </button>
+            ))}
           <div className="w-px h-6 bg-white/10 mx-2" />
           <button
             onClick={handleBackfill}
@@ -117,10 +121,11 @@ export default function FinanceDashboard() {
           <div className="w-px h-6 bg-white/10 mx-2" />
           <button
             onClick={() => openManualModal()}
-            className="flex items-center gap-2 px-6 py-2.5 bg-primary text-primary-foreground rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
+            className="flex items-center gap-2 px-4 sm:px-6 py-2.5 bg-primary text-primary-foreground rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all whitespace-nowrap"
           >
             <Plus className="w-4 h-4" /> Record Payment
           </button>
+          </div>
         </div>
       </div>
 

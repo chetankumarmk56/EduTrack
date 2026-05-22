@@ -344,7 +344,7 @@ class AnnouncementService:
                 raise HTTPException(status_code=403, detail="This student is not in your assigned classes.")
 
         # 3. Attachment URL is trusted — already validated during upload
-        # (Cloudinary/Azure guarantee URL validity post-upload)
+        # (Cloudinary guarantees URL validity post-upload)
 
         # 4. Create
         db_announcement = Announcement(

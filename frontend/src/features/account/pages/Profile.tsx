@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useApp } from '@/shared/contexts/AppContext';
 import { useAuth } from '@/shared/contexts/AuthContext';
+import { SkeletonHeader, SkeletonStatGrid, SkeletonCardGrid } from '@/shared/components/ui/Skeleton';
 import {
   User, Mail, Phone, Heart,
   TrendingUp, TrendingDown,
@@ -47,9 +48,10 @@ export default function Profile() {
 
   if (!user?.id || !activeStudent) {
     return (
-      <div className="h-full flex flex-col items-center justify-center text-muted-foreground italic space-y-4 pt-40">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-        <p className="font-medium">Synchronizing Family Matrix...</p>
+      <div className="space-y-8 p-6">
+        <SkeletonHeader />
+        <SkeletonStatGrid count={4} />
+        <SkeletonCardGrid count={4} cols="md" />
       </div>
     );
   }
@@ -63,34 +65,34 @@ export default function Profile() {
       <div className="max-w-7xl mx-auto space-y-12 py-8 px-4 sm:px-6 lg:px-8">
         
         {/* Header Section */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-          <div className="space-y-4">
-             <h1 className="text-6xl font-black tracking-tighter text-foreground leading-[0.9]">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 sm:gap-6">
+          <div className="space-y-2 sm:space-y-4">
+             <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black tracking-tighter text-foreground leading-[0.9]">
                 Profile
              </h1>
           </div>
         </div>
 
-        <div className="grid gap-8 lg:grid-cols-12">
+        <div className="grid gap-5 sm:gap-8 lg:grid-cols-12">
           {/* Main Profile Column */}
-          <StaggerContainer className="lg:col-span-8 space-y-8">
+          <StaggerContainer className="lg:col-span-8 space-y-5 sm:space-y-8">
             <StaggerItem>
-              <div className="premium-glass p-8 md:p-12 rounded-[3.5rem] relative overflow-hidden">
+              <div className="premium-glass p-5 sm:p-8 md:p-12 rounded-3xl sm:rounded-[3.5rem] relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-[80px] -mr-32 -mt-32" />
-                
-                <div className="flex flex-col md:flex-row gap-10 items-center md:items-start relative z-10">
-                  <motion.div 
+
+                <div className="flex flex-col sm:flex-row gap-6 sm:gap-10 items-center sm:items-start relative z-10">
+                  <motion.div
                     whileHover={{ scale: 1.05, rotate: 5 }}
-                    className="h-44 w-44 rounded-[3rem] bg-gradient-to-tr from-primary to-indigo-400 p-1 shadow-2xl shrink-0"
+                    className="h-28 w-28 sm:h-44 sm:w-44 rounded-3xl sm:rounded-[3rem] bg-gradient-to-tr from-primary to-indigo-400 p-0.5 sm:p-1 shadow-2xl shrink-0"
                   >
-                    <div className="h-full w-full rounded-[2.8rem] bg-white flex items-center justify-center text-primary font-black text-5xl border-4 border-white">
+                    <div className="h-full w-full rounded-[1.7rem] sm:rounded-[2.8rem] bg-white flex items-center justify-center text-primary font-black text-3xl sm:text-5xl border-4 border-white">
                       {activeStudent.name.charAt(0)}
                     </div>
                   </motion.div>
 
-                  <div className="flex-1 text-center md:text-left space-y-6">
+                  <div className="flex-1 text-center sm:text-left space-y-4 sm:space-y-6 min-w-0">
                     <div>
-                      <h2 className="text-5xl font-black tracking-tight text-foreground mb-2">{activeStudent.name}</h2>
+                      <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black tracking-tight text-foreground mb-2 break-words">{activeStudent.name}</h2>
                       <div className="flex flex-wrap justify-center md:justify-start gap-3">
                         <span className="px-4 py-1.5 rounded-xl bg-primary/10 border border-primary/20 text-primary text-xs font-black uppercase tracking-widest">
                           Student ID: #{activeStudent.id}
@@ -131,7 +133,7 @@ export default function Profile() {
               <div className="grid sm:grid-cols-2 gap-6">
                 <motion.div 
                   whileHover={{ y: -5 }}
-                  className="premium-glass p-8 rounded-[2.5rem] border-l-[12px] border-emerald-500 shadow-xl shadow-emerald-500/5"
+                  className="premium-glass p-5 sm:p-8 rounded-2xl sm:rounded-[2.5rem] border-l-[8px] sm:border-l-[12px] border-emerald-500 shadow-xl shadow-emerald-500/5"
                 >
                   <div className="flex items-center justify-between mb-6">
                     <div className="h-12 w-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center text-emerald-600">
@@ -146,7 +148,7 @@ export default function Profile() {
 
                 <motion.div 
                   whileHover={{ y: -5 }}
-                  className="premium-glass p-8 rounded-[2.5rem] border-l-[12px] border-amber-500 shadow-xl shadow-amber-500/5"
+                  className="premium-glass p-5 sm:p-8 rounded-2xl sm:rounded-[2.5rem] border-l-[8px] sm:border-l-[12px] border-amber-500 shadow-xl shadow-amber-500/5"
                 >
                   <div className="flex items-center justify-between mb-6">
                     <div className="h-12 w-12 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-600">
@@ -166,7 +168,7 @@ export default function Profile() {
           <StaggerContainer className="lg:col-span-4 space-y-8" delay={0.15}>
             {/* Parent Info Card */}
             <StaggerItem>
-              <div className="premium-glass p-8 rounded-[3rem] shadow-2xl relative overflow-hidden">
+              <div className="premium-glass p-5 sm:p-8 rounded-2xl sm:rounded-[3rem] shadow-2xl relative overflow-hidden">
                 <div className="relative z-10 space-y-8">
                   <div className="flex items-center gap-4">
                     <div className="h-14 w-14 rounded-2xl bg-primary flex items-center justify-center text-white shadow-lg shadow-primary/20">

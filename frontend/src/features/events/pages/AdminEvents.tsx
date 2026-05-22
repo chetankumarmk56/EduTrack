@@ -16,9 +16,9 @@ export default function AdminEvents() {
   const [filter, setFilter] = useState('all');
   
   const [form, setForm] = useState({
-    title: '', description: '', type: 'meeting', 
-    category: 'General', date: '', time: '', 
-    location: '', 
+    title: '', description: '', type: 'meeting',
+    category: 'General', date: '', time: '',
+    location: '', is_holiday: false,
     visibility: { parents: true, teachers: true, students: true }
   });
 
@@ -36,6 +36,7 @@ export default function AdminEvents() {
       date: event.date,
       time: event.time,
       location: event.location || '',
+      is_holiday: !!event.is_holiday,
       visibility: event.visibility || { parents: true, teachers: true, students: true }
     });
     setIsAdding(true);
@@ -45,9 +46,9 @@ export default function AdminEvents() {
     setIsAdding(false);
     setEditingEvent(null);
     setForm({
-      title: '', description: '', type: 'meeting', 
-      category: 'General', date: '', time: '', 
-      location: '', 
+      title: '', description: '', type: 'meeting',
+      category: 'General', date: '', time: '',
+      location: '', is_holiday: false,
       visibility: { parents: true, teachers: true, students: true }
     });
   };
@@ -73,43 +74,52 @@ export default function AdminEvents() {
     } catch (err) { console.error(err); }
   };
 
-  const filteredEvents = filter === 'all' ? events : events.filter(e => e.type === filter);
+  const filteredEvents = filter === 'all'
+    ? events
+    : filter === 'holiday'
+      ? events.filter((e: any) => e.is_holiday)
+      : filter === 'working'
+        ? events.filter((e: any) => !e.is_holiday)
+        : events;
 
-  const getEventIcon = (type: string) => {
-    switch (type) {
-      case 'holiday': return <Star className="w-5 h-5 text-amber-400" />;
-      case 'exam': return <Zap className="w-5 h-5 text-indigo-400" />;
-      case 'sports': return <CalendarDays className="w-5 h-5 text-emerald-400" />;
-      default: return <Bell className="w-5 h-5 text-blue-400" />;
-    }
+  const getEventIcon = (event: any) => {
+    if (event.is_holiday) return <Star className="w-5 h-5 text-amber-400" />;
+    const type = (event.type || '').toLowerCase();
+    if (type.includes('exam')) return <Zap className="w-5 h-5 text-indigo-400" />;
+    if (type.includes('sport')) return <CalendarDays className="w-5 h-5 text-emerald-400" />;
+    return <Bell className="w-5 h-5 text-blue-400" />;
   };
 
   return (
-    <div className="premium-page-container animate-fade-in flex flex-col gap-10">
+    <div className="w-full animate-fade-in flex flex-col gap-10">
       {/* Header Area */}
       <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-8">
         <div className="space-y-3">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-black uppercase tracking-widest">
             <Calendar className="w-3 h-3" /> Institutional Timeline
           </div>
-          <h1 className="text-5xl font-black tracking-tight text-gradient-indigo">Chronos Management</h1>
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight text-gradient-indigo">Chronos Management</h1>
           <p className="text-text-secondary text-lg font-medium max-w-xl">
-            Orchestrate school-wide events, holidays, and academic milestones.
+            Orchestrate school-wide events, non-teaching days, and academic milestones.
           </p>
         </div>
 
         <div className="flex items-center gap-4">
           <div className="flex bg-white/5 border border-glass-border rounded-xl p-1">
-            {['all', 'meeting', 'holiday', 'exam'].map(f => (
-              <button 
-                key={f}
-                onClick={() => setFilter(f)}
+            {[
+              { key: 'all', label: 'All' },
+              { key: 'working', label: 'Working' },
+              { key: 'holiday', label: 'Non-Teaching' },
+            ].map(f => (
+              <button
+                key={f.key}
+                onClick={() => setFilter(f.key)}
                 className={cn(
                   "px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all",
-                  filter === f ? "bg-white/10 text-white shadow-lg" : "text-text-secondary hover:text-white"
+                  filter === f.key ? "bg-white/10 text-white shadow-lg" : "text-text-secondary hover:text-white"
                 )}
               >
-                {f}
+                {f.label}
               </button>
             ))}
           </div>
@@ -138,12 +148,19 @@ export default function AdminEvents() {
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-4">
                     <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center border border-glass-border">
-                      {getEventIcon(e.type)}
+                      {getEventIcon(e)}
                     </div>
                     <div>
-                      <span className="text-[10px] font-black uppercase tracking-widest text-text-secondary opacity-50 block mb-1">
-                        {e.category || 'General'}
-                      </span>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-text-secondary opacity-50">
+                          {e.category || 'General'}
+                        </span>
+                        {e.is_holiday && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[9px] font-black uppercase tracking-widest">
+                            <Star className="w-2.5 h-2.5 fill-amber-400" /> Non-Teaching Day
+                          </span>
+                        )}
+                      </div>
                       <h3 className="text-xl font-black tracking-tight leading-tight">{e.title}</h3>
                     </div>
                   </div>
@@ -240,12 +257,14 @@ export default function AdminEvents() {
                   
                   <div className="space-y-2">
                     <label className="text-[10px] font-black uppercase tracking-widest text-text-secondary ml-4">Primary Type</label>
-                    <select className="input-obsidian" value={form.type} onChange={e => setForm({...form, type: e.target.value})}>
-                      <option value="meeting">Institutional Meeting</option>
-                      <option value="holiday">Academic Holiday</option>
-                      <option value="exam">Examination Phase</option>
-                      <option value="sports">Athletic Event</option>
-                    </select>
+                    <input
+                      type="text"
+                      placeholder="e.g. Meeting, Sports, Workshop"
+                      className="input-obsidian"
+                      value={form.type}
+                      onChange={e => setForm({...form, type: e.target.value})}
+                      required
+                    />
                   </div>
 
                   <div className="space-y-2">
@@ -261,6 +280,28 @@ export default function AdminEvents() {
                   <div className="space-y-2">
                     <label className="text-[10px] font-black uppercase tracking-widest text-text-secondary ml-4">Spatial Coordinate (Location)</label>
                     <input placeholder="Auditorium / Zoom / etc." className="input-obsidian" value={form.location} onChange={e => setForm({...form, location: e.target.value})} />
+                  </div>
+
+                  <div className="md:col-span-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setForm({...form, is_holiday: !form.is_holiday})}
+                      className={cn(
+                        "w-full p-4 rounded-2xl border transition-all flex items-center justify-between",
+                        form.is_holiday
+                          ? "bg-amber-500/10 border-amber-500/30 text-amber-400"
+                          : "bg-white/5 border-glass-border text-text-secondary"
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Star className={cn("w-4 h-4", form.is_holiday ? "fill-amber-400" : "")} />
+                        <div className="text-left">
+                          <div className="text-[10px] font-black uppercase tracking-widest">Mark as Non-Teaching Day</div>
+                          <div className="text-[10px] opacity-60 font-medium normal-case tracking-normal">No classes will be held on this date</div>
+                        </div>
+                      </div>
+                      {form.is_holiday ? <Check className="w-4 h-4" /> : <X className="w-4 h-4 opacity-30" />}
+                    </button>
                   </div>
 
                   <div className="md:col-span-2 space-y-4 pt-4">

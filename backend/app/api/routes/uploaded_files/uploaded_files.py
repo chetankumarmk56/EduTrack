@@ -68,6 +68,10 @@ async def list_my_files(
     search: Optional[str] = Query(default=None),
     subject: Optional[str] = Query(default=None),
     tag: Optional[str] = Query(default=None),
+    file_type: Optional[str] = Query(
+        default=None,
+        description="Filter by file_type, e.g. 'upload' or 'question_bank'.",
+    ),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
@@ -79,6 +83,7 @@ async def list_my_files(
         search=search,
         subject=subject,
         tag=tag,
+        file_type=file_type,
         limit=limit,
         offset=offset,
     )
