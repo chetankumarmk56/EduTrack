@@ -1,4 +1,5 @@
 import client from '@/shared/api/client';
+import type { Mark } from '@/shared/types';
 
 // Duplicate/stale — Mark is defined in @/shared/types/index.ts with a different
 // (newer) shape and is imported from there. Nothing imports this version.

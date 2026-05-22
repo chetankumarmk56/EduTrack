@@ -20,7 +20,6 @@ export default function TopNav({ onMenuClick }: TopNavProps) {
 
   const isTeacher = user?.role === 'teacher';
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
-  const isPortalUser = isTeacher || isAdmin;
 
   // Only show the toggle on teacher / admin / superadmin portals,
   // not on the parent crystal-theme portal (already light).

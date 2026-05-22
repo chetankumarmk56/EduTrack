@@ -11,7 +11,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
+import { motion, AnimatePresence, LayoutGroup, type Variants } from 'framer-motion';
 import {
   ArrowLeft,
   ArrowRight,
@@ -76,13 +76,13 @@ const cellItem = {
   show: { opacity: 1, y: 0, scale: 1, transition: SOFT_SPRING },
 };
 
-const listContainer = {
+const listContainer: Variants = {
   hidden: {},
   show: { transition: { staggerChildren: 0.04, delayChildren: 0.08 } },
 };
-const listItem = {
+const listItem: Variants = {
   hidden: { opacity: 0, y: 8 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.32, ease: [0.2, 0.65, 0.3, 0.95] } },
+  show: { opacity: 1, y: 0, transition: { duration: 0.32, ease: [0.2, 0.65, 0.3, 0.95] as [number, number, number, number] } },
 };
 
 // ─── Helpers ───────────────────────────────────────────────────────────────

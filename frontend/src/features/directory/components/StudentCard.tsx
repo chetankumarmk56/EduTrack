@@ -1,6 +1,5 @@
 import { motion } from 'framer-motion';
 import { Pencil, Trash2, Loader, Mail, Phone, Calendar, Hash } from 'lucide-react';
-import { cn } from '@/shared/lib/utils';
 
 interface StudentCardProps {
   student: any;

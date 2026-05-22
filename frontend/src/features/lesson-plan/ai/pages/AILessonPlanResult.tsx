@@ -26,7 +26,7 @@ export default function AILessonPlanResult() {
     for (const field of fields) {
       const v = params.get(field);
       if (!v) return null;
-      (out as Record<string, string>)[field] = v;
+      (out as unknown as Record<string, string>)[field] = v;
     }
     return out;
   }, [params]);
