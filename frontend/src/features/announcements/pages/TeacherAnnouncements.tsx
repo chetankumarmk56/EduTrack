@@ -11,9 +11,13 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/shared/contexts/AuthContext';
 import { useApp } from '@/shared/contexts/AppContext';
-import { announcementApi, type AnnouncementCreate, type Announcement } from '@/features/announcements/api';
+import { announcementApi, type AnnouncementCreate, type Announcement, type HomeworkConfirmationsBreakdown } from '@/features/announcements/api';
 import { cn } from '@/shared/lib/utils';
 import { SkeletonList } from '@/shared/components/ui/Skeleton';
+import { HomeworkFields } from '@/features/announcements/components/HomeworkFields';
+import { CategoryBadge } from '@/features/announcements/components/CategoryBadge';
+import { ANNOUNCEMENT_CATEGORIES } from '@/features/announcements/constants';
+import { BookOpenCheck, ListChecks } from 'lucide-react';
 
 const PRIORITY_STYLES: Record<string, { bar: string; badge: string }> = {
   IMPORTANT: { bar: 'bg-rose-500', badge: 'bg-rose-500/10 border-rose-500/30 text-rose-400' },
@@ -47,9 +51,16 @@ export default function TeacherAnnouncements() {
   const [isUploading, setIsUploading]   = useState(false);
 
   const [form, setForm] = useState<AnnouncementCreate>({
-    title: '', message: '', type: 'CLASS', priority: 'NORMAL',
+    title: '', message: '', type: 'CLASS', priority: 'NORMAL', category: 'NORMAL',
     class_id: undefined, student_id: undefined, attachment_url: undefined,
+    due_date: null, subject: null, instructions: null,
   });
+  const isHomework = form.category === 'HOMEWORK';
+
+  // Modal for inspecting which parents/students have confirmed a homework.
+  const [confirmationsFor, setConfirmationsFor] = useState<Announcement | null>(null);
+  const [confirmationData, setConfirmationData] = useState<HomeworkConfirmationsBreakdown | null>(null);
+  const [confirmationLoading, setConfirmationLoading] = useState(false);
 
 
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
@@ -61,8 +72,9 @@ export default function TeacherAnnouncements() {
   const [filterDate, setFilterDate]       = useState('');
   const [filterPriority, setFilterPriority] = useState<'ALL' | 'NORMAL' | 'IMPORTANT'>('ALL');
   const [filterType, setFilterType]       = useState<'ALL' | 'CLASS' | 'STUDENT'>('ALL');
+  const [filterCategory, setFilterCategory] = useState<'ALL' | 'NORMAL' | 'HOMEWORK'>('ALL');
 
-  const isFiltering = search || filterDate || filterPriority !== 'ALL' || filterType !== 'ALL';
+  const isFiltering = search || filterDate || filterPriority !== 'ALL' || filterType !== 'ALL' || filterCategory !== 'ALL';
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -71,11 +83,14 @@ export default function TeacherAnnouncements() {
       if (filterDate && !a.created_at.startsWith(filterDate)) return false;
       if (filterPriority !== 'ALL' && a.priority !== filterPriority) return false;
       if (filterType !== 'ALL' && a.type !== filterType) return false;
+      // Treat missing category as NORMAL for backward compatibility with
+      // rows created before the homework feature shipped.
+      if (filterCategory !== 'ALL' && (a.category ?? 'NORMAL') !== filterCategory) return false;
       return true;
     });
-  }, [announcements, search, filterDate, filterPriority, filterType]);
+  }, [announcements, search, filterDate, filterPriority, filterType, filterCategory]);
 
-  const clearFilters = () => { setSearch(''); setFilterDate(''); setFilterPriority('ALL'); setFilterType('ALL'); };
+  const clearFilters = () => { setSearch(''); setFilterDate(''); setFilterPriority('ALL'); setFilterType('ALL'); setFilterCategory('ALL'); };
 
   // Resolve teacher from directory
   const currentTeacher = teacherDirectory?.find((t: any) => t.user_id === user?.id);
@@ -118,8 +133,11 @@ export default function TeacherAnnouncements() {
   useEffect(() => { fetchAnnouncements(); }, [teacherId]);
 
   const resetForm = () => {
-    setForm({ title: '', message: '', type: 'CLASS', priority: 'NORMAL',
-      class_id: undefined, student_id: undefined, attachment_url: undefined });
+    setForm({
+      title: '', message: '', type: 'CLASS', priority: 'NORMAL', category: 'NORMAL',
+      class_id: undefined, student_id: undefined, attachment_url: undefined,
+      due_date: null, subject: null, instructions: null,
+    });
 
 
     setUploadedFileName(null);
@@ -136,11 +154,18 @@ export default function TeacherAnnouncements() {
     if (form.type === 'STUDENT' && !form.student_id) {
       setFormError('Please select a target student.'); return;
     }
-
+    if (form.category === 'HOMEWORK' && !form.due_date) {
+      setFormError('Homework needs a due date so parents know when it is owed.'); return;
+    }
 
     setIsSubmitting(true);
     try {
-      await announcementApi.createAnnouncement(form);
+      // Strip homework-only fields out of the payload when the announcement
+      // isn't homework so the backend doesn't store stray due_date values.
+      const payload: AnnouncementCreate = form.category === 'HOMEWORK'
+        ? form
+        : { ...form, due_date: null, subject: null, instructions: null };
+      await announcementApi.createAnnouncement(payload);
       setIsAdding(false);
       resetForm();
       fetchAnnouncements();
@@ -148,6 +173,24 @@ export default function TeacherAnnouncements() {
       setFormError(err?.response?.data?.detail || 'Failed to send announcement. Please try again.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const openConfirmations = async (a: Announcement) => {
+    setConfirmationsFor(a);
+    setConfirmationData(null);
+    setConfirmationLoading(true);
+    try {
+      const data = await announcementApi.listHomeworkConfirmations(a.id);
+      // Tolerate legacy backend responses (plain array) until backend reload.
+      const normalized: HomeworkConfirmationsBreakdown = Array.isArray(data)
+        ? { confirmed: data, pending: [] }
+        : { confirmed: data?.confirmed ?? [], pending: data?.pending ?? [] };
+      setConfirmationData(normalized);
+    } catch {
+      setConfirmationData({ confirmed: [], pending: [] });
+    } finally {
+      setConfirmationLoading(false);
     }
   };
 
@@ -309,6 +352,29 @@ export default function TeacherAnnouncements() {
               </button>
             ))}
 
+            <div className="w-px bg-white/10 mx-1" />
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-black uppercase tracking-widest text-text-secondary opacity-40">Category</span>
+            </div>
+            {(['ALL', 'NORMAL', 'HOMEWORK'] as const).map(c => (
+              <button
+                key={c}
+                onClick={() => setFilterCategory(c)}
+                className={cn(
+                  'px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all flex items-center gap-1.5',
+                  filterCategory === c
+                    ? c === 'HOMEWORK'
+                      ? 'bg-amber-500/10 border-amber-500/40 text-amber-400'
+                      : 'bg-brand-indigo/10 border-brand-indigo/40 text-brand-indigo'
+                    : 'bg-white/5 border-white/5 text-text-secondary hover:bg-white/10'
+                )}
+              >
+                {c === 'HOMEWORK' && <BookOpenCheck className="w-3 h-3" />}
+                {c === 'ALL' ? 'All' : c === 'HOMEWORK' ? 'Homework' : 'Updates'}
+              </button>
+            ))}
+
             {isFiltering && (
               <span className="ml-auto text-[10px] font-black text-text-secondary opacity-50 self-center">
                 {filtered.length} of {announcements.length} shown
@@ -382,6 +448,7 @@ export default function TeacherAnnouncements() {
                           <AlertTriangle className="w-3 h-3" /> Important
                         </span>
                       )}
+                      {a.category === 'HOMEWORK' && <CategoryBadge category="HOMEWORK" />}
                       <span className="text-[9px] font-bold uppercase tracking-widest text-text-secondary opacity-50">
                         {a.type === 'CLASS' ? 'Class-Wide' : 'Individual'}
                       </span>
@@ -417,6 +484,30 @@ export default function TeacherAnnouncements() {
                         </div>
                       )}
                     </div>
+
+                    {a.category === 'HOMEWORK' && (
+                      <div className="flex items-center gap-4 pt-2 border-t border-white/5">
+                        <div className="flex items-center gap-2 text-amber-400 text-xs font-bold">
+                          <BookOpenCheck className="w-3.5 h-3.5" />
+                          {a.homework_confirmed_count ?? 0} / {a.homework_target_count ?? 0} completed
+                        </div>
+                        {(a.homework_target_count ?? 0) > 0 && (
+                          <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-amber-500 rounded-full transition-all duration-700"
+                              style={{ width: `${Math.min(100, ((a.homework_confirmed_count ?? 0) / (a.homework_target_count ?? 1)) * 100)}%` }}
+                            />
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => openConfirmations(a)}
+                          className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[10px] font-black uppercase tracking-widest hover:bg-amber-500/20"
+                        >
+                          <ListChecks className="w-3 h-3" /> View confirmations
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <button
@@ -544,6 +635,44 @@ export default function TeacherAnnouncements() {
                       </select>
                     )}
                   </div>
+
+                  {/* Category — Normal vs Homework. Designed so adding new
+                      categories later (Circular, Event…) is just a new entry
+                      in ANNOUNCEMENT_CATEGORIES. */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-text-secondary">Category</label>
+                    <div className="grid grid-cols-2 gap-3">
+                      {Object.values(ANNOUNCEMENT_CATEGORIES).map((c) => {
+                        const Icon = c.icon;
+                        const active = form.category === c.key;
+                        return (
+                          <button
+                            key={c.key}
+                            type="button"
+                            onClick={() => setForm({ ...form, category: c.key })}
+                            className={cn(
+                              'h-14 rounded-2xl border flex items-center justify-center gap-2 font-black text-xs uppercase tracking-widest transition-all',
+                              active
+                                ? c.key === 'HOMEWORK'
+                                  ? 'bg-amber-500/10 border-amber-500 text-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.2)]'
+                                  : 'bg-brand-indigo/10 border-brand-indigo text-brand-indigo shadow-[0_0_20px_rgba(99,102,241,0.2)]'
+                                : 'bg-white/5 border-white/10 text-text-secondary hover:bg-white/10',
+                            )}
+                          >
+                            <Icon className="w-4 h-4" />
+                            {c.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {isHomework && (
+                    <HomeworkFields
+                      form={form}
+                      onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
+                    />
+                  )}
 
                   {/* Importance — defaults to Normal; teacher opts in to Important */}
                   <div className="space-y-2">
@@ -673,6 +802,127 @@ export default function TeacherAnnouncements() {
             </motion.div>
           </div>
         )}
+        </AnimatePresence>,
+        document.body,
+      )}
+
+      {createPortal(
+        <AnimatePresence>
+          {confirmationsFor && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+              <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                onClick={() => setConfirmationsFor(null)}
+                className="absolute inset-0 bg-black/90 backdrop-blur-2xl"
+              />
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="relative w-full max-w-xl obsidian-card border border-amber-500/30 shadow-2xl max-h-[80vh] overflow-y-auto"
+              >
+                <div className="p-8 space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-amber-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+                        <BookOpenCheck className="w-3.5 h-3.5" /> Homework confirmations
+                      </div>
+                      <h2 className="text-2xl font-black tracking-tight mt-1 line-clamp-2">{confirmationsFor.title}</h2>
+                      <p className="text-text-secondary text-xs mt-1">
+                        {confirmationsFor.homework_confirmed_count ?? 0} of {confirmationsFor.homework_target_count ?? 0} students completed
+                      </p>
+                    </div>
+                    <button onClick={() => setConfirmationsFor(null)} className="p-3 hover:bg-white/5 rounded-2xl border border-white/10 transition-colors">
+                      <X className="w-6 h-6 opacity-50 hover:opacity-100" />
+                    </button>
+                  </div>
+
+                  {confirmationLoading ? (
+                    <div className="flex items-center justify-center py-10">
+                      <Loader2 className="w-6 h-6 animate-spin text-amber-400" />
+                    </div>
+                  ) : confirmationData && (confirmationData.confirmed.length > 0 || confirmationData.pending.length > 0) ? (
+                    <div className="space-y-6">
+                      <section>
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="text-emerald-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5">
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Confirmed
+                          </div>
+                          <span className="text-[10px] font-bold text-text-secondary">
+                            {confirmationData.confirmed.length}
+                          </span>
+                        </div>
+                        {confirmationData.confirmed.length > 0 ? (
+                          <ul className="space-y-2">
+                            {confirmationData.confirmed.map((row) => (
+                              <li
+                                key={row.id}
+                                className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-white/5 border border-white/10"
+                              >
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <div className="w-9 h-9 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                                    <CheckCircle2 className="w-5 h-5" />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-bold text-white truncate">
+                                      {row.student_name ?? `Student #${row.student_id}`}
+                                    </p>
+                                    <p className="text-[10px] text-text-secondary truncate">
+                                      Confirmed by {row.parent_name ?? 'parent'}
+                                    </p>
+                                  </div>
+                                </div>
+                                <span className="text-[10px] font-black uppercase tracking-widest text-text-secondary shrink-0">
+                                  {formatDate(row.confirmed_at)}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="text-xs text-text-secondary opacity-70 px-1">No parents have confirmed yet.</p>
+                        )}
+                      </section>
+
+                      <section>
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="text-amber-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5">
+                            <Clock className="w-3.5 h-3.5" /> Not yet confirmed
+                          </div>
+                          <span className="text-[10px] font-bold text-text-secondary">
+                            {confirmationData.pending.length}
+                          </span>
+                        </div>
+                        {confirmationData.pending.length > 0 ? (
+                          <ul className="space-y-2">
+                            {confirmationData.pending.map((row) => (
+                              <li
+                                key={row.student_id}
+                                className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/5 border border-amber-500/20"
+                              >
+                                <div className="w-9 h-9 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+                                  <Clock className="w-5 h-5" />
+                                </div>
+                                <p className="text-sm font-bold text-white truncate">
+                                  {row.student_name ?? `Student #${row.student_id}`}
+                                </p>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="text-xs text-text-secondary opacity-70 px-1">All targeted students have confirmed.</p>
+                        )}
+                      </section>
+                    </div>
+                  ) : (
+                    <div className="text-center py-10 text-text-secondary">
+                      <p className="text-sm font-bold">No students targeted.</p>
+                      <p className="text-xs mt-1 opacity-70">This homework has no audience to confirm.</p>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            </div>
+          )}
         </AnimatePresence>,
         document.body,
       )}

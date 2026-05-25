@@ -4,19 +4,53 @@ from sqlalchemy.orm import selectinload
 from typing import List, Optional
 from uuid import UUID
 from fastapi import HTTPException, status
-from app.models.communication import Announcement, AnnouncementRead
+from app.models.communication import (
+    Announcement,
+    AnnouncementRead,
+    HomeworkConfirmation,
+    AnnouncementCategory,
+)
 from app.models.directory import Teacher, TeacherAssignment, Student, Parent
 from app.schemas.communication import AnnouncementCreate, AnnouncementUpdate, AnnouncementType
+
+
+def _serialize_announcement(a: Announcement, **extra) -> dict:
+    """
+    Single source of truth for converting an Announcement ORM row into the
+    JSON payload the API returns. Centralising this here means any new
+    field (category, due_date, …) is exposed everywhere at once.
+    """
+    base = {
+        "id": a.id,
+        "title": a.title,
+        "message": a.message,
+        "type": a.type,
+        "priority": a.priority,
+        "category": getattr(a, "category", AnnouncementCategory.NORMAL),
+        "due_date": getattr(a, "due_date", None),
+        "subject": getattr(a, "subject", None),
+        "instructions": getattr(a, "instructions", None),
+        "class_id": a.class_id,
+        "student_id": a.student_id,
+        "attachment_url": a.attachment_url,
+        "teacher_id": a.teacher_id,
+        "institution_id": a.institution_id,
+        "created_at": a.created_at,
+    }
+    base.update(extra)
+    return base
 
 class AnnouncementService:
     @staticmethod
     async def get_announcements_for_parent(
-        db: AsyncSession, 
-        institution_id: int, 
+        db: AsyncSession,
+        institution_id: int,
         parent_id: Optional[int],
         student_id: Optional[int] = None,
         limit: int = 20,
-        offset: int = 0
+        offset: int = 0,
+        category: Optional[AnnouncementCategory] = None,
+        viewer_user_id: Optional[int] = None,
     ) -> List[dict]:
         """
         Fetch announcements relevant to a parent's children or a specific student.
@@ -88,44 +122,92 @@ class AnnouncementService:
                     and_(Announcement.type == AnnouncementType.CLASS, Announcement.class_id.in_(class_ids)),
                     and_(Announcement.type == AnnouncementType.STUDENT, Announcement.student_id.in_(student_ids))
                 )
-            ).order_by(Announcement.created_at.desc())\
-             .limit(limit).offset(offset)
+            )
+
+        if category is not None:
+            stmt = stmt.where(Announcement.category == category)
+
+        stmt = stmt.order_by(Announcement.created_at.desc()).limit(limit).offset(offset)
 
         
         result = await db.execute(stmt)
         rows = result.all()
         
+        # Batch homework enrichment for the page in one round-trip:
+        # confirmation counts per announcement + per-child status for the
+        # viewer. This avoids an N+1 across the page.
+        hw_announcements = [r[0] for r in rows if r[0].category == AnnouncementCategory.HOMEWORK]
+        confirmed_counts: dict = {}
+        per_viewer_status: dict = {}
+        if hw_announcements:
+            hw_ids = [a.id for a in hw_announcements]
+            count_res = await db.execute(
+                select(
+                    HomeworkConfirmation.announcement_id,
+                    func.count(HomeworkConfirmation.id).label("c"),
+                )
+                .where(HomeworkConfirmation.announcement_id.in_(hw_ids))
+                .group_by(HomeworkConfirmation.announcement_id)
+            )
+            confirmed_counts = {r[0]: int(r[1]) for r in count_res.all()}
+
+            if viewer_user_id is not None:
+                from app.services.announcement.homework_service import (
+                    homework_service,
+                )
+
+                for a in hw_announcements:
+                    per_viewer_status[a.id] = await homework_service.get_my_children_status(
+                        db, a, viewer_user_id, institution_id
+                    )
+
+        # Cache target counts for class-scoped homework so we don't refetch
+        # the class size for each row.
+        class_size_cache: dict = {}
+
+        async def _hw_target_count(a: Announcement) -> int:
+            if a.type == AnnouncementType.STUDENT:
+                return 1
+            if a.type == AnnouncementType.CLASS and a.class_id:
+                if a.class_id in class_size_cache:
+                    return class_size_cache[a.class_id]
+                res = await db.execute(
+                    select(func.count(Student.id)).where(
+                        Student.school_class_id == a.class_id,
+                        Student.institution_id == institution_id,
+                    )
+                )
+                size = int(res.scalar() or 0)
+                class_size_cache[a.class_id] = size
+                return size
+            return 0
+
         enriched = []
-
-
         for row in rows:
             a, t_name, read_status = row
-            a_dict = {
-                "id": a.id,
-                "title": a.title,
-                "message": a.message,
-                "type": a.type,
-                "priority": a.priority,
-                "class_id": a.class_id,
-                "student_id": a.student_id,
-                "attachment_url": a.attachment_url,
-                "teacher_id": a.teacher_id,
-                "institution_id": a.institution_id,
-                "created_at": a.created_at,
+            extra = {
                 "is_read": read_status,
-                "teacher_name": t_name
+                "teacher_name": t_name,
+                "homework_confirmed_count": 0,
+                "homework_target_count": 0,
+                "homework_my_children": [],
             }
-            enriched.append(a_dict)
-            
+            if a.category == AnnouncementCategory.HOMEWORK:
+                extra["homework_confirmed_count"] = confirmed_counts.get(a.id, 0)
+                extra["homework_target_count"] = await _hw_target_count(a)
+                extra["homework_my_children"] = per_viewer_status.get(a.id, [])
+            enriched.append(_serialize_announcement(a, **extra))
+
         return enriched
 
     @staticmethod
     async def get_announcements_for_teacher(
-        db: AsyncSession, 
-        institution_id: int, 
+        db: AsyncSession,
+        institution_id: int,
         teacher_id: int,
         limit: int = 20,
-        offset: int = 0
+        offset: int = 0,
+        category: Optional[AnnouncementCategory] = None,
     ) -> List[dict]:
         """
         Fetch announcements created by a teacher with optimized engagement metrics.
@@ -148,8 +230,12 @@ class AnnouncementService:
         ).where(
             Announcement.teacher_id == teacher_id,
             Announcement.institution_id == institution_id
-        ).order_by(Announcement.created_at.desc())\
-         .limit(limit).offset(offset)
+        )
+
+        if category is not None:
+            stmt = stmt.where(Announcement.category == category)
+
+        stmt = stmt.order_by(Announcement.created_at.desc()).limit(limit).offset(offset)
         
         result = await db.execute(stmt)
         rows = result.all()
@@ -162,38 +248,87 @@ class AnnouncementService:
         class_ids = [r[0].class_id for r in rows if r[0].type == AnnouncementType.CLASS and r[0].class_id]
         class_targets = {}
         if class_ids:
-            # Get parent counts for these classes in one go
+            # Count students per class — class-wide announcements target every
+            # student in the class. We deliberately do NOT count Parent rows
+            # here: many parent users share their child's login and have no
+            # Parent table record (see [[project_parent_student_login]]), so a
+            # parent-join would undercount the real audience.
             target_stmt = select(
                 Student.school_class_id,
-                func.count(Parent.id.distinct()).label("count")
-            ).join(Parent, Student.parent_id == Parent.id)\
-             .where(Student.school_class_id.in_(class_ids))\
-             .group_by(Student.school_class_id)
-            
+                func.count(Student.id).label("count"),
+            ).where(
+                Student.school_class_id.in_(class_ids),
+                Student.institution_id == institution_id,
+            ).group_by(Student.school_class_id)
+
             target_res = await db.execute(target_stmt)
             class_targets = {r.school_class_id: r.count for r in target_res.all()}
+
+        # Homework confirmation counts in one batch — only matters for HW rows.
+        hw_ids = [a.id for a, _ in rows if a.category == AnnouncementCategory.HOMEWORK]
+        confirmed_counts: dict = {}
+        hw_targets: dict = {}
+        if hw_ids:
+            hc_res = await db.execute(
+                select(
+                    HomeworkConfirmation.announcement_id,
+                    func.count(HomeworkConfirmation.id).label("c"),
+                )
+                .where(HomeworkConfirmation.announcement_id.in_(hw_ids))
+                .group_by(HomeworkConfirmation.announcement_id)
+            )
+            confirmed_counts = {r[0]: int(r[1]) for r in hc_res.all()}
+
+            # Homework targets count *students*, not parents, so we cannot
+            # reuse the parent-keyed class_targets above. Fetch student
+            # headcounts in a single batched query, keyed by class_id.
+            hw_class_ids = list({
+                a.class_id
+                for a, _ in rows
+                if a.category == AnnouncementCategory.HOMEWORK
+                and a.type == AnnouncementType.CLASS
+                and a.class_id is not None
+            })
+            student_counts: dict = {}
+            if hw_class_ids:
+                sc_res = await db.execute(
+                    select(
+                        Student.school_class_id,
+                        func.count(Student.id).label("c"),
+                    )
+                    .where(
+                        Student.school_class_id.in_(hw_class_ids),
+                        Student.institution_id == institution_id,
+                    )
+                    .group_by(Student.school_class_id)
+                )
+                student_counts = {r[0]: int(r[1]) for r in sc_res.all()}
+
+            for a, _ in rows:
+                if a.category != AnnouncementCategory.HOMEWORK:
+                    continue
+                if a.type == AnnouncementType.STUDENT:
+                    hw_targets[a.id] = 1
+                elif a.type == AnnouncementType.CLASS and a.class_id:
+                    hw_targets[a.id] = student_counts.get(a.class_id, 0)
+                else:
+                    hw_targets[a.id] = 0
 
         enriched = []
         for row in rows:
             a, read_count = row
             target_count = 1 if a.type == AnnouncementType.STUDENT else class_targets.get(a.class_id, 0)
-            
-            enriched.append({
-                "id": a.id,
-                "title": a.title,
-                "message": a.message,
-                "type": a.type,
-                "priority": a.priority,
-                "class_id": a.class_id,
-                "student_id": a.student_id,
-                "attachment_url": a.attachment_url,
-                "teacher_id": a.teacher_id,
-                "institution_id": a.institution_id,
-                "created_at": a.created_at,
-                "read_count": read_count,
-                "target_count": target_count
-            })
-            
+            enriched.append(_serialize_announcement(
+                a,
+                read_count=read_count,
+                target_count=target_count,
+                homework_confirmed_count=confirmed_counts.get(a.id, 0)
+                    if a.category == AnnouncementCategory.HOMEWORK else 0,
+                homework_target_count=hw_targets.get(a.id, 0)
+                    if a.category == AnnouncementCategory.HOMEWORK else 0,
+                homework_my_children=[],
+            ))
+
         return enriched
 
     @staticmethod

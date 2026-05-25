@@ -32,8 +32,12 @@ interface AppContextType {
   subjects: Subject[];
   schoolClasses: SchoolClass[];
   refreshDirectory: (force?: boolean) => Promise<void>;
-  refreshStudents: () => Promise<void>;
-  refreshTeachers: () => Promise<void>;
+  refreshStudents: (filters?: {
+    schoolClassId?: number | null;
+    search?: string;
+    isActive?: boolean;
+  }) => Promise<void>;
+  refreshTeachers: (filters?: { search?: string; isActive?: boolean }) => Promise<void>;
 
   // Loading states
   isDirectoryLoading: boolean;
@@ -230,16 +234,31 @@ const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
         localStorage.setItem('edu_cache_school_classes', JSON.stringify(data.academic.school_classes || []));
       }
 
+      // Bulk directory hydration. We only persist these in localStorage
+      // when the caller is an admin/teacher who actually uses the list —
+      // parents/students see their own marks/attendance, not the whole
+      // institution. Persisting a stale 5K-student blob in parent
+      // localStorage was load-bearing for nothing and slowed up every
+      // refresh.
+      const isStaffRole =
+        user?.role === 'admin' ||
+        user?.role === 'super_admin' ||
+        user?.role === 'teacher';
+
       if (data.directory) {
         const s: Student[] = data.directory.students || [];
         const t: Teacher[] = data.directory.teachers || [];
         setStudents(s);
         setTeachers(t);
-        localStorage.setItem('edu_cache_students', JSON.stringify(s));
-        localStorage.setItem('edu_cache_teachers', JSON.stringify(t));
+        if (isStaffRole) {
+          localStorage.setItem('edu_cache_students', JSON.stringify(s));
+          localStorage.setItem('edu_cache_teachers', JSON.stringify(t));
+        }
       } else if (data.students) {
         setStudents(data.students);
-        localStorage.setItem('edu_cache_students', JSON.stringify(data.students));
+        if (isStaffRole) {
+          localStorage.setItem('edu_cache_students', JSON.stringify(data.students));
+        }
       }
 
       if (data.teacher_details) {
@@ -267,10 +286,16 @@ const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
     }
   }, [refreshEvents]);
 
-  const refreshStudents = useCallback(async () => {
+  const refreshStudents = useCallback(async (
+    filters: { schoolClassId?: number | null; search?: string; isActive?: boolean } = {},
+  ) => {
     setIsDirectoryLoading(true);
     try {
-      const data = await directoryApi.getStudents();
+      // Push filters down to SQL — see directoryApi.getStudents and
+      // backend students.read_students. Without filters the backend
+      // returns the first 100 rows (paged); admin pages should always
+      // pass `schoolClassId` so we only fetch one class.
+      const data = await directoryApi.getStudents(filters);
       setStudents(data);
     } catch (err) {
       console.error("Failed to load students:", err);
@@ -279,10 +304,12 @@ const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
     }
   }, []);
 
-  const refreshTeachers = useCallback(async () => {
+  const refreshTeachers = useCallback(async (
+    filters: { search?: string; isActive?: boolean } = {},
+  ) => {
     setIsDirectoryLoading(true);
     try {
-      const data = await directoryApi.getTeachers();
+      const data = await directoryApi.getTeachers(filters);
       setTeachers(data);
     } catch (err) {
       console.error("Failed to load teachers:", err);

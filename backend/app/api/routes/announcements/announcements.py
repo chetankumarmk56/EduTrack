@@ -4,12 +4,21 @@ import os
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import List
+from typing import List, Optional
 
 from app.core.database import get_db, AsyncSessionLocal
 from app.core.dependencies import get_current_active_user, UserContext
-from app.schemas.communication import AnnouncementResponse, AnnouncementCreate, AnnouncementUpdate
+from app.schemas.communication import (
+    AnnouncementResponse,
+    AnnouncementCreate,
+    AnnouncementUpdate,
+    AnnouncementCategory,
+    HomeworkConfirmRequest,
+    HomeworkConfirmationResponse,
+    HomeworkConfirmationsBreakdown,
+)
 from app.services.announcement import announcement_service
+from app.services.announcement.homework_service import homework_service
 from app.models import User, Teacher
 
 router = APIRouter(
@@ -60,11 +69,12 @@ async def get_announcements_for_teacher(
     db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(get_current_active_user),
     limit: int = 20,
-    offset: int = 0
+    offset: int = 0,
+    category: Optional[AnnouncementCategory] = None,
 ):
     """Fetch announcements created by a specific teacher."""
     return await announcement_service.get_announcements_for_teacher(
-        db, user.institution_id, teacher_id, limit, offset
+        db, user.institution_id, teacher_id, limit, offset, category=category
     )
 
 @router.get("/my", response_model=List[AnnouncementResponse])
@@ -72,7 +82,8 @@ async def get_my_announcements(
     db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(get_current_active_user),
     limit: int = 20,
-    offset: int = 0
+    offset: int = 0,
+    category: Optional[AnnouncementCategory] = None,
 ):
     """
     Unified endpoint for students and parents to fetch relevant announcements.
@@ -83,33 +94,39 @@ async def get_my_announcements(
         if not db_teacher:
             return []
         return await announcement_service.get_announcements_for_teacher(
-            db, user.institution_id, db_teacher.id, limit, offset
+            db, user.institution_id, db_teacher.id, limit, offset, category=category
         )
 
     if user.role in ["student", "parent"]:
         from app.models.directory import Parent, Student
-        
+
         # 1. Try resolving as parent profile
         parent_result = await db.execute(select(Parent).where(Parent.user_id == user.id))
         db_parent = parent_result.scalars().first()
-        
+
         if db_parent:
             return await announcement_service.get_announcements_for_parent(
-                db, user.institution_id, parent_id=db_parent.id, limit=limit, offset=offset
+                db, user.institution_id,
+                parent_id=db_parent.id,
+                limit=limit, offset=offset,
+                category=category,
+                viewer_user_id=user.id,
             )
-            
+
         # 2. Try resolving as student profile
         student_result = await db.execute(select(Student).where(Student.user_id == user.id))
         db_student = student_result.scalars().first()
-        
+
         if db_student:
             return await announcement_service.get_announcements_for_parent(
-                db, user.institution_id, 
-                parent_id=db_student.parent_id, 
-                student_id=db_student.id, 
-                limit=limit, offset=offset
+                db, user.institution_id,
+                parent_id=db_student.parent_id,
+                student_id=db_student.id,
+                limit=limit, offset=offset,
+                category=category,
+                viewer_user_id=user.id,
             )
-            
+
         return []
 
 
@@ -121,12 +138,15 @@ async def get_announcements_for_parent(
     parent_id: int,
     limit: int = 20,
     offset: int = 0,
+    category: Optional[AnnouncementCategory] = None,
     db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(get_current_active_user)
 ):
     """Fetch announcements relevant to a parent and their children."""
     return await announcement_service.get_announcements_for_parent(
-        db, user.institution_id, parent_id=parent_id, limit=limit, offset=offset
+        db, user.institution_id,
+        parent_id=parent_id, limit=limit, offset=offset,
+        category=category, viewer_user_id=user.id,
     )
 
 @router.post("/", response_model=AnnouncementResponse)
@@ -207,11 +227,90 @@ async def delete_announcement(
     """Delete an announcement (Teacher only)."""
     if user.role != "teacher":
         raise HTTPException(status_code=403, detail="Only teachers can delete announcements")
-        
+
     success = await announcement_service.delete_announcement(
         db, announcement_id, user.id
     )
     if not success:
         raise HTTPException(status_code=404, detail="Announcement not found or access denied")
-        
+
     return {"message": "Announcement deleted"}
+
+
+# ---------------------------------------------------------------------------
+# Homework category — per-child confirmation endpoints
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/{announcement_id}/homework/confirm",
+    response_model=HomeworkConfirmationResponse,
+)
+async def confirm_homework(
+    announcement_id: str,
+    payload: HomeworkConfirmRequest,
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(get_current_active_user),
+):
+    """
+    Parent marks a homework as completed for one of their children.
+
+    The service enforces:
+      - the announcement is a HOMEWORK category
+      - the calling user is a parent (or parent-linked student)
+      - the student belongs to that parent and is in the announcement audience
+      - duplicate confirmations are no-ops (idempotent)
+    """
+    if user.role not in ("parent", "student"):
+        raise HTTPException(
+            status_code=403, detail="Only parents can confirm homework"
+        )
+
+    from uuid import UUID as _UUID
+    try:
+        ann_uuid = _UUID(announcement_id)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="Invalid announcement id")
+
+    row = await homework_service.confirm_homework(
+        db,
+        announcement_id=ann_uuid,
+        user_id=user.id,
+        institution_id=user.institution_id,
+        student_id=payload.student_id,
+    )
+    return HomeworkConfirmationResponse(
+        id=row.id,
+        announcement_id=row.announcement_id,
+        student_id=row.student_id,
+        parent_id=row.parent_id,
+        confirmed_at=row.confirmed_at,
+    )
+
+
+@router.get(
+    "/{announcement_id}/homework/confirmations",
+    response_model=HomeworkConfirmationsBreakdown,
+)
+async def list_homework_confirmations(
+    announcement_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(get_current_active_user),
+):
+    """Teacher view: who has confirmed this homework, and when."""
+    if user.role != "teacher":
+        raise HTTPException(
+            status_code=403, detail="Only teachers can view homework confirmations"
+        )
+
+    from uuid import UUID as _UUID
+    try:
+        ann_uuid = _UUID(announcement_id)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="Invalid announcement id")
+
+    return await homework_service.list_confirmations_for_teacher(
+        db,
+        announcement_id=ann_uuid,
+        user_id=user.id,
+        institution_id=user.institution_id,
+    )

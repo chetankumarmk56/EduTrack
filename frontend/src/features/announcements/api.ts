@@ -1,14 +1,29 @@
 import client from '@/shared/api/client';
+import type { AnnouncementCategory } from './constants';
+
+export interface HomeworkChildStatus {
+  student_id: number;
+  student_name?: string;
+  confirmed: boolean;
+  confirmed_at?: string | null;
+  confirmed_by_parent_id?: number | null;
+}
 
 export interface AnnouncementCreate {
   title: string;
   message: string;
   type: 'CLASS' | 'STUDENT';
   priority: 'NORMAL' | 'IMPORTANT';
+  category?: AnnouncementCategory;
 
   class_id?: number;
   student_id?: number;
   attachment_url?: string;
+
+  // Homework-only fields (ignored by backend when category !== HOMEWORK).
+  due_date?: string | null;
+  subject?: string | null;
+  instructions?: string | null;
 }
 
 export interface Announcement {
@@ -17,6 +32,7 @@ export interface Announcement {
   message: string;
   type: 'CLASS' | 'STUDENT';
   priority: 'NORMAL' | 'IMPORTANT';
+  category?: AnnouncementCategory;
 
   class_id?: number;
   student_id?: number;
@@ -28,6 +44,35 @@ export interface Announcement {
   is_read?: boolean;
   read_count?: number;
   target_count?: number;
+
+  // Homework metadata
+  due_date?: string | null;
+  subject?: string | null;
+  instructions?: string | null;
+  homework_confirmed_count?: number;
+  homework_target_count?: number;
+  /** Per-child status for the current viewer (parent feed only). */
+  homework_my_children?: HomeworkChildStatus[];
+}
+
+export interface HomeworkConfirmation {
+  id: string;
+  announcement_id: string;
+  student_id: number;
+  parent_id?: number | null;
+  confirmed_at: string;
+  student_name?: string;
+  parent_name?: string;
+}
+
+export interface HomeworkPendingStudent {
+  student_id: number;
+  student_name?: string;
+}
+
+export interface HomeworkConfirmationsBreakdown {
+  confirmed: HomeworkConfirmation[];
+  pending: HomeworkPendingStudent[];
 }
 
 export const announcementApi = {
@@ -51,6 +96,18 @@ export const announcementApi = {
 
   deleteAnnouncement: (id: string) =>
     client.delete(`/announcements/${id}`).then(res => res.data),
+
+  /** Parent confirms homework completion for one child. Idempotent. */
+  confirmHomework: (announcementId: string, studentId: number): Promise<HomeworkConfirmation> =>
+    client
+      .post(`/announcements/${announcementId}/homework/confirm`, { student_id: studentId })
+      .then(res => res.data),
+
+  /** Teacher view: who has confirmed this homework, and who is still pending. */
+  listHomeworkConfirmations: (announcementId: string): Promise<HomeworkConfirmationsBreakdown> =>
+    client
+      .get(`/announcements/${announcementId}/homework/confirmations`)
+      .then(res => res.data),
 
   uploadAttachment: async (file: File): Promise<{ url: string }> => {
     const formData = new FormData();

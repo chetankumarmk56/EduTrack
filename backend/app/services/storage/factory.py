@@ -30,11 +30,29 @@ def _s3_configured() -> bool:
 
 @lru_cache(maxsize=1)
 def get_default_backend() -> FileStorageBackend:
-    """Return the backend new uploads should land in."""
+    """
+    Return the backend new uploads should land in.
+
+    Production hardening: refuse to hand back the local-disk backend when
+    ``ENVIRONMENT == "prod"`` even though config.py already blocks startup
+    in that case. Two reasons:
+
+      * Defense-in-depth — a future config drift (e.g. a runtime setting
+        flip) can't sneak a local write past us.
+      * Tests that mock settings with `ENVIRONMENT=prod` exercise the same
+        guard, so the regression is impossible to ship.
+    """
     if _s3_configured():
         logger.info("File library: using AWS S3 backend (bucket=%s).", settings.AWS_S3_BUCKET)
         return S3StorageBackend()
-    logger.info("File library: using local-disk backend (no AWS creds detected).")
+    if settings.ENVIRONMENT == "prod":
+        raise RuntimeError(
+            "File library has no remote backend configured in production. "
+            "Set AWS_S3_BUCKET + AWS_S3_REGION + AWS_ACCESS_KEY_ID + "
+            "AWS_SECRET_ACCESS_KEY. Local-disk fallback is disabled in prod "
+            "because container disks are ephemeral and not shared across replicas."
+        )
+    logger.info("File library: using local-disk backend (dev only).")
     return LocalStorageBackend()
 
 

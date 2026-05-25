@@ -16,6 +16,20 @@ class AnnouncementPriority(str, Enum):
     IMPORTANT = "IMPORTANT"
 
 
+class AnnouncementCategory(str, Enum):
+    """
+    What *kind* of announcement this is. Keep this orthogonal to
+    ``AnnouncementType`` (which controls audience: class vs student).
+
+    Extensible — add CIRCULAR / EVENT / EXAM_NOTICE / URGENT_ALERT here
+    without touching downstream code that treats unknown categories as
+    NORMAL. Old rows without a category are treated as NORMAL at the
+    application layer (column default + migration backfill).
+    """
+    NORMAL = "NORMAL"
+    HOMEWORK = "HOMEWORK"
+
+
 class Announcement(Base):
     """
     Robust targeted announcements system.
@@ -28,27 +42,50 @@ class Announcement(Base):
     
     type = Column(SQLEnum(AnnouncementType, native_enum=False), nullable=False)
     priority = Column(SQLEnum(AnnouncementPriority, native_enum=False), default=AnnouncementPriority.NORMAL, nullable=False)
-    
+
+    # Category controls *what kind* of announcement this is (normal, homework, …).
+    # Defaults to NORMAL so existing rows + clients that don't send a category
+    # keep behaving exactly as they did before.
+    category = Column(
+        SQLEnum(AnnouncementCategory, native_enum=False),
+        default=AnnouncementCategory.NORMAL,
+        server_default=AnnouncementCategory.NORMAL.value,
+        nullable=False,
+    )
+
+    # Homework-only optional fields. Kept on the same table (rather than a
+    # separate homework table) because they are sparse extra columns, never
+    # joined on, and centralising them avoids a polymorphic load path.
+    due_date = Column(DateTime(timezone=True), nullable=True)
+    subject = Column(String(length=120), nullable=True)
+    instructions = Column(Text, nullable=True)
+
     attachment_url = Column(String, nullable=True)
-    
+
     # Target IDs
     class_id = Column(Integer, ForeignKey("school_classes.id"), nullable=True)
     student_id = Column(Integer, ForeignKey("students.id"), nullable=True)
     teacher_id = Column(Integer, ForeignKey("teachers.id"), nullable=False)
-    
+
     institution_id = Column(Integer, ForeignKey("institutions.id"), nullable=False)
-    
+
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     # Relationships
     teacher = relationship("Teacher")
     institution = relationship("Institution")
     reads = relationship("AnnouncementRead", back_populates="announcement", cascade="all, delete-orphan")
+    homework_confirmations = relationship(
+        "HomeworkConfirmation",
+        back_populates="announcement",
+        cascade="all, delete-orphan",
+    )
 
     __table_args__ = (
         Index("ix_announcements_class_id", "class_id"),
         Index("ix_announcements_student_id", "student_id"),
         Index("ix_announcements_created_at_desc", created_at.desc()),
+        Index("ix_announcements_category", "category"),
     )
 
 class AnnouncementRead(Base):
@@ -69,6 +106,40 @@ class AnnouncementRead(Base):
     __table_args__ = (
         UniqueConstraint("announcement_id", "parent_id", name="uq_announcement_parent_read"),
     )
+
+
+class HomeworkConfirmation(Base):
+    """
+    Per-student confirmation that homework was completed.
+
+    The uniqueness is on (announcement_id, student_id) — not parent — because
+    one parent may have multiple children attached to the same class-wide
+    homework announcement, and each child needs its own confirmation row.
+    The parent_id column records *who* confirmed (audit) but does not
+    participate in uniqueness.
+    """
+    __tablename__ = "homework_confirmations"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    announcement_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("announcements.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    student_id = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), nullable=False)
+    parent_id = Column(Integer, ForeignKey("parents.id"), nullable=True)
+    confirmed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    announcement = relationship("Announcement", back_populates="homework_confirmations")
+    student = relationship("Student")
+    parent = relationship("Parent")
+
+    __table_args__ = (
+        UniqueConstraint("announcement_id", "student_id", name="uq_homework_confirmation_student"),
+        Index("ix_homework_confirmations_announcement", "announcement_id"),
+        Index("ix_homework_confirmations_student", "student_id"),
+    )
+
 
 class CronLock(Base):
     """Distributed lock for background tasks."""

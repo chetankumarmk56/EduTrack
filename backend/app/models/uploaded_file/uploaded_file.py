@@ -94,8 +94,11 @@ class UploadedFile(Base, TimestampMixin):
     source_subject_id = Column(String(64), nullable=True)
     source_chapter_id = Column(String(64), nullable=True)
 
+    # Note: index is declared explicitly in __table_args__ below — don't
+    # add index=True here too or Base.metadata.create_all will try to
+    # create the same index twice and fail with "index already exists".
     uploaded_at = Column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     last_used_at = Column(DateTime(timezone=True), nullable=True)
 

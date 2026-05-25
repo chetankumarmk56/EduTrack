@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from typing import Optional
+from typing import BinaryIO, Optional
 
 from app.core.logger import logger
 from app.services.storage.base import FileStorageBackend
@@ -38,6 +38,40 @@ class LocalStorageBackend(FileStorageBackend):
                 fh.write(data)
 
         await asyncio.to_thread(_write)
+        return key
+
+    async def upload_stream(
+        self,
+        *,
+        key: str,
+        fileobj: BinaryIO,
+        content_type: str,
+        content_length: Optional[int] = None,
+    ) -> str:
+        """Copy ``fileobj`` to disk in chunks, mirroring the S3 backend's
+        streaming contract so callers can switch backends without touching
+        upload code."""
+        path = self._resolve(key)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+
+        try:
+            fileobj.seek(0)
+        except Exception:  # noqa: BLE001
+            pass
+
+        def _copy() -> None:
+            # 1 MiB chunks. Big enough that we're not paying per-syscall
+            # overhead on a 25 MB upload, small enough that we don't pin
+            # huge buffers per concurrent request.
+            chunk_size = 1024 * 1024
+            with open(path, "wb") as fh:
+                while True:
+                    buf = fileobj.read(chunk_size)
+                    if not buf:
+                        return
+                    fh.write(buf)
+
+        await asyncio.to_thread(_copy)
         return key
 
     async def download(self, key: str) -> bytes:

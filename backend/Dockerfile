@@ -31,8 +31,15 @@ EXPOSE 8000
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
   CMD curl -f http://localhost:8000/health || exit 1
 
-# Default command (can be overridden in docker-compose)
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Default command. Gunicorn pre-fork master + UvicornWorker:
+#   * Multiple workers so a CPU-bound stall in one (e.g. bcrypt) doesn't
+#     block every other request on the pod.
+#   * Pre-fork survives a panicking worker (master restarts it).
+#   * Worker count + timeouts in backend/gunicorn_conf.py.
+#
+# Override with `command:` in docker-compose if you need a single
+# uvicorn process for local debugging.
+CMD ["gunicorn", "-c", "gunicorn_conf.py", "app.main:app"]
 
 # DOCKER SCALING NOTES:
 # 1. Build: docker build -t edutrack-backend .

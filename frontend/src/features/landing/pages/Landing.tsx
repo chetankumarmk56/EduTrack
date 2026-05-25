@@ -88,10 +88,13 @@ export default function Landing() {
     }
   ];
 
-  const handlePortalClick = (item: any) => {
-    // If user is logged in with a different role, log them out first to prevent GuestRoute loops
+  const handlePortalClick = async (item: any) => {
+    // If user is logged in with a different role, log them out first to prevent GuestRoute loops.
+    // Await so the server-side cookie clear lands before we navigate —
+    // otherwise the cached session auto-logs them straight into their
+    // old portal instead of the login page they just clicked.
     if (user && user.role !== item.role && !(user.role === 'super_admin' && item.role === 'admin')) {
-      logout();
+      await logout();
     }
     navigate(item.path);
   };

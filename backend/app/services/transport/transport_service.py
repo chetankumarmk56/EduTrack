@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from app.models.transport import Bus, Route, Stop, StudentTransport, BusLocation, NotificationLog
 from app.models.directory import Parent, Student
 from app.schemas import transport as schemas
-from app.core.websocket import manager
+from app.core.websocket import broadcaster
 from app.core.geo_math import haversine_distance
 import asyncio
 
@@ -253,10 +253,11 @@ class TransportService:
             "longitude": longitude,
             "timestamp": db_location.timestamp.isoformat() if db_location.timestamp else None
         }
-        asyncio.create_task(manager.broadcast(bus.id, data))
-        # Note: evaluate_proximity_alerts needs its own DB session in background
-        # For simplicity in this refactor, we'll keep the call structure but usually it needs a session factory
-        # asyncio.create_task(TransportService.evaluate_proximity_alerts(bus.id, latitude, longitude))
+        # Channel name is tenant-scoped — see app/core/websocket.py and the
+        # /ws/transport/{bus_id} handler. Fire-and-forget so a slow Redis
+        # publish can't stall the GPS ingest HTTP request.
+        channel = f"bus:{bus.institution_id}:{bus.id}"
+        asyncio.create_task(broadcaster.publish(channel, data))
         return db_location
 
 transport_service = TransportService()

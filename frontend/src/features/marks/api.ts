@@ -83,10 +83,18 @@ export const marksApi = {
     },
 
     /**
-     * Fetch all marks for a specific student.
+     * Fetch marks for a specific student.
+     *
+     * The backend defaults to the last 365 days when no range is given.
+     * Pass an explicit `dateFrom` for report-card / transcript views
+     * that need the full history — see backend
+     * marks.py:_DEFAULT_MARKS_WINDOW_DAYS.
      */
-    getMarks: async (studentId: number) => {
-        const response = await client.get<Mark[]>(`marks/${studentId}`);
+    getMarks: async (studentId: number, dateFrom?: string, dateTo?: string) => {
+        const params: Record<string, string> = {};
+        if (dateFrom) params.date_from = dateFrom;
+        if (dateTo) params.date_to = dateTo;
+        const response = await client.get<Mark[]>(`marks/${studentId}`, { params });
         return response.data;
     },
 

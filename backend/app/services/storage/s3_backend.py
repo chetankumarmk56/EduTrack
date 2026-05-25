@@ -10,7 +10,7 @@ backend instead).
 from __future__ import annotations
 
 import asyncio
-from typing import Optional
+from typing import BinaryIO, Optional
 
 from app.core.config import settings
 from app.core.logger import logger
@@ -44,6 +44,11 @@ class S3StorageBackend(FileStorageBackend):
         return self._client
 
     async def upload(self, *, key: str, data: bytes, content_type: str) -> str:
+        """
+        Bytes-in upload. Used by callers that already have an in-memory
+        payload (lesson_plan_s3, question_bank_s3). For user-uploaded
+        content prefer ``upload_stream``.
+        """
         client = self._get_client()
 
         def _put() -> None:
@@ -56,6 +61,61 @@ class S3StorageBackend(FileStorageBackend):
                 # object itself stays private.
                 ACL="private",
                 ServerSideEncryption="AES256",
+            )
+
+        await asyncio.to_thread(_put)
+        return key
+
+    async def upload_stream(
+        self,
+        *,
+        key: str,
+        fileobj: BinaryIO,
+        content_type: str,
+        content_length: Optional[int] = None,
+    ) -> str:
+        """
+        Multipart-stream ``fileobj`` straight to S3.
+
+        ``upload_fileobj`` reads in chunks (default 8 MiB threshold for
+        multipart) so a 25 MB upload never sits in Python memory in full.
+        It also retries transient failures internally, which is what we
+        want — the alternative is hand-rolling MultipartCreate / Upload /
+        Complete with our own retry/abort plumbing.
+
+        boto3 is blocking, so the whole call is offloaded to a worker
+        thread via ``asyncio.to_thread``.
+        """
+        client = self._get_client()
+        bucket = self.bucket
+
+        # Rewind in case a size check seeked the file. SpooledTemporaryFile
+        # is seekable; if a caller hands us something that isn't, S3 will
+        # error and the caller will see a 5xx.
+        try:
+            fileobj.seek(0)
+        except Exception:  # noqa: BLE001
+            pass
+
+        def _put() -> None:
+            from boto3.s3.transfer import TransferConfig
+            # 8 MiB threshold matches boto3 default. Below this we use a
+            # single PUT; above, automatic multipart with 8 MiB chunks.
+            cfg = TransferConfig(
+                multipart_threshold=8 * 1024 * 1024,
+                multipart_chunksize=8 * 1024 * 1024,
+                use_threads=True,
+            )
+            client.upload_fileobj(
+                Fileobj=fileobj,
+                Bucket=bucket,
+                Key=key,
+                ExtraArgs={
+                    "ContentType": content_type or "application/octet-stream",
+                    "ACL": "private",
+                    "ServerSideEncryption": "AES256",
+                },
+                Config=cfg,
             )
 
         await asyncio.to_thread(_put)

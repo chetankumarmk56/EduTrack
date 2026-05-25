@@ -3,7 +3,7 @@ from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
 from app.models.core import User
 from app.schemas import directory as schemas
-from app.core.security import get_password_hash
+from app.core.security import get_password_hash_async
 from app.models.directory import Student
 from typing import List, Optional
 from app.core.logger import logger
@@ -45,16 +45,19 @@ class StudentService:
             user_result = await db.execute(select(User).where(User.email == student_email))
             existing_user = user_result.scalars().first()
 
+        # bcrypt off the event loop. Compute the hash once upfront so we
+        # don't pay the ~100ms penalty twice when both branches need it.
+        new_hash = await get_password_hash_async(password_value) if password_value else None
         if existing_user:
             db_user = existing_user
-            if password_value:
-                db_user.password_hash = get_password_hash(password_value)
+            if new_hash is not None:
+                db_user.password_hash = new_hash
                 await db.flush()
         else:
             db_user = User(
                 email=student_email,
                 name=data.get('name', ''),
-                password_hash=get_password_hash(password_value) if password_value else '',
+                password_hash=new_hash or '',
                 role='student',
                 institution_id=institution_id,
             )
@@ -79,19 +82,54 @@ class StudentService:
         return await StudentService.get_student(db, institution_id, db_student.id)
 
     @staticmethod
-    async def get_students(db: AsyncSession, institution_id: int, skip: int = 0, limit: int = 1000):
+    async def get_students(
+        db: AsyncSession,
+        institution_id: int,
+        skip: int = 0,
+        limit: int = 1000,
+        *,
+        school_class_id: Optional[int] = None,
+        search: Optional[str] = None,
+        is_active: Optional[bool] = None,
+    ):
+        """
+        List students with optional server-side filters.
+
+        Push as much filtering as possible into SQL so the admin UI
+        doesn't have to pull 500 rows just to render the 30 in one
+        class. Search runs against name + parent_name + parent_email
+        with ILIKE — the (institution_id, school_class_id) compound index
+        already on the table makes the class-filter path a sub-millisecond
+        lookup.
+        """
         from app.models.academic import SchoolClass
-        result = await db.execute(
+        from sqlalchemy import or_, func
+
+        stmt = (
             select(Student)
             .options(
                 selectinload(Student.parent),
                 selectinload(Student.school_class).selectinload(SchoolClass.grade),
-                selectinload(Student.school_class).selectinload(SchoolClass.section)
+                selectinload(Student.school_class).selectinload(SchoolClass.section),
             )
             .where(Student.institution_id == institution_id)
-            .offset(skip)
-            .limit(limit)
         )
+        if school_class_id is not None:
+            stmt = stmt.where(Student.school_class_id == school_class_id)
+        if is_active is not None:
+            stmt = stmt.where(Student.is_active.is_(is_active))
+        if search:
+            like = f"%{search.strip().lower()}%"
+            stmt = stmt.where(
+                or_(
+                    func.lower(Student.name).like(like),
+                    func.lower(Student.parent_name).like(like),
+                    func.lower(Student.parent_email).like(like),
+                )
+            )
+
+        stmt = stmt.offset(skip).limit(limit)
+        result = await db.execute(stmt)
         return result.scalars().all()
 
     @staticmethod
@@ -225,7 +263,7 @@ class StudentService:
             user_result = await db.execute(select(User).where(User.id == student.user_id))
             db_user = user_result.scalars().first()
             if db_user:
-                db_user.password_hash = get_password_hash(new_password)
+                db_user.password_hash = await get_password_hash_async(new_password)
         await db.commit()
         return await StudentService.get_student(db, institution_id, student.id)
 

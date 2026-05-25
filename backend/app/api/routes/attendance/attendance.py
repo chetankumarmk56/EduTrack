@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
+from datetime import date, timedelta
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List
+from typing import List, Optional
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user, require_faculty, UserContext
@@ -8,6 +9,13 @@ from app.schemas import attendance as schemas
 from app.services.attendance import attendance_service
 
 router = APIRouter(prefix="/api/attendance", tags=["Attendance Tracking"])
+
+# Default attendance window. A student over 3 years can accumulate
+# 600+ records per subject; the eager-loaded student/class/grade/section
+# joins blow that up into multi-MB JSON. Callers that genuinely need the
+# full history must pass an explicit ``date_from`` (e.g. report-card
+# generators) — the default keeps the parent dashboard fast.
+_DEFAULT_WINDOW_DAYS = 90
 
 @router.post("/", response_model=schemas.AttendanceResponse)
 async def mark_attendance(
@@ -32,12 +40,27 @@ async def mark_attendance_batch(
 
 @router.get("/{student_id}", response_model=List[schemas.AttendanceResponse])
 async def get_student_attendance(
-    student_id: int, 
-    subject: str = None, 
+    student_id: int,
+    subject: Optional[str] = None,
+    date_from: Optional[str] = Query(
+        None,
+        description="ISO date (YYYY-MM-DD). Defaults to today - 90 days when omitted.",
+    ),
+    date_to: Optional[str] = Query(
+        None,
+        description="ISO date (YYYY-MM-DD). Defaults to today when omitted.",
+    ),
     db: AsyncSession = Depends(get_db),
-    user: UserContext = Depends(get_current_user)
+    user: UserContext = Depends(get_current_user),
 ):
-    return await attendance_service.get_attendance(db, user.institution_id, student_id, subject)
+    if date_from is None:
+        date_from = (date.today() - timedelta(days=_DEFAULT_WINDOW_DAYS)).isoformat()
+    if date_to is None:
+        date_to = date.today().isoformat()
+    return await attendance_service.get_attendance(
+        db, user.institution_id, student_id, subject,
+        date_from=date_from, date_to=date_to,
+    )
 
 @router.get("/class/{school_class_id}/{date}", response_model=List[schemas.AttendanceResponse])
 async def get_class_attendance(

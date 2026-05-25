@@ -13,8 +13,10 @@ Sits between the route layer and the storage adapter:
 """
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import mimetypes
+import os
 import re
 import uuid
 from typing import List, Optional, Tuple
@@ -215,10 +217,22 @@ class UploadedFileService:
                 f"{', '.join(sorted(ALLOWED_SUFFIXES))}.",
             )
 
-        data = await upload.read()
-        if not data:
+        # Size check via the spooled file's tell/seek — never materialise
+        # the full payload in Python memory. Older code did
+        # ``data = await upload.read()`` and held up to 25 MB per file ×
+        # 9 files in one request (~225 MB). Now we keep at most one
+        # 1 MiB chunk in memory at a time when streaming to disk/S3.
+        spooled = upload.file  # SpooledTemporaryFile, seekable
+        try:
+            spooled.seek(0, os.SEEK_END)
+            file_size = spooled.tell()
+            spooled.seek(0)
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(status_code=400, detail=f"Could not measure upload: {exc}")
+
+        if file_size == 0:
             raise HTTPException(status_code=400, detail="File is empty.")
-        if len(data) > MAX_FILE_BYTES:
+        if file_size > MAX_FILE_BYTES:
             raise HTTPException(
                 status_code=400,
                 detail=f"File too large (max {MAX_FILE_BYTES // (1024 * 1024)} MB).",
@@ -238,14 +252,26 @@ class UploadedFileService:
             f"teacher_{teacher_id}/{unique}_{safe_name}"
         )
 
-        # Push to backend FIRST. If this fails the DB stays untouched.
-        await backend.upload(key=storage_key, data=data, content_type=mime_type)
+        # Stream straight to backend (S3 multipart / chunked disk write).
+        # If this fails, DB is untouched.
+        await backend.upload_stream(
+            key=storage_key,
+            fileobj=spooled,
+            content_type=mime_type,
+            content_length=file_size,
+        )
 
-        # Best-effort text extraction (synchronous; files are small).
+        # Best-effort text extraction. PDF/DOCX parsing is CPU-bound —
+        # offload to a thread so a slow Adobe-quirk PDF can't stall the
+        # event loop for every other concurrent request on this worker.
+        # The dedicated worker container is the right long-term home for
+        # this; for now offloading is the smallest safe change.
         extracted: Optional[str] = None
         extraction_status = "skipped"
         try:
-            text = extract_text(filename, data)
+            spooled.seek(0)
+            data_for_extract = spooled.read()  # extract needs bytes
+            text = await asyncio.to_thread(extract_text, filename, data_for_extract)
             extracted = text[:MAX_EXTRACTED_TEXT_CHARS]
             extraction_status = "done"
         except ValueError as exc:
@@ -259,7 +285,7 @@ class UploadedFileService:
             storage_key=storage_key,
             original_filename=safe_name,
             mime_type=mime_type,
-            file_size=len(data),
+            file_size=file_size,
             extracted_text=extracted,
             extraction_status=extraction_status,
             tags=tags or [],
@@ -340,13 +366,15 @@ class UploadedFileService:
 
         text = row.extracted_text or ""
         if not text:
-            # Try a late extraction (e.g. earlier upload failed).
+            # Try a late extraction (e.g. earlier upload failed). Off the
+            # event loop because PDF/DOCX parsing is CPU-bound.
             try:
                 backend = get_backend_for(row.storage_backend)
                 data = await backend.download(row.storage_key)
-                text = extract_text(row.original_filename, data)[
-                    :MAX_EXTRACTED_TEXT_CHARS
-                ]
+                full_text = await asyncio.to_thread(
+                    extract_text, row.original_filename, data
+                )
+                text = full_text[:MAX_EXTRACTED_TEXT_CHARS]
                 row.extracted_text = text
                 row.extraction_status = "done"
             except Exception as exc:  # noqa: BLE001

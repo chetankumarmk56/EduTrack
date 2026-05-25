@@ -9,7 +9,7 @@ even when the active default changes later.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import BinaryIO, Optional
 
 
 class FileStorageBackend(ABC):
@@ -25,7 +25,32 @@ class FileStorageBackend(ABC):
         data: bytes,
         content_type: str,
     ) -> str:
-        """Store ``data`` under ``key`` and return the canonical key used."""
+        """Store ``data`` under ``key`` and return the canonical key used.
+
+        Prefer ``upload_stream`` for user-uploaded content — it avoids
+        materialising the whole payload in memory.
+        """
+
+    @abstractmethod
+    async def upload_stream(
+        self,
+        *,
+        key: str,
+        fileobj: BinaryIO,
+        content_type: str,
+        content_length: Optional[int] = None,
+    ) -> str:
+        """
+        Stream ``fileobj`` to storage under ``key`` without ever holding
+        the full payload in memory.
+
+        ``fileobj`` must be a seekable, blocking binary file (S3's
+        ``upload_fileobj`` requires it). FastAPI's ``UploadFile.file`` is
+        a ``SpooledTemporaryFile`` which qualifies.
+
+        ``content_length`` is optional; backends may use it to pick an
+        appropriate multipart chunk size or skip multipart for small files.
+        """
 
     @abstractmethod
     async def download(self, key: str) -> bytes:

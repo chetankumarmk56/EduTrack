@@ -7,7 +7,7 @@ from datetime import datetime, date
 import io
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_user, require_payment_admin, UserContext
+from app.core.dependencies import get_current_user, require_payment_admin, require_cron_or_admin, UserContext
 from app.schemas.finance import (
     StudentDuesResponse, PaymentResponse, PaginatedPaymentResponse,
     PaymentCreate, OrderCreate, OrderResponse, PaymentVerify, PaymentVerifyResponse,
@@ -705,26 +705,33 @@ async def export_ledger(
 
 # ─── Fee reminder dispatcher ─────────────────────────────────────────────────
 # Manually trigger the weekly fee-due push notifications. Designed for an
-# external cron (Render Scheduled Jobs, GitHub Actions, etc.) hitting it
+# external cron (Render Cron Job, EventBridge, GitHub Actions) hitting it
 # every Wednesday at 9 AM local time. The service itself enforces the day
 # guard, so a misfired trigger on Tuesday no-ops cleanly.
 #
-# The same endpoint accepts `force=true` to run dispatch ad-hoc — useful
-# for back-filling a missed week or seeding a test in staging.
+# Auth: either an X-Cron-Secret header matching settings.CRON_SECRET, OR a
+# Bearer token for an admin/finance user (for ad-hoc browser runs). The
+# distributed cron_locks mutex prevents two replicas racing here.
+#
+# `force=true` skips the day guard — useful for back-filling a missed
+# week or seeding a test in staging.
 
 @router.post("/fee-reminders/dispatch")
 async def dispatch_fee_reminders(
     force: bool = Query(False, description="Skip the Wednesday/hour guard"),
     dry_run: bool = Query(False, description="Compute eligible rows but don't push or bump last_notified_at"),
     db: AsyncSession = Depends(get_db),
-    admin: UserContext = Depends(require_payment_admin),
+    caller: str = Depends(require_cron_or_admin),
 ):
     """
     Run the weekly fee-reminder push. Returns a summary dict the cron job
     can log to confirm what was actually sent.
     """
     from app.services.finance.fee_reminder_service import fee_reminder_service
+    from app.core.logger import logger
 
+    logger.info("[fee-reminder] dispatch triggered by %s (force=%s, dry_run=%s)",
+                caller, force, dry_run)
     summary = await fee_reminder_service.dispatch_due_reminders(
         db,
         force_day=force,

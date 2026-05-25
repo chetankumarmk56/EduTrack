@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { transportApi } from '@/features/transport/api';
 import { Skeleton, SkeletonHeader, SkeletonList } from '@/shared/components/ui/Skeleton';
+import { getCurrentPortalRole } from '@/shared/lib/portalRole';
 
 
 // --- Custom Leaflet Icons ---
@@ -59,31 +60,59 @@ export default function BusTracking() {
    useEffect(() => {
       if (!assignment?.bus?.id) return;
 
-      const connectWS = () => {
-         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-         const wsUrl = `${protocol}//${window.location.host.replace(':3000', ':8000')}/api/transport/ws/transport/${assignment.bus.id}`;
+      // The browser WebSocket API can't set Authorization headers, so we
+      // pass the access token as a query string. Server authorizes once
+      // at connect and closes (1008) on bad/missing token. We reconnect
+      // with the current token on every attempt, so a refresh in another
+      // tab fixes the connection on the next retry.
+      let cancelled = false;
 
+      const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)
+         || 'http://localhost:8000/api/';
+      // Build a ws(s) URL from the configured API base so prod traffic
+      // hits the deployed host, not window.location.
+      const baseUrl = new URL(apiBase, window.location.origin);
+      const wsProtocol = baseUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+
+      const connectWS = () => {
+         if (cancelled) return;
+         const role = getCurrentPortalRole();
+         const token = localStorage.getItem(`edu_auth_token_${role}`);
+         if (!token) {
+            // No token yet (e.g. interceptor mid-refresh) — try again shortly.
+            setTimeout(connectWS, 1500);
+            return;
+         }
+         const wsUrl = `${wsProtocol}//${baseUrl.host}/api/transport/ws/transport/${assignment.bus.id}?token=${encodeURIComponent(token)}`;
          const ws = new WebSocket(wsUrl);
          wsRef.current = ws;
 
          ws.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            if (data.latitude && data.longitude) {
-               setBusLocation({
-                  lat: data.latitude,
-                  lng: data.longitude
-               });
+            try {
+               const data = JSON.parse(event.data);
+               if (data.latitude && data.longitude) {
+                  setBusLocation({ lat: data.latitude, lng: data.longitude });
+               }
+            } catch {
+               // ignore malformed payload
             }
          };
 
-         ws.onclose = () => {
-            // console.log("WebSocket disconnected. Reconnecting...");
+         ws.onclose = (evt) => {
+            // 1008 = policy violation (bad/missing token). Stop hammering
+            // — the user needs to re-login. All other closes are
+            // network/server hiccups; reconnect with exponential backoff
+            // capped at 30s.
+            if (cancelled || evt.code === 1008) return;
             setTimeout(connectWS, 3000);
          };
       };
 
       connectWS();
-      return () => wsRef.current?.close();
+      return () => {
+         cancelled = true;
+         wsRef.current?.close();
+      };
    }, [assignment]);
 
    if (isLoading) {

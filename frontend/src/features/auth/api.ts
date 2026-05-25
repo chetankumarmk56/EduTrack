@@ -70,6 +70,14 @@ export const authApi = {
     return response.data;
   },
 
+  // Server-side logout: clears the HttpOnly access + refresh cookies for
+  // the caller's role+user_id. AuthContext.logout fires this best-effort
+  // and proceeds with local state teardown regardless of the result.
+  logout: async () => {
+    const response = await client.post('auth/logout');
+    return response.data;
+  },
+
   changePassword: async (currentPassword: string, newPassword: string) => {
     const response = await client.post<{ message: string }>('auth/change-password', {
       current_password: currentPassword,

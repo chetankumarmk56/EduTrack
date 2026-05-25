@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import List
 
 from app.core.database import get_db
 from app.core.dependencies import (
@@ -14,6 +14,7 @@ from app.schemas.auth import Token
 from app.services.teacher import teacher_service
 from app.services.auth import auth_service
 from app.core.config import settings
+from app.core.limiter import limiter, RATE_LIMITS
 
 router = APIRouter(
     prefix="/api/directory",
@@ -53,10 +54,11 @@ async def delete_assignment(
 # --- Teacher Routes ---
 
 @router.post("/teachers/login", response_model=Token)
+@limiter.limit(RATE_LIMITS["teacher_login"])
 async def teacher_login(
+    request: Request,
     login_data: schemas.TeacherLogin,
     response: Response,
-    request: Request,
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -82,25 +84,41 @@ async def teacher_login(
     if not auth_data:
         raise HTTPException(status_code=401, detail="Invalid educator credentials.")
 
-    # Set Refresh Token in HttpOnly Cookie
-    response.set_cookie(
-        key="edu_refresh_teacher",
-        value=auth_data.pop("refresh_token"),
-        httponly=True,
-        secure=settings.ENVIRONMENT == "prod",
-        samesite="lax",
-        max_age=7 * 24 * 3600
+    # Set BOTH the access and refresh cookies as HttpOnly. The web SPA
+    # reads neither directly. Mobile keeps using the `access_token` in
+    # the response body via Authorization header.
+    from app.services.auth.auth_service import set_auth_cookies
+    refresh_token = auth_data.pop("refresh_token")
+    user_id = auth_data["user"]["id"]
+    set_auth_cookies(
+        response,
+        role="teacher",
+        user_id=user_id,
+        access_token=auth_data["access_token"],
+        refresh_token=refresh_token,
     )
 
     return auth_data
 
 @router.get("/teachers/", response_model=List[schemas.TeacherResponse])
 async def read_teachers(
-    skip: int = 0, limit: int = 1000, 
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=500),  # see students.read_students for rationale
+    search: Optional[str] = Query(
+        None, min_length=1, max_length=80,
+        description="ILIKE match on name / email.",
+    ),
+    is_active: Optional[bool] = Query(
+        None, description="Filter inactive teachers out of admin lists when true.",
+    ),
     db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(require_faculty)
 ):
-    return await teacher_service.get_teachers(db, user.institution_id, skip=skip, limit=limit)
+    return await teacher_service.get_teachers(
+        db, user.institution_id,
+        skip=skip, limit=limit,
+        search=search, is_active=is_active,
+    )
 
 @router.get("/teachers/{teacher_id}", response_model=schemas.TeacherResponse)
 async def read_teacher(

@@ -20,10 +20,25 @@ services:
       retries: 10
       start_period: 10s
 
+  redis:
+    # Shared Redis used for rate limiting (slowapi) + websocket pub/sub.
+    # Single replica is fine; the data is ephemeral by design.
+    image: redis:7-alpine
+    container_name: edutrack_redis
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   backend:
     build: ./backend
     container_name: edutrack_api
     restart: always
+    # Default CMD in the Dockerfile uses gunicorn -c gunicorn_conf.py.
+    # Override with `command: ["uvicorn", "app.main:app", "--reload"]` if
+    # you need hot-reload during local development.
     ports:
       - "8000:8000"
     environment:
@@ -31,8 +46,40 @@ services:
       - ENVIRONMENT=${ENVIRONMENT:-dev}
       - SECRET_KEY=${SECRET_KEY:-change-me-to-32-or-more-random-chars-please}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
+      - REDIS_URL=redis://redis:6379/0
+      # Scheduler runs in the `worker` service; keep it off on the web replicas.
+      - FEE_REMINDER_SCHEDULER_ENABLED=false
+      # 2 workers is a sensible default for a 1-vCPU dev container. Bump
+      # via `WEB_CONCURRENCY=N docker-compose up` to stress-test.
+      - WEB_CONCURRENCY=${WEB_CONCURRENCY:-2}
     depends_on:
       db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Background worker. Runs the in-process scheduler (Wednesday fee-reminder
+  # push, future cron-style jobs) outside the web replicas so:
+  #   * Scaling the web tier doesn't spawn duplicate cron jobs.
+  #   * A blocked dispatch can't tie up an ASGI worker.
+  # Keep this at exactly one replica — the cron_locks table is a safety
+  # net, not a license to run more than one.
+  worker:
+    build: ./backend
+    container_name: edutrack_worker
+    restart: always
+    command: ["python", "worker.py"]
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-luffy}:${POSTGRES_PASSWORD:-secret}@db:5432/${POSTGRES_DB:-school}
+      - ENVIRONMENT=${ENVIRONMENT:-dev}
+      - SECRET_KEY=${SECRET_KEY:-change-me-to-32-or-more-random-chars-please}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
+      - REDIS_URL=redis://redis:6379/0
+      - FEE_REMINDER_SCHEDULER_ENABLED=true
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
 volumes:

@@ -43,10 +43,26 @@ export const attendanceApi = {
 
     /**
      * Fetch attendance history for a specific student.
+     *
+     * The backend defaults to the last 90 days when no range is given.
+     * Callers that need full history (report cards, year-end exports)
+     * must pass an explicit dateFrom — see backend
+     * attendance.py:_DEFAULT_WINDOW_DAYS.
      */
-    getAttendance: async (studentId: number, subject?: string) => {
-        const params = subject ? { subject } : {};
-        const response = await client.get<AttendanceRecord[]>(`attendance/${studentId}`, { params });
+    getAttendance: async (
+        studentId: number,
+        subject?: string,
+        dateFrom?: string,
+        dateTo?: string,
+    ) => {
+        const params: Record<string, string> = {};
+        if (subject) params.subject = subject;
+        if (dateFrom) params.date_from = dateFrom;
+        if (dateTo) params.date_to = dateTo;
+        const response = await client.get<AttendanceRecord[]>(
+            `attendance/${studentId}`,
+            { params },
+        );
         return response.data;
     },
 

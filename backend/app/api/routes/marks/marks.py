@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException
+from datetime import date, datetime, timedelta, timezone
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 
@@ -8,6 +9,11 @@ from app.schemas import mark as schemas
 from app.services.marks import marks_service
 
 router = APIRouter(prefix="/api/marks", tags=["Assessment & Marks"])
+
+# Default look-back for marks. An academic year is ~10 months; 365 days
+# covers the whole year and a buffer for late entries. Set explicit
+# date_from for report-card generators that need full history.
+_DEFAULT_MARKS_WINDOW_DAYS = 365
 
 @router.post("/", response_model=schemas.MarkResponse)
 async def record_mark(
@@ -60,11 +66,38 @@ async def get_exams(
 
 @router.get("/{student_id}", response_model=List[schemas.MarkResponse])
 async def get_student_marks(
-    student_id: int, 
+    student_id: int,
+    date_from: Optional[str] = Query(
+        None,
+        description=(
+            "ISO date (YYYY-MM-DD). Defaults to today - 365 days when omitted. "
+            "Filter applies to Mark.created_at."
+        ),
+    ),
+    date_to: Optional[str] = Query(
+        None,
+        description="ISO date (YYYY-MM-DD). Defaults to today when omitted.",
+    ),
     db: AsyncSession = Depends(get_db),
-    user: UserContext = Depends(get_current_user)
+    user: UserContext = Depends(get_current_user),
 ):
-    return await marks_service.get_marks(db, user.institution_id, student_id)
+    """
+    Marks for a student, scoped to a date window.
+
+    Default window (last 365 days) keeps the parent dashboard fast; a
+    multi-year history would otherwise pull thousands of rows with
+    eager-loaded student/exam/subject_ref joins. Pass explicit
+    `date_from=…` for report-card / transcript exports that need full
+    history — the service still caps results at 1000 rows as a defence.
+    """
+    if date_from is None:
+        date_from = (date.today() - timedelta(days=_DEFAULT_MARKS_WINDOW_DAYS)).isoformat()
+    if date_to is None:
+        date_to = date.today().isoformat()
+    return await marks_service.get_marks(
+        db, user.institution_id, student_id,
+        date_from=date_from, date_to=date_to,
+    )
 
 @router.get("/{student_id}/rankings")
 async def get_student_rankings(

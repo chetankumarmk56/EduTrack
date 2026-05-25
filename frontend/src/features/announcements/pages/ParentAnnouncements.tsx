@@ -9,14 +9,17 @@ import {
   Filter, AlertTriangle, MailOpen, Bell,
 } from 'lucide-react';
 
-import { announcementApi, type Announcement } from '@/features/announcements/api';
+import { announcementApi, type Announcement, type HomeworkChildStatus } from '@/features/announcements/api';
 import { cn } from '@/shared/lib/utils';
 import { StaggerContainer, StaggerItem } from '@/shared/components/ui/PageWrapper';
 import { SkeletonHeader, SkeletonList } from '@/shared/components/ui/Skeleton';
+import { CategoryBadge } from '@/features/announcements/components/CategoryBadge';
+import { HomeworkConfirmPanel } from '@/features/announcements/components/HomeworkConfirmPanel';
+import { BookOpenCheck } from 'lucide-react';
 
 type Priority = 'IMPORTANT' | 'NORMAL';
 type Scope = 'CLASS' | 'STUDENT';
-type FilterKey = 'all' | 'unread' | 'important' | 'personal' | 'class';
+type FilterKey = 'all' | 'unread' | 'important' | 'personal' | 'class' | 'homework';
 
 const PRIORITY_THEMES: Record<Priority, {
   border: string; bg: string; text: string; solid: string; rail: string; chip: string;
@@ -205,6 +208,29 @@ export default function ParentAnnouncements() {
     }
   };
 
+  /**
+   * Local-state patch after a child's homework is confirmed inside the
+   * detail modal. We update both the modal's `selected` copy and the list
+   * row so the badge counts in the feed reflect the new state without a
+   * full refetch.
+   */
+  const handleHomeworkConfirmed = (announcementId: string, updated: HomeworkChildStatus) => {
+    const patch = (a: Announcement): Announcement => {
+      if (a.id !== announcementId) return a;
+      const children = (a.homework_my_children ?? []).map(c =>
+        c.student_id === updated.student_id ? { ...c, ...updated } : c,
+      );
+      const confirmedDelta = updated.confirmed ? 1 : 0;
+      return {
+        ...a,
+        homework_my_children: children,
+        homework_confirmed_count: (a.homework_confirmed_count ?? 0) + confirmedDelta,
+      };
+    };
+    setAnnouncements(prev => prev.map(patch));
+    setSelected(prev => (prev ? patch(prev) : prev));
+  };
+
   const handleMarkAllRead = async () => {
     const unread = announcements.filter(a => !a.is_read);
     if (unread.length === 0) return;
@@ -236,6 +262,11 @@ export default function ParentAnnouncements() {
     important: announcements.filter(a => a.priority === 'IMPORTANT').length,
     personal: announcements.filter(a => a.type === 'STUDENT').length,
     class: announcements.filter(a => a.type === 'CLASS').length,
+    homework: announcements.filter(a => a.category === 'HOMEWORK').length,
+    pendingHomework: announcements.filter(a =>
+      a.category === 'HOMEWORK'
+      && (a.homework_my_children ?? []).some(c => !c.confirmed)
+    ).length,
   }), [announcements]);
 
   const filtered = useMemo(() => {
@@ -245,6 +276,7 @@ export default function ParentAnnouncements() {
       if (filter === 'important' && a.priority !== 'IMPORTANT') return false;
       if (filter === 'personal' && a.type !== 'STUDENT') return false;
       if (filter === 'class' && a.type !== 'CLASS') return false;
+      if (filter === 'homework' && a.category !== 'HOMEWORK') return false;
       if (q) {
         const hay = `${a.title} ${a.message} ${a.teacher_name ?? ''}`.toLowerCase();
         if (!hay.includes(q)) return false;
@@ -377,6 +409,7 @@ export default function ParentAnnouncements() {
             </span>
             <FilterChip active={filter === 'all'} onClick={() => setFilter('all')} label="All" count={counts.total} />
             <FilterChip active={filter === 'unread'} onClick={() => setFilter('unread')} label="Unread" count={counts.unread} tone="primary" />
+            <FilterChip active={filter === 'homework'} onClick={() => setFilter('homework')} label="Homework" count={counts.homework} tone="amber" />
             <FilterChip active={filter === 'important'} onClick={() => setFilter('important')} label="Important" count={counts.important} tone="rose" />
             <FilterChip active={filter === 'personal'} onClick={() => setFilter('personal')} label="Personal" count={counts.personal} />
             <FilterChip active={filter === 'class'} onClick={() => setFilter('class')} label="Class" count={counts.class} />
@@ -452,6 +485,7 @@ export default function ParentAnnouncements() {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-2">
                       {selected.priority === 'IMPORTANT' && <PriorityBadge />}
+                      {selected.category === 'HOMEWORK' && <CategoryBadge category="HOMEWORK" />}
                       <ScopeBadge type={selected.type as Scope} />
                     </div>
                     <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-tight">{selected.title}</h2>
@@ -475,6 +509,12 @@ export default function ParentAnnouncements() {
                 <p className="text-base sm:text-lg text-slate-700 leading-relaxed whitespace-pre-wrap">{selected.message}</p>
                 {selected.attachment_url && (
                   <AttachmentPreview url={selected.attachment_url} onPreview={(url, type) => setPreviewFile({ url, type })} />
+                )}
+                {selected.category === 'HOMEWORK' && (
+                  <HomeworkConfirmPanel
+                    announcement={selected}
+                    onConfirmed={(updated) => handleHomeworkConfirmed(selected.id, updated)}
+                  />
                 )}
               </div>
 
@@ -540,12 +580,13 @@ function FilterChip({
   onClick: () => void;
   label: string;
   count: number;
-  tone?: 'default' | 'primary' | 'rose';
+  tone?: 'default' | 'primary' | 'rose' | 'amber';
 }) {
   const activeClasses = {
     default: 'bg-slate-900 text-white border-slate-900 shadow-sm',
     primary: 'bg-[hsl(var(--primary))] text-white border-[hsl(var(--primary))] shadow-md',
     rose: 'bg-rose-500 text-white border-rose-500 shadow-md shadow-rose-500/20',
+    amber: 'bg-amber-500 text-white border-amber-500 shadow-md shadow-amber-500/20',
   }[tone];
 
   return (
@@ -696,6 +737,18 @@ function AnnouncementCard({ a, onClick }: { a: Announcement; onClick: () => void
 
           <div className="flex items-center gap-3 pt-1.5 flex-wrap">
             {isImportant && <PriorityBadge />}
+            {a.category === 'HOMEWORK' && <CategoryBadge category="HOMEWORK" />}
+            {a.category === 'HOMEWORK' && (a.homework_my_children ?? []).length > 0 && (
+              <span className={cn(
+                'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[10px] font-black uppercase tracking-widest',
+                (a.homework_my_children ?? []).every(c => c.confirmed)
+                  ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
+                  : 'bg-slate-100 text-slate-600 border-slate-200',
+              )}>
+                <BookOpenCheck className="w-3.5 h-3.5" />
+                {(a.homework_my_children ?? []).filter(c => c.confirmed).length}/{(a.homework_my_children ?? []).length} done
+              </span>
+            )}
             <ScopeBadge type={a.type as Scope} />
 
             <div className="flex items-center gap-2 ml-auto">

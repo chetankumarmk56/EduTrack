@@ -7,6 +7,11 @@ from app.models.event import Event
 from app.models.communication import Announcement, DeviceToken, DevicePlatform, PushDeliveryLog
 from app.models.transport import Bus, Route, Stop, StudentTransport, BusLocation, NotificationLog
 from app.models.finance import FeeStructure, Payment, PaymentAllocation, FinanceLedger, LedgerEntryType
+from app.models.manual_payment import (
+    ManualPaymentRequest, ManualPaymentAuditLog,
+    ManualPaymentStatus, ManualPaymentAuditEvent,
+    InstitutionPaymentSettings,
+)
 from app.models.timetable import SchedulePeriod, TimetableSlot
 from app.models.teacher_attendance import (
     TeacherAttendance, TeacherLeaveRequest, TeacherAttendanceAuditLog,
@@ -24,6 +29,9 @@ __all__ = [
     "Event", "Announcement", "DeviceToken", "DevicePlatform", "PushDeliveryLog", "Base",
     "Bus", "Route", "Stop", "StudentTransport", "BusLocation", "NotificationLog",
     "FeeStructure", "Payment", "PaymentAllocation", "FinanceLedger", "LedgerEntryType",
+    "ManualPaymentRequest", "ManualPaymentAuditLog",
+    "ManualPaymentStatus", "ManualPaymentAuditEvent",
+    "InstitutionPaymentSettings",
     "SchedulePeriod", "TimetableSlot",
     "TeacherAttendance", "TeacherLeaveRequest", "TeacherAttendanceAuditLog",
     "TeacherAttendanceStatus", "TeacherLeaveType", "TeacherLeaveStatus",

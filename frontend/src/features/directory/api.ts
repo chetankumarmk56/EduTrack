@@ -48,10 +48,36 @@ export interface TeacherWithPassword {
   assignments: import('@/shared/types').TeacherAssignment[];
 }
 
+// Page size for admin "list all students/teachers" calls. The backend
+// caps at 500; we ask for the smaller default here because the admin UI
+// now pushes filters (school_class_id / search) down to SQL so we
+// rarely need a full pull.
+const ADMIN_LIST_PAGE_SIZE = 100;
+
+export interface StudentListFilters {
+  skip?: number;
+  limit?: number;
+  schoolClassId?: number | null;
+  search?: string;
+  isActive?: boolean;
+}
+
 export const directoryApi = {
   // Students
-  getStudents: async (skip = 0, limit = 100) => {
-    const response = await client.get<Student[]>('directory/', { params: { skip, limit } });
+  //
+  // Pass `schoolClassId` to load just one class (the admin directory's
+  // common path) instead of all students. `search` is matched
+  // server-side on name / parent_name / parent_email via ILIKE so the
+  // client doesn't have to fetch then filter.
+  getStudents: async (filters: StudentListFilters = {}) => {
+    const params: Record<string, string | number | boolean> = {
+      skip: filters.skip ?? 0,
+      limit: filters.limit ?? ADMIN_LIST_PAGE_SIZE,
+    };
+    if (filters.schoolClassId != null) params.school_class_id = filters.schoolClassId;
+    if (filters.search) params.search = filters.search;
+    if (filters.isActive !== undefined) params.is_active = filters.isActive;
+    const response = await client.get<Student[]>('directory/', { params });
     return response.data;
   },
 
@@ -76,8 +102,16 @@ export const directoryApi = {
   },
 
   // Teachers
-  getTeachers: async (skip = 0, limit = 100) => {
-    const response = await client.get<TeacherWithPassword[]>('directory/teachers/', { params: { skip, limit } });
+  getTeachers: async (
+    filters: { skip?: number; limit?: number; search?: string; isActive?: boolean } = {},
+  ) => {
+    const params: Record<string, string | number | boolean> = {
+      skip: filters.skip ?? 0,
+      limit: filters.limit ?? ADMIN_LIST_PAGE_SIZE,
+    };
+    if (filters.search) params.search = filters.search;
+    if (filters.isActive !== undefined) params.is_active = filters.isActive;
+    const response = await client.get<TeacherWithPassword[]>('directory/teachers/', { params });
     return response.data;
   },
 

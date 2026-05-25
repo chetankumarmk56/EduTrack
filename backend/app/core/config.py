@@ -72,6 +72,28 @@ class Settings(BaseSettings):
     RAZORPAY_KEY_SECRET: Optional[str] = "placeholder_secret"
     RAZORPAY_WEBHOOK_SECRET: Optional[str] = "placeholder_webhook_secret"
     
+    # Redis (rate limiting + future pub/sub for websockets / queues).
+    # When unset, slowapi runs with an in-memory counter — fine for a
+    # single-instance dev box, NOT fine for multi-replica prod.
+    REDIS_URL: Optional[str] = None
+
+    # Shared secret used by external cron jobs (Render Cron / EventBridge /
+    # GitHub Actions) to authenticate against /api/finance/fee-reminders/dispatch
+    # without holding a JWT. Send via `X-Cron-Secret` header. Leave unset to
+    # disable secret-based access (admin JWT still works).
+    CRON_SECRET: Optional[str] = None
+
+    # Observability. Default to JSON in prod so log aggregators (Datadog,
+    # CloudWatch, Better Stack) can parse fields; default to human-readable
+    # in dev for terminal grep-ability. Set LOG_JSON=true to force JSON
+    # locally (useful when debugging the formatter itself).
+    LOG_JSON: Optional[bool] = None  # None = auto: True in prod, False in dev
+    # Sentry DSN. Leave unset to disable Sentry — the SDK is imported
+    # lazily so unconfigured deploys don't pay the cost. Set the DSN in
+    # production for error aggregation + release tracking.
+    SENTRY_DSN: Optional[str] = None
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.0  # 0.0 = error-tracking only, no perf
+
     # Frontend
     FRONTEND_URL: str = "http://localhost:5173"
     # Optional comma-separated extra origins (e.g. "https://app.example.com,https://admin.example.com")
@@ -171,16 +193,38 @@ class Settings(BaseSettings):
                     "Set them via environment variables before starting in production."
                 )
 
-            # Warn (don't block) on conditions that degrade reliability but aren't fatal.
-            # Uploads stored on container disk are lost on redeploy and unavailable to
-            # other replicas. Required for any multi-replica deploy (e.g. App Runner ≥2).
-            import warnings
-            if not self.AWS_S3_BUCKET or not self.AWS_S3_REGION:
-                warnings.warn(
-                    "AWS_S3_BUCKET/AWS_S3_REGION unset in production — uploads will be lost on redeploy "
-                    "and inaccessible across replicas. OK for single-instance deploys; required for scale-out."
+            # ── Production storage: at least one remote backend MUST be set ──
+            # Two upload surfaces:
+            #   1. Teacher file library  → AWS S3        (storage/factory.py)
+            #   2. Announcement attachments → Cloudinary (storage_service.py)
+            # If neither is configured, every upload silently writes to the
+            # container's local disk — which is ephemeral on Render/Fly/Heroku
+            # and unreachable across replicas. We hard-fail on startup so the
+            # operator sees the problem at deploy time instead of when a parent
+            # opens a broken attachment two days later.
+            s3_configured = bool(self.AWS_S3_BUCKET and self.AWS_S3_REGION)
+            cloudinary_configured = bool(
+                self.CLOUDINARY_CLOUD_NAME
+                and self.CLOUDINARY_API_KEY
+                and self.CLOUDINARY_API_SECRET
+            )
+            if not s3_configured:
+                raise ValueError(
+                    "Production startup blocked: AWS S3 is not configured "
+                    "(AWS_S3_BUCKET + AWS_S3_REGION + AWS_ACCESS_KEY_ID + "
+                    "AWS_SECRET_ACCESS_KEY required). The teacher file library "
+                    "would otherwise write to ephemeral container disk."
+                )
+            if not cloudinary_configured:
+                raise ValueError(
+                    "Production startup blocked: Cloudinary is not configured "
+                    "(CLOUDINARY_CLOUD_NAME + CLOUDINARY_API_KEY + "
+                    "CLOUDINARY_API_SECRET required). Announcement attachments "
+                    "would otherwise write to ephemeral container disk."
                 )
 
+            # Warn (non-fatal) when FRONTEND_URL still looks like dev.
+            import warnings
             if not self.FRONTEND_URL or "localhost" in self.FRONTEND_URL:
                 warnings.warn(
                     f"FRONTEND_URL='{self.FRONTEND_URL}' looks wrong for production. "

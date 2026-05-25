@@ -2,7 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text
 from datetime import datetime, timedelta, timezone
 from app.models.core import Institution, User
-from app.core.security import get_password_hash
+from app.core.security import get_password_hash_async
 from app.core.logger import logger
 from app.schemas import admin as schemas
 
@@ -189,10 +189,12 @@ class AdminService:
 
     @staticmethod
     async def create_user(db: AsyncSession, user_data: schemas.UserCreate) -> User:
+        # bcrypt off the event loop — see app.core.security.get_password_hash_async.
+        pw_hash = await get_password_hash_async(user_data.password)
         db_user = User(
             name=user_data.name,
             email=user_data.email,
-            password_hash=get_password_hash(user_data.password),
+            password_hash=pw_hash,
             role=user_data.role,
             institution_id=user_data.institution_id
         )
@@ -216,16 +218,23 @@ class AdminService:
         db_user = await AdminService.get_user(db, user_id)
         if not db_user:
             return None
-        
+
         update_dict = update_data.model_dump(exclude_unset=True)
         if "password" in update_dict:
-            update_dict["password_hash"] = get_password_hash(update_dict.pop("password"))
-            
+            update_dict["password_hash"] = await get_password_hash_async(update_dict.pop("password"))
+
         for key, value in update_dict.items():
             setattr(db_user, key, value)
-            
+
         await db.commit()
         await db.refresh(db_user)
+
+        # Drop the cache so the next authenticated request re-reads the
+        # fresh row (name change, deactivation, role tweak all need to
+        # propagate immediately).
+        from app.core.user_cache import user_cache
+        await user_cache.invalidate(user_id)
+
         return db_user
 
     @staticmethod

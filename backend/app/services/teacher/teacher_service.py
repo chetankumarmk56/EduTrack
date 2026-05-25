@@ -3,25 +3,66 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from app.models.core import User
 from app.schemas import directory as schemas
-from app.core.security import get_password_hash, verify_password, create_access_token
+from app.core.security import (
+    create_access_token,
+    get_password_hash_async,
+    verify_password_async,
+)
 from app.models.directory import Teacher, TeacherAssignment
 from typing import List, Optional
 
 class TeacherService:
     @staticmethod
-    async def get_teachers(db: AsyncSession, institution_id: int, skip: int = 0, limit: int = 1000):
+    async def get_teachers(
+        db: AsyncSession,
+        institution_id: int,
+        skip: int = 0,
+        limit: int = 1000,
+        *,
+        search: Optional[str] = None,
+        is_active: Optional[bool] = None,
+    ):
+        """
+        List teachers with server-side filters. Search matches name +
+        email (ILIKE). Admins use this to fan out fewer rows on the
+        directory page; the (institution_id) index handles the base
+        filter and the limit caps the worst case.
+        """
         from app.models.academic import SchoolClass
-        result = await db.execute(
+        from sqlalchemy import or_, func
+
+        stmt = (
             select(Teacher)
             .options(
-                selectinload(Teacher.assignments).selectinload(TeacherAssignment.school_class).selectinload(SchoolClass.grade),
-                selectinload(Teacher.assignments).selectinload(TeacherAssignment.school_class).selectinload(SchoolClass.section),
-                selectinload(Teacher.assignments).selectinload(TeacherAssignment.subject_ref)
+                # Scope the loaded assignments to the teacher's tenant.
+                # Legacy seed/import data sometimes wrote rows where the
+                # teacher and the school_class belong to different
+                # institutions, which then duplicated entries in the
+                # Marks/Attendance dropdowns. The .and_() filter pins
+                # collection loading to the current institution so a
+                # future cross-tenant row can't bleed back in.
+                selectinload(Teacher.assignments.and_(TeacherAssignment.institution_id == institution_id))
+                    .selectinload(TeacherAssignment.school_class).selectinload(SchoolClass.grade),
+                selectinload(Teacher.assignments.and_(TeacherAssignment.institution_id == institution_id))
+                    .selectinload(TeacherAssignment.school_class).selectinload(SchoolClass.section),
+                selectinload(Teacher.assignments.and_(TeacherAssignment.institution_id == institution_id))
+                    .selectinload(TeacherAssignment.subject_ref)
             )
             .where(Teacher.institution_id == institution_id)
-            .offset(skip)
-            .limit(limit)
         )
+        if is_active is not None:
+            stmt = stmt.where(Teacher.is_active.is_(is_active))
+        if search:
+            like = f"%{search.strip().lower()}%"
+            stmt = stmt.where(
+                or_(
+                    func.lower(Teacher.name).like(like),
+                    func.lower(Teacher.email).like(like),
+                )
+            )
+
+        stmt = stmt.offset(skip).limit(limit)
+        result = await db.execute(stmt)
         return result.scalars().all()
 
     @staticmethod
@@ -30,9 +71,19 @@ class TeacherService:
         result = await db.execute(
             select(Teacher)
             .options(
-                selectinload(Teacher.assignments).selectinload(TeacherAssignment.school_class).selectinload(SchoolClass.grade),
-                selectinload(Teacher.assignments).selectinload(TeacherAssignment.school_class).selectinload(SchoolClass.section),
-                selectinload(Teacher.assignments).selectinload(TeacherAssignment.subject_ref)
+                # Scope the loaded assignments to the teacher's tenant.
+                # Legacy seed/import data sometimes wrote rows where the
+                # teacher and the school_class belong to different
+                # institutions, which then duplicated entries in the
+                # Marks/Attendance dropdowns. The .and_() filter pins
+                # collection loading to the current institution so a
+                # future cross-tenant row can't bleed back in.
+                selectinload(Teacher.assignments.and_(TeacherAssignment.institution_id == institution_id))
+                    .selectinload(TeacherAssignment.school_class).selectinload(SchoolClass.grade),
+                selectinload(Teacher.assignments.and_(TeacherAssignment.institution_id == institution_id))
+                    .selectinload(TeacherAssignment.school_class).selectinload(SchoolClass.section),
+                selectinload(Teacher.assignments.and_(TeacherAssignment.institution_id == institution_id))
+                    .selectinload(TeacherAssignment.subject_ref)
             )
             .where(Teacher.id == teacher_id, Teacher.institution_id == institution_id)
         )
@@ -44,9 +95,19 @@ class TeacherService:
         result = await db.execute(
             select(Teacher)
             .options(
-                selectinload(Teacher.assignments).selectinload(TeacherAssignment.school_class).selectinload(SchoolClass.grade),
-                selectinload(Teacher.assignments).selectinload(TeacherAssignment.school_class).selectinload(SchoolClass.section),
-                selectinload(Teacher.assignments).selectinload(TeacherAssignment.subject_ref)
+                # Scope the loaded assignments to the teacher's tenant.
+                # Legacy seed/import data sometimes wrote rows where the
+                # teacher and the school_class belong to different
+                # institutions, which then duplicated entries in the
+                # Marks/Attendance dropdowns. The .and_() filter pins
+                # collection loading to the current institution so a
+                # future cross-tenant row can't bleed back in.
+                selectinload(Teacher.assignments.and_(TeacherAssignment.institution_id == institution_id))
+                    .selectinload(TeacherAssignment.school_class).selectinload(SchoolClass.grade),
+                selectinload(Teacher.assignments.and_(TeacherAssignment.institution_id == institution_id))
+                    .selectinload(TeacherAssignment.school_class).selectinload(SchoolClass.section),
+                selectinload(Teacher.assignments.and_(TeacherAssignment.institution_id == institution_id))
+                    .selectinload(TeacherAssignment.subject_ref)
             )
             .where(Teacher.user_id == user_id, Teacher.institution_id == institution_id)
         )
@@ -63,16 +124,18 @@ class TeacherService:
             user_result = await db.execute(select(User).where(User.email == email))
             existing_user = user_result.scalars().first()
         
+        # bcrypt off the event loop. Compute once upfront.
+        new_hash = await get_password_hash_async(password_value) if password_value else None
         if existing_user:
             db_user = existing_user
-            if password_value:
-                db_user.password_hash = get_password_hash(password_value)
+            if new_hash is not None:
+                db_user.password_hash = new_hash
                 await db.flush()
         else:
             db_user = User(
                 email=data.get('email'),
                 name=data.get('name', ''),
-                password_hash=get_password_hash(password_value) if password_value else '',
+                password_hash=new_hash or '',
                 role='teacher',
                 institution_id=institution_id,
             )
@@ -124,7 +187,7 @@ class TeacherService:
             user_result = await db.execute(select(User).where(User.id == teacher.user_id))
             db_user = user_result.scalars().first()
             if db_user:
-                db_user.password_hash = get_password_hash(new_password)
+                db_user.password_hash = await get_password_hash_async(new_password)
                 await db.commit()
                 return await TeacherService.get_teacher(db, institution_id, teacher.id)
         return None
@@ -170,7 +233,9 @@ class TeacherService:
         )
         db_user = result.scalars().first()
 
-        if not db_user or not db_user.password_hash or not verify_password(password, db_user.password_hash):
+        if not db_user or not db_user.password_hash:
+            return None
+        if not await verify_password_async(password, db_user.password_hash):
             return None
 
         t_result = await db.execute(
@@ -283,9 +348,19 @@ class TeacherService:
         teacher_res = await db.execute(
             select(Teacher)
             .options(
-                selectinload(Teacher.assignments).selectinload(TeacherAssignment.school_class).selectinload(SchoolClass.grade),
-                selectinload(Teacher.assignments).selectinload(TeacherAssignment.school_class).selectinload(SchoolClass.section),
-                selectinload(Teacher.assignments).selectinload(TeacherAssignment.subject_ref)
+                # Scope the loaded assignments to the teacher's tenant.
+                # Legacy seed/import data sometimes wrote rows where the
+                # teacher and the school_class belong to different
+                # institutions, which then duplicated entries in the
+                # Marks/Attendance dropdowns. The .and_() filter pins
+                # collection loading to the current institution so a
+                # future cross-tenant row can't bleed back in.
+                selectinload(Teacher.assignments.and_(TeacherAssignment.institution_id == institution_id))
+                    .selectinload(TeacherAssignment.school_class).selectinload(SchoolClass.grade),
+                selectinload(Teacher.assignments.and_(TeacherAssignment.institution_id == institution_id))
+                    .selectinload(TeacherAssignment.school_class).selectinload(SchoolClass.section),
+                selectinload(Teacher.assignments.and_(TeacherAssignment.institution_id == institution_id))
+                    .selectinload(TeacherAssignment.subject_ref)
             )
             .where(
                 Teacher.id.in_(teacher_ids),

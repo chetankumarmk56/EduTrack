@@ -43,19 +43,23 @@ const processQueue = (error: any, token: string | null = null) => {
   failedQueue = [];
 };
 
-// Request Interceptor: Inject Auth Token and Institution ID
+// Request Interceptor: Inject institution + role headers.
+//
+// We deliberately do NOT attach an Authorization header anymore. The
+// access token now lives in an HttpOnly cookie set by the backend on
+// login, and rides along with every request because the axios client
+// has `withCredentials: true`. Keeping the token JS-accessible
+// (localStorage) was the H10 issue — XSS could exfiltrate it.
+//
+// X-Portal-Role tells the backend which role-scoped access cookie to
+// match (a browser can hold sister sessions across portals).
 client.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const currentRole = getCurrentPortalRole();
-    const token = localStorage.getItem(`edu_auth_token_${currentRole}`);
     const institutionId = localStorage.getItem(`edu_institution_id_${currentRole}`) || '1';
 
-    if (token) {
-      config.headers.set('Authorization', `Bearer ${token}`);
-    }
-
     config.headers.set('X-Institution-Id', institutionId);
-    config.headers.set('X-Portal-Role', currentRole); // Tell backend which refresh cookie to check
+    config.headers.set('X-Portal-Role', currentRole);
     return config;
   },
   (error) => Promise.reject(error)
@@ -133,7 +137,10 @@ client.interceptors.response.use(
       if (errorCode === 'INVALID_TOKEN') {
         console.warn("[Auth] Terminal token error. Skipping refresh.");
         if (!window.location.pathname.includes('-login')) {
-          localStorage.removeItem(`edu_auth_token_${role}`);
+          // No token in localStorage anymore (it lives in an HttpOnly
+          // cookie). Just drop the user metadata so the next mount
+          // hydrates fresh from /api/auth/me, which will 401 and route
+          // here, this time to the login page.
           localStorage.removeItem(`edu_user_${role}`);
           const loginRedirect = `${role === 'admin' ? '/admin-login' :
             role === 'teacher' ? '/teacher-login' :
@@ -149,12 +156,11 @@ client.interceptors.response.use(
         console.debug("[Auth] Refresh already in progress; queuing request.");
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
-        }).then((token) => {
+        }).then(() => {
           // Mark the queued request as a retry so a second 401 from the
-          // server won't kick off another refresh (which would loop on a
-          // backend that revoked the just-issued token).
+          // server won't kick off another refresh. The browser already
+          // has the new access cookie at this point — no header to set.
           originalRequest._retry = true;
-          originalRequest.headers.set('Authorization', `Bearer ${token}`);
           return client(originalRequest);
         }).catch((err) => Promise.reject(err));
       }
@@ -163,24 +169,24 @@ client.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const response = await client.post('auth/refresh');
-        const { access_token } = response.data;
+        // The refresh endpoint reads the HttpOnly refresh cookie and
+        // re-stamps a fresh HttpOnly access cookie. We don't need to
+        // touch localStorage or attach a Bearer header on the retry —
+        // the browser will pick up the new cookie automatically.
+        await client.post('auth/refresh');
 
-        console.debug("[Auth] Refresh Successful. Updating access token.");
-        localStorage.setItem(`edu_auth_token_${role}`, access_token);
-
-        // Retry original request
-        originalRequest.headers.set('Authorization', `Bearer ${access_token}`);
-        processQueue(null, access_token);
+        console.debug("[Auth] Refresh Successful — cookie re-stamped.");
+        processQueue(null, null);
 
         return client(originalRequest);
       } catch (refreshError) {
         console.error("[Auth] Refresh Failed. Clearing session for role:", role);
         processQueue(refreshError, null);
 
-        // Only clear and redirect if we are NOT already on a login page
+        // Only clear and redirect if we are NOT already on a login page.
+        // The access token cookie is HttpOnly so the server clears it
+        // for us on /logout. Here we only wipe the JS-visible bits.
         if (!window.location.pathname.includes('-login')) {
-          localStorage.removeItem(`edu_auth_token_${role}`);
           localStorage.removeItem(`edu_user_${role}`);
           localStorage.removeItem(`edu_institution_id_${role}`);
 

@@ -1,7 +1,30 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Boolean, Date
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, Integer, String, ForeignKey, Boolean, Date, Index
+from sqlalchemy.orm import relationship, validates
 from app.core.database import Base
 from app.models.core import TimestampMixin
+
+
+def _normalize_phone_to_last10(raw):
+    """
+    Canonicalise a phone number to its last 10 digits.
+
+    Indian guardian numbers are 10-digit subscriber IDs, often prefixed
+    with +91, 0, or stray spaces/dashes. Comparing on the last 10 digits
+    canonicalises across all those formats so a parent-login lookup is a
+    single indexed equality probe instead of a Python-side scan over
+    every student with the same DOB.
+
+    Returns ``None`` if fewer than 10 digits are present so callers can
+    skip the row rather than false-match on a partial number. Mirrored
+    in app/services/auth/auth_service._normalize_phone — keep them in
+    sync (the migration backfill calls this same function).
+    """
+    if not raw:
+        return None
+    digits = "".join(ch for ch in str(raw) if ch.isdigit())
+    if len(digits) < 10:
+        return None
+    return digits[-10:]
 
 class Parent(Base, TimestampMixin):
     """
@@ -50,9 +73,28 @@ class Student(Base, TimestampMixin):
     parent_name = Column(String, nullable=True)
     parent_email = Column(String, nullable=True)
     parent_phone = Column(String, nullable=True)
+    # Auto-derived last-10-digits canonical form of parent_phone. Indexed
+    # alongside dob so the parent-login lookup is a single equality probe
+    # against the index instead of a full scan over every student with
+    # the same DOB across every institution. Kept in sync via the
+    # ``_set_normalized_phone`` validator below — never set it by hand
+    # outside the Alembic backfill.
+    parent_phone_normalized = Column(String(10), nullable=True, index=True)
 
     institution_id = Column(Integer, ForeignKey("institutions.id"), nullable=False, default=1, index=True)
     institution = relationship("Institution", back_populates="students")
+
+    @validates("parent_phone")
+    def _set_normalized_phone(self, _key, value):
+        """
+        Auto-populate ``parent_phone_normalized`` on every write to
+        ``parent_phone``. Fires for INSERT and UPDATE, including bulk
+        ``setattr`` paths used by the directory service when applying a
+        partial update payload. Returning ``value`` keeps the column
+        itself unchanged — we only piggy-back to refresh the index target.
+        """
+        self.parent_phone_normalized = _normalize_phone_to_last10(value)
+        return value
 
     # Relationships
     parent_id = Column(Integer, ForeignKey("parents.id"), nullable=True)

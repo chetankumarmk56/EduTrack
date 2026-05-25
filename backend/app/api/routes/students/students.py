@@ -1,13 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from typing import List
 
 from app.core.database import get_db
-from app.core.limiter import limiter  # ✅ NEW: Rate limiter
+from app.core.limiter import limiter, RATE_LIMITS
 from app.core.dependencies import (
-    get_current_user, UserContext, 
+    get_current_user, UserContext,
     require_institution_admin, require_faculty
 )
 from app.schemas import directory as schemas
@@ -29,7 +30,9 @@ async def create_student(
     return await student_service.create_student(db, user.institution_id, student)
 
 @router.post("/parents/login", response_model=Token)
+@limiter.limit(RATE_LIMITS["parent_login"])
 async def parent_login(
+    request: Request,
     login_data: schemas.ParentLogin,
     response: Response,
     db: AsyncSession = Depends(get_db),
@@ -62,27 +65,27 @@ async def parent_login(
             ),
         )
 
-    # Mirror the cookie convention used by the student endpoint so the
-    # refresh-token flow (edu_refresh_parent_*) keeps working.
-    from app.core.config import settings
+    # Stamp BOTH the access and refresh cookies as HttpOnly. The web SPA
+    # reads neither directly. Mobile keeps using the `access_token` in
+    # the response body via SecureStore + Authorization header.
+    from app.services.auth.auth_service import set_auth_cookies
     _user_id = auth_data["user"]["id"]
-    response.set_cookie(
-        key=f"edu_refresh_parent_{_user_id}",
-        value=auth_data.pop("refresh_token"),
-        path="/api/auth/refresh",
-        httponly=True,
-        secure=settings.COOKIE_SECURE,
-        samesite="Lax",
-        domain=settings.COOKIE_DOMAIN if settings.COOKIE_DOMAIN else None,
-        max_age=7 * 24 * 60 * 60,
+    refresh_token = auth_data.pop("refresh_token")
+    set_auth_cookies(
+        response,
+        role="parent",
+        user_id=_user_id,
+        access_token=auth_data["access_token"],
+        refresh_token=refresh_token,
     )
 
     return auth_data
 
 
 @router.post("/students/login", response_model=Token)
+@limiter.limit(RATE_LIMITS["student_login"])
 async def student_login(
-    request: Request,  # ✅ NEW: Required for rate limiter
+    request: Request,
     login_data: schemas.StudentLogin,
     response: Response,
     db: AsyncSession = Depends(get_db)
@@ -141,30 +144,61 @@ async def student_login(
     if not auth_data:
         raise HTTPException(status_code=401, detail="Invalid student credentials.")
         
-    # ✅ FIXED: Cookie key must use user_id suffix so refresh endpoint pattern
-    # edu_refresh_parent_* can find it. Without the suffix refresh always fails.
-    from app.core.config import settings
-    _user_id = auth_data['user']['id']
-    response.set_cookie(
-        key=f"edu_refresh_parent_{_user_id}",  # matches pattern edu_refresh_parent_*
-        value=auth_data.pop("refresh_token"),
-        path="/api/auth/refresh",
-        httponly=True,
-        secure=False,  # set True in production (HTTPS)
-        samesite="Lax",  # Lax allows same-site navigation; Strict can break flows
-        domain=settings.COOKIE_DOMAIN if settings.COOKIE_DOMAIN else None,
-        max_age=7 * 24 * 60 * 60,  # 7 days so parents don't have to log in daily
+    # Stamp BOTH the access and refresh cookies as HttpOnly. The web SPA
+    # reads neither directly. Mobile keeps using the `access_token` in
+    # the response body via SecureStore + Authorization header.
+    from app.services.auth.auth_service import set_auth_cookies
+    _user_id = auth_data["user"]["id"]
+    # Use the actual logged-in role (student vs parent) so the cookie
+    # name matches what the SPA sends in X-Portal-Role.
+    _role = auth_data.get("role") or "parent"
+    refresh_token = auth_data.pop("refresh_token")
+    set_auth_cookies(
+        response,
+        role=_role,
+        user_id=_user_id,
+        access_token=auth_data["access_token"],
+        refresh_token=refresh_token,
     )
     
     return auth_data
 
+# Default kept deliberately conservative — a school with 5K students would
+# return a 5-15 MB JSON when the old default of 1000 was paired with the
+# eager-loaded school_class + grade + section + parent relations. Callers
+# that need a bigger page must opt in explicitly via ``?limit=…`` up to
+# the cap. The cap (500) is what an admin's "show all" UI can render
+# without hanging the browser; beyond that, paginate.
+#
+# Filter params let the admin UI push search/class scope down to SQL so we
+# don't pull the whole institution into a React state every page view.
 @router.get("/", response_model=List[schemas.StudentResponse], dependencies=[Depends(require_faculty)])
 async def read_students(
-    skip: int = 0, limit: int = 1000, 
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=500),
+    school_class_id: Optional[int] = Query(
+        None,
+        description="Restrict to one class. Uses the (institution_id, school_class_id) index.",
+    ),
+    search: Optional[str] = Query(
+        None,
+        min_length=1, max_length=80,
+        description="ILIKE match on name / parent_name / parent_email.",
+    ),
+    is_active: Optional[bool] = Query(
+        None,
+        description="Filter soft-deleted students out of admin lists when true.",
+    ),
     db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(get_current_user)
 ):
-    return await student_service.get_students(db, user.institution_id, skip=skip, limit=limit)
+    return await student_service.get_students(
+        db, user.institution_id,
+        skip=skip, limit=limit,
+        school_class_id=school_class_id,
+        search=search,
+        is_active=is_active,
+    )
 
 @router.get("/my-students", response_model=List[schemas.StudentResponse])
 async def get_my_students(

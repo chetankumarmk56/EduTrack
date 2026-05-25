@@ -15,6 +15,8 @@ import {
   Building2,
   BookOpen,
   Globe,
+  Wallet,
+  Landmark,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -57,6 +59,7 @@ export const parentNavItems: NavItem[] = [
   { name: 'Events', path: '/parent/events', icon: Bell },
   { name: 'Bus Tracking', path: '/parent/bus-tracking', icon: MapPin },
   { name: 'Payments', path: '/parent/payments', icon: CreditCard },
+  { name: 'Pay Fees (UPI)', path: '/parent/fee-pay', icon: Wallet },
 ];
 
 export const adminNavItems: NavItem[] = [
@@ -68,6 +71,7 @@ export const adminNavItems: NavItem[] = [
   { name: 'Staff Attendance', path: '/admin/teacher-attendance', icon: UserCheck },
   { name: 'Bus Directory', path: '/admin/transport', icon: MapPin },
   { name: 'Finance', path: '/admin/finance', icon: CreditCard },
+  { name: 'Manual Payments', path: '/admin/manual-payments', icon: Landmark },
 ];
 
 export const superAdminNavItems: NavItem[] = [

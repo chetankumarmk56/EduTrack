@@ -1,3 +1,17 @@
+"""
+Announcement / teacher-shared file storage.
+
+Production path: Cloudinary (signed URLs returned to the client).
+Dev fallback: ``static/uploads/`` on the local disk — only allowed when
+``ENVIRONMENT != "prod"``. In production the absence of Cloudinary
+credentials would already have been caught by ``app.core.config``'s
+startup check, but we double-guard here so a config drift can't sneak a
+local write past us.
+
+Why two guards: the config check is one-shot at process start. If
+someone clears Cloudinary creds at runtime (e.g. a secret rotation
+that doesn't restart the process), the second guard kicks in.
+"""
 import os
 import asyncio
 import datetime
@@ -28,9 +42,11 @@ class StorageService:
     MAX_SIZE = 25 * 1024 * 1024  # 25 MB (Cloudinary free tier limit)
 
     def __init__(self):
-        # Local fallback directory
+        # Local-disk dir only used in dev. Creating the directory is cheap
+        # and avoids a race when multiple tests start up in parallel.
         self.upload_dir = os.path.join(os.getcwd(), "static", "uploads")
-        os.makedirs(self.upload_dir, exist_ok=True)
+        if settings.ENVIRONMENT != "prod":
+            os.makedirs(self.upload_dir, exist_ok=True)
 
         # ── Cloudinary init ────────────────────────────────────────────────
         self._cloudinary_ready = False
@@ -48,15 +64,20 @@ class StorageService:
                     secure=True,
                 )
                 self._cloudinary_ready = True
-                logger.info("☁️  Cloudinary storage initialized successfully.")
+                logger.info("Cloudinary storage initialized.")
             except Exception as e:
                 logger.error(f"Cloudinary init error: {e}")
 
     # ──────────────────────────────────────────────────────────────────────────
     async def upload_file(self, file: UploadFile) -> str:
         """
-        Upload a file and return a permanent public URL.
-        Priority: Cloudinary → Local (ephemeral, dev-only)
+        Upload a file and return a permanent URL.
+
+        Behaviour by environment:
+          * prod:  Cloudinary required. Failure surfaces as 5xx so the
+                   client retries rather than ending up with a 404'd
+                   ``/static/uploads/...`` URL after the next redeploy.
+          * dev:   Try Cloudinary first if configured, else write locally.
         """
         # 1. Validate extension
         ext = os.path.splitext(file.filename or "")[1].lower()
@@ -81,28 +102,68 @@ class StorageService:
 
         unique_name = f"{int(datetime.datetime.now().timestamp())}_{file.filename}"
 
-        # 3. Cloudinary upload (preferred)
+        # 3. Production path: Cloudinary required.
+        if settings.ENVIRONMENT == "prod":
+            if not self._cloudinary_ready:
+                # Defense-in-depth: config startup check should have caught this.
+                logger.error(
+                    "Cloudinary not initialised in production. "
+                    "Refusing to write upload to ephemeral local disk."
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=(
+                        "File storage is not available right now. "
+                        "Please try again or contact support."
+                    ),
+                )
+            try:
+                result = await asyncio.to_thread(
+                    cloudinary.uploader.upload,
+                    contents,
+                    public_id=f"edutrack/announcements/{unique_name}",
+                    resource_type="auto",
+                    overwrite=True,
+                )
+                url = result.get("secure_url", "")
+                if not url:
+                    raise RuntimeError("Cloudinary returned no secure_url")
+                logger.info(f"Cloudinary upload success: {url}")
+                return url
+            except Exception as e:
+                logger.exception("Cloudinary upload failed in production: %s", e)
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="The file storage provider rejected the upload. Please try again.",
+                )
+
+        # 4. Dev / test path. Use Cloudinary if it happens to be configured;
+        #    otherwise fall back to local disk. Loud log so nobody mistakes
+        #    a working dev flow for a working prod flow.
         if self._cloudinary_ready:
             try:
                 result = await asyncio.to_thread(
                     cloudinary.uploader.upload,
                     contents,
                     public_id=f"edutrack/announcements/{unique_name}",
-                    resource_type="auto",   # handles images, PDFs, videos, docs
+                    resource_type="auto",
                     overwrite=True,
                 )
                 url = result.get("secure_url", "")
-                logger.info(f"☁️  Cloudinary upload success: {url}")
-                return url
+                if url:
+                    logger.info(f"Cloudinary upload success (dev): {url}")
+                    return url
             except Exception as e:
-                logger.warning(f"Cloudinary upload failed, trying fallback: {e}")
+                logger.warning(f"Cloudinary upload failed in dev, falling back to disk: {e}")
 
-        # 4. Local storage (dev/fallback — ephemeral on Render free tier)
         file_path = os.path.join(self.upload_dir, unique_name)
         try:
             with open(file_path, "wb") as f:
                 f.write(contents)
-            logger.warning("⚠️  File saved locally — will NOT persist across Render redeploys.")
+            logger.warning(
+                "[dev] File saved to ./static/uploads — ephemeral. "
+                "Set Cloudinary credentials to use the real storage path."
+            )
             return f"/static/uploads/{unique_name}"
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Storage error: {e}")
@@ -128,7 +189,7 @@ class StorageService:
                 logger.warning(f"File verify failed: {file_url} — {e}")
                 return False
 
-        # Local path
+        # Local path (dev only — see upload_file).
         if file_url.startswith("/static/uploads/"):
             file_path = os.path.join(os.getcwd(), file_url.lstrip("/"))
             return os.path.exists(file_path)

@@ -30,18 +30,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // currentRole is now dynamically derived from the URL
   const currentRole = useMemo(() => getCurrentPortalRole(location.pathname), [location.pathname]);
 
-  // Synchronous Hydration for instant UI on refresh
+  // Synchronous hydration for instant UI on refresh.
+  //
+  // The access token now lives in an HttpOnly cookie — JS can't read it.
+  // We use `edu_user_${role}` in localStorage as a hint that "there's
+  // probably a session" so we render an authenticated shell immediately
+  // instead of flashing the login page. The actual auth state is then
+  // confirmed against /api/auth/me; if that 401s, the interceptor
+  // bounces us to the login page.
   const getInitialState = () => {
-    // We can't use location here easily as it's a hook, but we can use window.location
     const path = window.location.pathname;
     const role = getCurrentPortalRole(path);
-    const savedToken = localStorage.getItem(`edu_auth_token_${role}`);
     const savedUser = localStorage.getItem(`edu_user_${role}`);
 
-    if (savedToken && savedUser) {
+    if (savedUser) {
       try {
         return {
-          token: savedToken,
+          // We no longer store the token in JS — the cookie IS the token.
+          // The `token` field stays in the context shape for backward
+          // compat with any consumer that imports it, but it's a marker
+          // (truthy = has-session) not an actual JWT.
+          token: 'cookie',
           user: JSON.parse(savedUser) as AuthUser,
           state: 'authenticated' as const
         };
@@ -49,12 +58,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { token: null, user: null, state: 'unauthenticated' as const };
       }
     }
-    // If there's a token but no cached user, we need to hydrate via /auth/me.
-    if (savedToken) {
-      return { token: savedToken, user: null, state: 'loading' as const };
-    }
-    // No token at all → don't show the spinner, just render the login page.
-    return { token: null, user: null, state: 'unauthenticated' as const };
+    // No user cache → we'll hydrate via /auth/me on mount. Show the
+    // loading state only briefly; if the cookie's missing, the 401
+    // bounces us to login.
+    return { token: null, user: null, state: 'loading' as const };
   };
 
   const initialState = useMemo(getInitialState, []);
@@ -64,46 +71,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [authState, setAuthState] = useState<'loading' | 'authenticated' | 'unauthenticated'>(initialState.state);
   const hydrationRef = useRef<string | null>(null);
 
-  // Triggered on mount AND whenever the currentRole (URL) changes
+  // Triggered on mount AND whenever the currentRole (URL) changes.
+  //
+  // We always probe /api/auth/me here. If the HttpOnly access cookie
+  // is present, the call succeeds and we cache the user; if not, the
+  // axios interceptor's 401-refresh-or-redirect flow takes over.
+  // localStorage's `edu_user_${role}` only gives us a head start on
+  // initial paint — it doesn't gate the network call.
   useEffect(() => {
     let isMounted = true;
 
     const hydrateAndInit = async () => {
-      const savedToken = localStorage.getItem(`edu_auth_token_${currentRole}`);
-
-      // 1. Avoid redundant hydration if we already have a valid user matching this role
-      if (user?.role === currentRole && authState === 'authenticated') {
+      // Avoid double-hydrating the same role in the same mount cycle.
+      if (hydrationRef.current === currentRole) {
         return;
       }
+      hydrationRef.current = currentRole;
 
-      // 2. Avoid re-hydrating the exact same token/role combination multiple times
-      const hydrationKey = `${currentRole}:${savedToken}`;
-      if (hydrationRef.current === hydrationKey) {
-        return;
-      }
-
-      if (!savedToken) {
-        if (isMounted) {
-          console.debug(`[Auth] No token for ${currentRole}. Setting unauthenticated.`);
-          setToken(null);
-          setUser(null);
-          setAuthState('unauthenticated');
-        }
-        return;
-      }
-
-      hydrationRef.current = hydrationKey;
-
-      // Only set loading if we don't have a user already (optimistic hydration)
       if (isMounted && !user) {
-        setToken(savedToken);
         setAuthState('loading');
       }
 
       try {
         console.debug(`[Auth] Hydrating session for ${currentRole}...`);
-        // Race the API call against a 5s timeout so a hung backend / network
-        // can never trap the UI in the 'loading' state forever.
+        // 5s ceiling so a hung backend can't trap the UI in 'loading'.
         const userData = await Promise.race([
           authApi.getMe(),
           new Promise((_, reject) =>
@@ -121,18 +112,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         // Safety check: ensure the token role matches the portal context
         if (authUser.role !== currentRole && authUser.role !== 'super_admin') {
-          console.warn(`[Auth] Role mismatch: Token has ${authUser.role}, Portal needs ${currentRole}`);
+          console.warn(`[Auth] Role mismatch: Cookie has ${authUser.role}, Portal needs ${currentRole}`);
           setAuthState('unauthenticated');
           return;
         }
 
         setUser(authUser);
+        setToken('cookie'); // marker only — actual token lives in HttpOnly cookie
         setAuthState('authenticated');
         localStorage.setItem(`edu_user_${currentRole}`, JSON.stringify(authUser));
       } catch (err) {
         console.error(`[Auth] Hydration Failed for ${currentRole}:`, err);
         if (isMounted) {
-          localStorage.removeItem(`edu_auth_token_${currentRole}`);
+          // Cookie is HttpOnly — we can't clear it from JS. The server's
+          // 401 path or an explicit /logout call handles that. We just
+          // drop the JS-visible user hint.
           localStorage.removeItem(`edu_user_${currentRole}`);
           setToken(null);
           setUser(null);
@@ -142,50 +136,71 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     hydrateAndInit();
-    return () => { isMounted = false; };
+    return () => {
+      isMounted = false;
+      // React 18 StrictMode mounts effects twice (mount → unmount → mount).
+      // Without clearing the marker here, the second mount sees
+      // hydrationRef.current === currentRole, returns early, and never
+      // fires /auth/me — while the first mount's response is dropped by
+      // the `if (!isMounted) return` guard. Net effect: authState stays
+      // 'loading' forever and the spinner never resolves.
+      if (hydrationRef.current === currentRole) {
+        hydrationRef.current = null;
+      }
+    };
   }, [currentRole]);
 
-  const login = (newToken: string, newUser: AuthUser) => {
+  const login = (_newToken: string, newUser: AuthUser) => {
     const storageRole = newUser.role;
     console.debug(`[Auth] Manual Login for ${storageRole}. Syncing state.`);
 
-    // Clear old token before storing new one (prevents stale tokens if switching users same role)
-    localStorage.removeItem(`edu_auth_token_${storageRole}`);
+    // The access token comes via an HttpOnly cookie the backend set on
+    // login — we discard `_newToken` here. We KEEP user metadata in
+    // localStorage so we can paint the dashboard shell instantly on
+    // refresh without waiting for /api/auth/me to round-trip.
     localStorage.removeItem(`edu_user_${storageRole}`);
     localStorage.removeItem(`edu_institution_id_${storageRole}`);
 
     // Wipe directory caches — they aren't namespaced per user, so a previous
-    // user's session would otherwise pollute this user's view (e.g. a teacher
-    // logging in inheriting an admin's full student list, or stale "0 students"
-    // from before a class assignment was made).
+    // user's session would otherwise pollute this user's view.
     Object.keys(localStorage)
       .filter(k => k.startsWith('edu_cache_'))
       .forEach(k => localStorage.removeItem(k));
 
-    // Persist to role-specific namespaces BEFORE updating state to avoid race with interceptors
-    localStorage.setItem(`edu_auth_token_${storageRole}`, newToken);
     localStorage.setItem(`edu_user_${storageRole}`, JSON.stringify(newUser));
     localStorage.setItem(`edu_institution_id_${storageRole}`, String(newUser.institution_id));
 
-    // Update local state (if the role matches current view)
     if (storageRole === currentRole || newUser.role === 'super_admin') {
-      setToken(newToken);
+      setToken('cookie'); // truthy marker only
       setUser(newUser);
       setAuthState('authenticated');
-      // Update the hydration ref so the effect knows we're already good
-      hydrationRef.current = `${currentRole}:${newToken}`;
+      hydrationRef.current = currentRole;
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    // Hit the server first and wait for the response. /api/auth/logout
+    // returns Set-Cookie headers that delete the HttpOnly access +
+    // refresh cookies; if we fire-and-forget and let the caller do
+    // `window.location.href = '/'` immediately, the navigating document
+    // tears down before the browser processes those Set-Cookie clears.
+    // Net effect: cookies survive, next visit to /parent-login auto-
+    // logs the user back in. Awaiting guarantees the cookies are gone
+    // before any caller-initiated navigation runs.
+    try {
+      const { authApi } = await import('@/features/auth/api');
+      await authApi.logout?.();
+    } catch {
+      /* server unreachable — still log out locally */
+    }
+
     setToken(null);
     setUser(null);
     setAuthState('unauthenticated');
-    localStorage.removeItem(`edu_auth_token_${currentRole}`);
     localStorage.removeItem(`edu_user_${currentRole}`);
     localStorage.removeItem(`edu_institution_id_${currentRole}`);
-    // Wipe directory caches AND per-page selection state (e.g. activeAssignmentId)
-    // so the next user starts fresh — these keys aren't user-scoped.
+    // Wipe directory caches AND per-page selection state so the next
+    // user starts fresh — these keys aren't user-scoped.
     Object.keys(localStorage)
       .filter(k => k.startsWith('edu_cache_') || k === 'edu_active_assignment_id')
       .forEach(k => localStorage.removeItem(k));

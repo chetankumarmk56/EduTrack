@@ -6,7 +6,14 @@ services:
     plan: free
     rootDir: backend
     buildCommand: find . -name "*.pyc" -delete 2>/dev/null; find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; pip install -r requirements.txt
-    startCommand: python seed.py && uvicorn app.main:app --host 0.0.0.0 --port 10000
+    # NOTE: Do NOT run `python seed.py` here. Seed is a one-off task; running
+    # it on every container start re-creates demo data on every redeploy and
+    # blocks zero-downtime restarts. Run it from a Render Shell or Job.
+    #
+    # Gunicorn pre-fork master + UvicornWorker — see backend/gunicorn_conf.py.
+    # WEB_CONCURRENCY env var overrides the auto-detected worker count.
+    # Render Free tier is single-CPU, so the config defaults to 2 workers there.
+    startCommand: alembic upgrade head && gunicorn -c gunicorn_conf.py app.main:app
     envVars:
       - key: ENVIRONMENT
         value: prod
@@ -24,6 +31,11 @@ services:
         value: 1
       - key: PYTHONPYCACHEPREFIX
         value: /tmp/pycache
+      # ── Gunicorn worker count override. Leave unset to let
+      #    gunicorn_conf.py auto-pick min(2*cpu+1, 8). Tune up on bigger
+      #    plans (Render Pro = 2+ vCPU) or down if memory is tight. ──
+      - key: WEB_CONCURRENCY
+        sync: false
       # ── Razorpay (required in prod — startup fails if missing or placeholder) ──
       - key: RAZORPAY_KEY_ID
         sync: false
@@ -41,3 +53,43 @@ services:
       # ── AI features (optional) ──
       - key: GOOGLE_API_KEY
         sync: false
+      # ── Redis (required for multi-replica rate limiting + pub/sub) ──
+      # Free options: Upstash, Render Redis, or KV providers compatible with redis://
+      - key: REDIS_URL
+        sync: false
+      # ── Scheduler — keep OFF here; the Render Cron Job below drives dispatch ──
+      - key: FEE_REMINDER_SCHEDULER_ENABLED
+        value: "false"
+      # ── Shared secret for the Render Cron Job to authenticate against
+      #    POST /api/finance/fee-reminders/dispatch without holding a JWT.
+      #    Generate with: python -c 'import secrets; print(secrets.token_urlsafe(32))'
+      - key: CRON_SECRET
+        sync: false
+
+  # ── Fee reminder cron job ─────────────────────────────────────────────
+  # Render Cron Jobs do an HTTPS call from a managed scheduler — no
+  # always-on worker container required. Runs every Wednesday at 09:00
+  # IST (03:30 UTC). The endpoint enforces day/hour guard internally
+  # and acquires cron_locks.fee_reminder_weekly so even if Render fires
+  # twice (rare but possible during outages) we won't double-dispatch.
+  #
+  # NOTE: replace {EDUTRACK_BACKEND_HOST} with the actual web service URL
+  # after first deploy (Render lets you reference it via fromService).
+  - type: cron
+    name: edutrack-fee-reminder-cron
+    runtime: python
+    plan: free
+    rootDir: backend
+    schedule: "30 3 * * 3"   # Wed 03:30 UTC == 09:00 Asia/Kolkata
+    buildCommand: pip install -r requirements.txt
+    # `curl --fail-with-body` makes a non-2xx body land in the job's log so
+    # operators can see exactly why a dispatch failed.
+    startCommand: |
+      curl --fail-with-body -sS -X POST \
+        -H "X-Cron-Secret: ${CRON_SECRET}" \
+        "${BACKEND_BASE_URL}/api/finance/fee-reminders/dispatch"
+    envVars:
+      - key: CRON_SECRET
+        sync: false   # must match the web service's value
+      - key: BACKEND_BASE_URL
+        sync: false   # e.g. https://edutrack-backend.onrender.com

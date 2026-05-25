@@ -30,8 +30,8 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
     user?.role === 'admin'       ? 'Admin'     :
     user?.role === 'finance'     ? 'Finance'   : 'Family';
 
-  const handleSignOut = () => {
-    logout();
+  const handleSignOut = async () => {
+    await logout();
     window.location.href = '/';
   };
 

@@ -6,9 +6,92 @@ import time
 from datetime import datetime, timedelta, timezone
 
 from app.models.core import User, Institution
-from app.core.security import verify_password, create_access_token, create_refresh_token, get_password_hash
+from app.core.security import (
+    create_access_token,
+    create_refresh_token,
+    get_password_hash_async,
+    verify_password_async,
+)
+from app.core.config import settings as _settings
 from app.core.logger import logger
 from typing import Optional
+
+# Centralised constants for access/refresh cookie naming so a single
+# helper writes them and the auth dependency reads them in sync.
+ACCESS_COOKIE_PREFIX = "edu_access_"
+REFRESH_COOKIE_PREFIX = "edu_refresh_"
+
+
+def set_auth_cookies(
+    response,
+    *,
+    role: str,
+    user_id: int,
+    access_token: str,
+    refresh_token: Optional[str] = None,
+) -> None:
+    """
+    Stamp the access (and optionally refresh) cookies on a response.
+
+    Cookie strategy:
+      * Both cookies are HttpOnly → JavaScript can't read them, so an
+        XSS-injected script can no longer exfiltrate either token.
+      * SameSite=Lax → blocks CSRF on cross-origin POSTs while still
+        letting top-level navigation work (parent clicks a deep link).
+      * Secure flag follows settings.COOKIE_SECURE (always true in prod
+        via the config startup hardening).
+      * Domain follows settings.COOKIE_DOMAIN for multi-subdomain deploys.
+
+    The access cookie's path is "/" so every authenticated route sees
+    it. The refresh cookie keeps the existing narrow path "/api/auth/refresh"
+    so it's never sent on any other endpoint.
+    """
+    common = {
+        "httponly": True,
+        "secure": _settings.COOKIE_SECURE,
+        "samesite": "lax",
+        "domain": _settings.COOKIE_DOMAIN if _settings.COOKIE_DOMAIN else None,
+    }
+    # Access token cookie — JS-inaccessible. Lifetime matches the JWT exp.
+    response.set_cookie(
+        key=f"{ACCESS_COOKIE_PREFIX}{role}_{user_id}",
+        value=access_token,
+        path="/",
+        max_age=_settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        **common,
+    )
+    if refresh_token is not None:
+        response.set_cookie(
+            key=f"{REFRESH_COOKIE_PREFIX}{role}_{user_id}",
+            value=refresh_token,
+            path="/api/auth/refresh",
+            max_age=_settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+            **common,
+        )
+
+
+def clear_auth_cookies(response, *, role: str, user_id: Optional[int] = None) -> None:
+    """
+    Delete the access + refresh cookies on logout. We delete by *prefix*
+    rather than the exact user_id-suffixed name because the browser may
+    have stale cookies from a previous user_id and we want to clear all
+    of them for this role.
+
+    Limitation: starlette's delete_cookie matches on exact name. The
+    enumerate-and-delete pattern below covers the typical case; any
+    cookies the request never sent stay alive until their TTL.
+    """
+    # If we know the exact user_id we hit the right cookies on the first
+    # try. Otherwise we still try the role-only key.
+    common = {
+        "domain": _settings.COOKIE_DOMAIN if _settings.COOKIE_DOMAIN else None,
+    }
+    suffixes = [str(user_id)] if user_id is not None else [""]
+    for suffix in suffixes:
+        key_access = f"{ACCESS_COOKIE_PREFIX}{role}_{suffix}".rstrip("_")
+        key_refresh = f"{REFRESH_COOKIE_PREFIX}{role}_{suffix}".rstrip("_")
+        response.delete_cookie(key=key_access, path="/", **common)
+        response.delete_cookie(key=key_refresh, path="/api/auth/refresh", **common)
 
 async def resolve_institution_id(db: AsyncSession, raw: Optional[str]) -> Optional[int]:
     """
@@ -112,9 +195,11 @@ class AuthService:
         if not user:
             return None
 
-        # Password verification is CPU intensive
+        # bcrypt is CPU-bound and holds the GIL — run it off the event loop
+        # so a single login attempt doesn't stall every other request on
+        # this worker (see app.core.security.verify_password_async).
         pw_start = time.time()
-        is_valid = verify_password(password, user.password_hash)
+        is_valid = await verify_password_async(password, user.password_hash)
         pw_time = (time.time() - pw_start) * 1000
         logger.debug(f"AUTH_PW_VERIFY: {pw_time:.2f}ms")
 
@@ -340,38 +425,44 @@ class AuthService:
 
         institution_id is sourced from the matched Student row — never
         trusted from a request header.
+
+        Performance / privacy notes
+        ---------------------------
+        We query against ``parent_phone_normalized`` (last-10-digits
+        canonical form, populated automatically by the Student model's
+        validator and backfilled by migration ``i7d8e9f0a1b2``). The
+        compound index ``(parent_phone_normalized, dob)`` makes this a
+        single equality probe instead of the previous full scan over
+        every student with the same DOB — which used to pull thousands
+        of other schools' rows into worker memory on each parent login.
         """
         from app.models.directory import Student
-        from app.models.core import Institution
         from sqlalchemy.orm import joinedload
 
         normalized = AuthService._normalize_phone(parent_phone)
         if not normalized:
             return None
 
-        # Fast filter on dob first (cheap equality), then Python-side phone
-        # comparison. This avoids needing a denormalized column or a regex
-        # in SQL, and stays portable across the SQLite test DB.
+        # Indexed lookup: at most a handful of rows globally (typically
+        # one). LIMIT 5 is a defence-in-depth cap so even if the data is
+        # weird (e.g. legacy duplicates) we don't materialise unbounded
+        # candidates.
         result = await db.execute(
             select(Student)
             .options(joinedload(Student.institution))
             .where(
+                Student.parent_phone_normalized == normalized,
                 Student.dob == dob,
-                Student.parent_phone.is_not(None),
                 Student.is_active.is_(True),
             )
+            .limit(5)
         )
-        candidates = result.scalars().all()
-
-        matches = [
-            s for s in candidates
-            if AuthService._normalize_phone(s.parent_phone) == normalized
-        ]
+        matches = result.scalars().all()
 
         if not matches:
             logger.info(
-                "PARENT_LOGIN_NO_MATCH: phone=***%s dob=%s candidates_with_dob=%d",
-                normalized[-4:], dob, len(candidates),
+                "PARENT_LOGIN_NO_MATCH: phone=***%s dob=%s",
+                normalized[-4:], dob,
             )
             return None
 
@@ -458,7 +549,7 @@ class AuthService:
                 detail="Authentication context is no longer valid.",
             )
 
-        if not verify_password(current_password, user.password_hash):
+        if not await verify_password_async(current_password, user.password_hash):
             logger.warning(f"CHANGE_PASSWORD_BAD_CURRENT: user_id={user.id}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -466,13 +557,13 @@ class AuthService:
             )
 
         # Defense-in-depth reuse check against the existing hash.
-        if verify_password(new_password, user.password_hash):
+        if await verify_password_async(new_password, user.password_hash):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="New password must be different from the current password.",
             )
 
-        user.password_hash = get_password_hash(new_password)
+        user.password_hash = await get_password_hash_async(new_password)
         try:
             await db.commit()
         except Exception:

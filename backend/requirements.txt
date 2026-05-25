@@ -1,5 +1,6 @@
 fastapi==0.110.0
 uvicorn==0.29.0
+gunicorn>=21.2.0          # Pre-fork master process — see backend/gunicorn_conf.py
 sqlalchemy==2.0.28
 pydantic==2.6.4
 pydantic-settings==2.2.1
@@ -18,7 +19,10 @@ python-dotenv
 python-multipart
 azure-storage-blob
 httpx>=0.27.0,<1.0.0
-slowapi>=0.1.9  # Rate limiting (in-memory; no Redis needed)
+slowapi>=0.1.9            # Rate limiting (Redis-backed when REDIS_URL set; in-memory fallback otherwise)
+redis>=5.0.0              # Backing store for slowapi shared across replicas + pub/sub for websockets
+limits[redis]>=3.0.0      # slowapi's storage adapter for Redis
+sentry-sdk[fastapi]>=2.0  # Optional — only activated when SENTRY_DSN is set
 razorpay
 cloudinary
 openai>=1.40.0

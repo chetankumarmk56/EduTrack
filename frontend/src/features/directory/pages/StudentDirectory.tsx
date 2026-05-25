@@ -22,10 +22,6 @@ export default function StudentDirectory() {
     isDirectoryLoading
   } = useApp();
 
-  useEffect(() => {
-    refreshStudents();
-  }, []);
-
   const [selectedGradeId, setSelectedGradeId] = useState<number | null>(() => {
     const saved = localStorage.getItem('student_directory_grade_id');
     return saved ? Number(saved) : null;
@@ -34,6 +30,16 @@ export default function StudentDirectory() {
     const saved = localStorage.getItem('student_directory_class_id');
     return saved ? Number(saved) : null;
   });
+
+  // Fetch only the selected class's students. With no class selected
+  // (first visit), we skip the fetch entirely — there's nothing to
+  // render until the user picks a class anyway. Previously this page
+  // pulled up to 500 students on mount and filtered client-side.
+  useEffect(() => {
+    if (selectedSchoolClassId) {
+      refreshStudents({ schoolClassId: selectedSchoolClassId });
+    }
+  }, [selectedSchoolClassId, refreshStudents]);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
     const saved = localStorage.getItem('student_directory_view_mode');
     return (saved as 'grid' | 'list') || 'grid';

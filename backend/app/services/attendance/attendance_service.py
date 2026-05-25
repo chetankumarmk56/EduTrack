@@ -205,7 +205,25 @@ class AttendanceService:
         return []
             
     @staticmethod
-    async def get_attendance(db: AsyncSession, institution_id: int, student_id: int, subject: str = None):
+    async def get_attendance(
+        db: AsyncSession,
+        institution_id: int,
+        student_id: int,
+        subject: str = None,
+        *,
+        date_from: str = None,
+        date_to: str = None,
+    ):
+        """
+        Return attendance records for a student.
+
+        ``date_from`` / ``date_to`` are ISO date strings (YYYY-MM-DD).
+        The route layer fills in 90-day defaults when omitted; we accept
+        ``None`` for backwards compat with callers that haven't migrated.
+
+        ``Attendance.date`` is a TEXT column (YYYY-MM-DD), so lexical
+        comparison is the same as date comparison — no casting needed.
+        """
         from app.models.academic import SchoolClass
         stmt = select(Attendance).options(
             selectinload(Attendance.student),
@@ -217,7 +235,15 @@ class AttendanceService:
             Attendance.institution_id == institution_id
         )
         if subject:
-             stmt = stmt.where(Attendance.subject == subject)
+            stmt = stmt.where(Attendance.subject == subject)
+        if date_from:
+            stmt = stmt.where(Attendance.date >= date_from)
+        if date_to:
+            stmt = stmt.where(Attendance.date <= date_to)
+        # Sort newest-first so the parent dashboard's "recent attendance"
+        # widget renders in the order users expect without an extra sort
+        # client-side.
+        stmt = stmt.order_by(Attendance.date.desc()).limit(1000)
         result = await db.execute(stmt)
         return result.scalars().all()
 

@@ -3,7 +3,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.dependencies import get_current_user, UserContext
-from app.core.limiter import limiter  # ✅ NEW: Rate limiter
+from app.core.limiter import limiter, RATE_LIMITS
 from app.services.auth import auth_service
 from app.schemas.auth import Token, ChangePasswordRequest, ChangePasswordResponse
 from app.core.logger import logger
@@ -14,8 +14,9 @@ router = APIRouter(
 )
 
 @router.post("/login", response_model=Token)
+@limiter.limit(RATE_LIMITS["auth_login"])
 async def login_for_access_token(
-    request: Request,  # ✅ NEW: Required for rate limiter
+    request: Request,  # required positionally so slowapi can read the client IP
     response: Response,
     db: AsyncSession = Depends(get_db),
     form_data: OAuth2PasswordRequestForm = Depends()
@@ -51,24 +52,27 @@ async def login_for_access_token(
         )
     
     token_data = auth_service.create_token(user)
-    
-    # ✅ IMPROVED: Secure cookie settings
-    from app.core.config import settings
-    response.set_cookie(
-        key=f"edu_refresh_{user.role}_{user.id}",
-        value=token_data.pop("refresh_token"),
-        path="/api/auth/refresh",
-        httponly=True,
-        secure=settings.COOKIE_SECURE,  # False in dev (HTTP), True in prod (HTTPS)
-        samesite="Lax",                 # Lax: works with SPA navigation (Strict was too restrictive)
-        domain=settings.COOKIE_DOMAIN if settings.COOKIE_DOMAIN else None,
-        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+    refresh_token = token_data.pop("refresh_token")
+
+    # Stamp BOTH the access and refresh cookies as HttpOnly. The web SPA
+    # reads neither directly — every authenticated request rides on the
+    # cookies via `withCredentials: true`. Mobile clients ignore the
+    # cookies and use the `access_token` field in the response body via
+    # SecureStore + Authorization header instead.
+    from app.services.auth.auth_service import set_auth_cookies
+    set_auth_cookies(
+        response,
+        role=user.role,
+        user_id=user.id,
+        access_token=token_data["access_token"],
+        refresh_token=refresh_token,
     )
-    
+
     logger.info(f"AUTH_SUCCESS: user_id={user.id}, role={user.role}, institution_id={user.institution_id}")
     return token_data
 
 @router.post("/refresh", response_model=Token)
+@limiter.limit(RATE_LIMITS["auth_refresh"])
 async def refresh_access_token(
     request: Request,
     response: Response,
@@ -155,9 +159,21 @@ async def refresh_access_token(
             "institution_id": institution_id,
             "name": user_name
         })
-        
+
+        # Re-stamp the access cookie so the web SPA picks up the rotated
+        # token transparently — same path/Same-Site flags as login.
+        # Refresh cookie itself is NOT rotated here (it has its own TTL);
+        # if you start rotating refresh tokens too, set refresh_token here.
+        from app.services.auth.auth_service import set_auth_cookies
+        set_auth_cookies(
+            response,
+            role=user_role,
+            user_id=user_id,
+            access_token=new_access_token,
+        )
+
         logger.info(f"REFRESH_SUCCESS: user_id={user_id}, role={user_role}, institution_id={institution_id}")
-        
+
         return {
             "access_token": new_access_token,
             "token_type": "bearer",
@@ -183,7 +199,33 @@ async def read_users_me(current_user: UserContext = Depends(get_current_user)):
     return current_user
 
 
+@router.post("/logout")
+async def logout(
+    request: Request,
+    response: Response,
+    current_user: UserContext = Depends(get_current_user),
+):
+    """
+    Clear both the access and refresh cookies for the current user's role.
+
+    Requires auth so an unauthenticated attacker can't trigger
+    arbitrary Set-Cookie clears as a DoS vector. The cookies are
+    cleared scoped to the caller's own role+user_id — sister sessions
+    (e.g. an admin still logged in alongside a parent in the same
+    browser) are untouched.
+    """
+    from app.services.auth.auth_service import clear_auth_cookies
+    clear_auth_cookies(
+        response,
+        role=current_user.role,
+        user_id=current_user.id,
+    )
+    logger.info(f"LOGOUT: user_id={current_user.id} role={current_user.role}")
+    return {"status": "ok"}
+
+
 @router.post("/change-password", response_model=ChangePasswordResponse)
+@limiter.limit(RATE_LIMITS["auth_change_password"])
 async def change_password(
     request: Request,
     payload: ChangePasswordRequest,
