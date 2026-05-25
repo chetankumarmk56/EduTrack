@@ -68,8 +68,8 @@ async def _seed_world(session):
     other_parent_user = User(name="Other Parent", email="op@x.com", password_hash="x", role="parent", institution_id=inst.id)
     session.add_all([parent_user, teacher_user, other_parent_user]); await session.flush()
 
-    parent = Parent(name="Parent One", user_id=parent_user.id, institution_id=inst.id)
-    other_parent = Parent(name="Other Parent", user_id=other_parent_user.id, institution_id=inst.id)
+    parent = Parent(user_id=parent_user.id, institution_id=inst.id)
+    other_parent = Parent(user_id=other_parent_user.id, institution_id=inst.id)
     session.add_all([parent, other_parent]); await session.flush()
 
     teacher = Teacher(name="Teacher One", email="t1@x.com", user_id=teacher_user.id, institution_id=inst.id, is_active=True)
