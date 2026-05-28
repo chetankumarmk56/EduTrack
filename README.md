@@ -1,62 +1,297 @@
-# EduTrack SaaS Project
+# EduTrack
 
-This project contains the complete source code for the EduTrack SaaS platform, divided into a Python backend and a React frontend.
+A multi-tenant school management SaaS — admin web portal, parent/teacher web portal, and a React Native mobile app — backed by a single FastAPI service.
 
-## Project Structure
+EduTrack covers the day-to-day workflows a 50–2,000 student school actually runs on: attendance, marks, announcements with homework confirmation, fee collection (Razorpay + manual offline payments), transport tracking, timetables, parent communication (push + voice), and AI-assisted lesson planning / question generation.
+
+- **Backend:** Python 3.11 / FastAPI / SQLAlchemy 2 (async) / Alembic / PostgreSQL / Redis
+- **Web frontend:** React 19 / Vite / TypeScript / Tailwind v4
+- **Mobile:** Expo SDK 54 / React Native 0.81 / expo-router
+- **Infra:** Render + Neon today; Vercel for the web SPA. AWS migration playbook in [`README-AWS.md`](README-AWS.md).
+
+---
+
+## Table of contents
+
+1. [Repository layout](#repository-layout)
+2. [Architecture](#architecture)
+3. [Local setup](#local-setup)
+4. [Running the test suite](#running-the-test-suite)
+5. [Deployment](#deployment)
+6. [Environment variables](#environment-variables)
+7. [Operational notes](#operational-notes)
+8. [Contributing](#contributing)
+
+---
+
+## Repository layout
 
 ```
 SCHOOL/
-├── backend/            # FastAPI Python backend
-│   ├── app/            # Source code
-│   └── requirements.txt
-├── frontend/           # React (Vite) frontend
-│   ├── src/            # Source code
-│   └── package.json
-├── .gitignore
-└── README.md
+├── backend/              # FastAPI service (web + cron worker)
+│   ├── app/
+│   │   ├── api/routes/   # HTTP routers, grouped by feature
+│   │   ├── core/         # config, db, security, logger, websocket, rate-limiter
+│   │   ├── models/       # SQLAlchemy ORM models
+│   │   ├── schemas/      # Pydantic request/response models
+│   │   └── services/     # business logic (auth, finance, storage, push, ...)
+│   ├── alembic/          # database migrations (42+ revisions)
+│   ├── tests/            # 100+ pytest cases (auth, websockets, storage, ...)
+│   ├── gunicorn_conf.py  # production worker config
+│   ├── worker.py         # background scheduler entrypoint
+│   └── Dockerfile
+│
+├── frontend/             # React SPA — admin, teacher, parent portals
+│   └── src/
+│       ├── features/     # feature-sliced (attendance, marks, finance, ...)
+│       ├── shared/       # api client, contexts, ui primitives
+│       └── App.tsx
+│
+├── mobile/               # Expo React Native app (parent/teacher)
+│   ├── app/              # expo-router screens
+│   ├── features/         # parallel feature slices
+│   └── services/         # shared mobile services (push, auth, api)
+│
+├── deployment/           # nginx config, reverse-proxy templates
+├── docker-compose.yml    # local dev stack (Postgres + Redis + API + worker)
+├── render.yaml           # Render IaC (web + cron job)
+├── README-AWS.md         # production AWS deployment guide
+└── docs/                 # one-pager, demo script, internal docs
 ```
 
-## Setup Instructions
+---
 
-### Backend Setup
+## Architecture
 
-1. Navigate to the backend directory:
-   ```bash
-   cd backend
-   ```
+```
+┌──────────────────┐   ┌──────────────────┐   ┌──────────────────┐
+│ Web SPA (Vercel) │   │ Mobile (Expo)    │   │ Admin scripts /  │
+│ React 19 + Vite  │   │ React Native     │   │ Render cron jobs │
+└─────────┬────────┘   └─────────┬────────┘   └─────────┬────────┘
+          │ HTTPS                │ HTTPS                │ HTTPS
+          │ HttpOnly cookies     │ Bearer tokens        │ X-Cron-Secret
+          └──────────────────────┼──────────────────────┘
+                                 ▼
+                     ┌──────────────────────┐
+                     │  FastAPI (gunicorn + │
+                     │  UvicornWorker)      │
+                     │                      │
+                     │  ┌────────────────┐  │
+                     │  │ Web replicas   │  │
+                     │  │   ├ HTTP API   │  │
+                     │  │   ├ WebSockets │  │
+                     │  │   └ /health    │  │
+                     │  └────────────────┘  │
+                     │  ┌────────────────┐  │
+                     │  │ Worker replica │  │
+                     │  │  fee reminders │  │
+                     │  └────────────────┘  │
+                     └─────┬──────────┬─────┘
+                           │          │
+                ┌──────────▼──┐   ┌───▼─────────┐    ┌──────────────┐
+                │ Postgres    │   │ Redis       │    │ AWS S3       │
+                │ (Neon/RDS)  │   │ rate-limit  │    │ uploads +    │
+                │             │   │ + pub/sub   │    │ presigned    │
+                │             │   │ + WS fanout │    │ URLs (1h)    │
+                └─────────────┘   └─────────────┘    └──────────────┘
 
-2. Create a virtual environment:
-   ```bash
-   python -m venv .venv
-   ```
+External integrations: Razorpay (payments), Twilio (voice calls),
+Expo Push (mobile notifications), Google Gemini + OpenAI (AI lesson plans
+and question bank), Sentry (error tracking).
+```
 
-3. Activate the virtual environment:
-   - On macOS/Linux: `source .venv/bin/activate`
-   - On Windows: `.venv\Scripts\activate`
+**Multi-tenancy.** Every authenticated request carries an `X-Institution-Id` header that the backend resolves (slug or numeric PK) against the `institutions` table. The institution id is also embedded in the JWT so a tenant claim is always available even if the header is spoofed. Super-admin is the only role that crosses tenants.
 
-4. Install the dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+**Auth.** HttpOnly cookies for the web SPA (token never reachable from JavaScript — XSS-resistant). Bearer tokens for mobile (stored in `expo-secure-store`). Account lockout after 5 failed logins. Bcrypt runs in a thread pool so it never stalls the async event loop.
 
-5. Run the FastAPI server:
-   ```bash
-   uvicorn app.main:app --reload
-   ```
+**Storage.** All uploads go to AWS S3 and are served via short-lived presigned URLs. Local disk is used only in dev and is rejected at startup in production. Legacy Cloudinary URLs still resolve via passthrough for older rows.
 
-### Frontend Setup
+**Scheduling.** A dedicated worker container runs the in-process Wednesday fee-reminder scheduler. Web replicas keep `FEE_REMINDER_SCHEDULER_ENABLED=false` so scaling out the API doesn't spawn duplicate cron jobs. A `cron_locks` table provides defense-in-depth against double-dispatch.
 
-1. Navigate to the frontend directory:
-   ```bash
-   cd frontend
-   ```
+---
 
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
+## Local setup
 
-3. Start the development server:
-   ```bash
-   npm run dev
-   ```
+### Prerequisites
+
+- Python 3.11
+- Node.js 20+
+- Docker + Docker Compose (recommended) **or** a local Postgres 15 + Redis 7
+
+### Quick start (Docker Compose)
+
+```bash
+git clone https://github.com/<your-org>/edutrack.git
+cd edutrack
+
+cp backend/.env.example backend/.env
+# Edit backend/.env — at minimum, set:
+#   SECRET_KEY (32+ random chars)
+#   DATABASE_URL (leave default to use the compose-managed Postgres)
+#   RAZORPAY_KEY_ID / SECRET (test keys are fine for dev)
+
+docker compose up --build
+```
+
+This brings up:
+- `db` — Postgres 15 on `localhost:5432`
+- `redis` — Redis 7
+- `backend` — FastAPI on `localhost:8000` with hot-reload (host code mounted into the container)
+- `worker` — background scheduler
+
+Apply migrations and seed demo data the first time:
+
+```bash
+docker compose exec backend alembic upgrade head
+docker compose exec backend python seed.py
+```
+
+Then start the web frontend:
+
+```bash
+cd frontend
+npm install
+npm run dev      # http://localhost:5173
+```
+
+And — optionally — the mobile app:
+
+```bash
+cd mobile
+npm install
+npx expo start   # press i (iOS) or a (Android)
+```
+
+### Bare-metal setup
+
+If you don't want Docker:
+
+```bash
+# Backend
+cd backend
+python3.11 -m venv venv && source venv/bin/activate
+pip install -r requirements.txt -r requirements-dev.txt
+cp .env.example .env  # configure DATABASE_URL + SECRET_KEY
+alembic upgrade head
+python seed.py
+uvicorn app.main:app --reload     # localhost:8000
+
+# Frontend (separate terminal)
+cd ../frontend && npm install && npm run dev
+```
+
+### Default demo credentials
+
+After running `seed.py`:
+
+| Role         | Email                  | Password   |
+| ------------ | ---------------------- | ---------- |
+| Super-admin  | `super@edutrack.dev`   | `super123` |
+| School admin | `admin@demo.school`    | `admin123` |
+| Teacher      | `teacher@demo.school`  | `teach123` |
+| Parent       | (use phone + DOB flow) | —          |
+
+> Demo credentials only exist when `ENVIRONMENT != prod`. Seed refuses to run against a production DB.
+
+---
+
+## Running the test suite
+
+### Backend
+
+```bash
+cd backend
+source venv/bin/activate
+python -m pytest tests/ -v
+```
+
+Tests use SQLite via `aiosqlite` so they're hermetic and run in <30 seconds. CI runs the same command on every PR (see `.github/workflows/backend-ci.yml`).
+
+### Frontend
+
+```bash
+cd frontend
+npm run lint        # eslint
+npm run build       # tsc -b && vite build (typecheck + bundle)
+```
+
+Both run in CI on every PR (`.github/workflows/frontend-ci.yml`).
+
+### Manual / smoke
+
+A `verify` skill in `.claude/` documents the manual happy-path checks for each major feature. For a release candidate, run through the demo script in [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md).
+
+---
+
+## Deployment
+
+Two supported deployment targets:
+
+### Option 1 — Render + Neon + Vercel (current production)
+
+- **Backend** → Render web service, defined in [`render.yaml`](render.yaml). Render runs `alembic upgrade head && gunicorn -c gunicorn_conf.py app.main:app` on every deploy.
+- **Cron** → Render cron job at `30 3 * * 3` (Wed 09:00 IST) calls `/api/finance/fee-reminders/dispatch` with `X-Cron-Secret`.
+- **Database** → Neon Postgres (serverless, branch-per-env friendly).
+- **Redis** → Upstash or Render Redis.
+- **Frontend** → Vercel (auto-deploys from `main`). Set `VITE_API_BASE_URL` to the Render URL.
+
+Pushing to `main` triggers `.github/workflows/deploy-prod.yml`, which:
+1. Runs `gitleaks` + `pip-audit`.
+2. Fires the Render and Vercel deploy hooks in parallel.
+3. Polls `/health` for up to 6 minutes to confirm the rollout.
+
+### Option 2 — AWS (ECS Fargate + RDS + ElastiCache + ALB)
+
+Follow [`README-AWS.md`](README-AWS.md) for the full runbook: VPC, RDS, ElastiCache, ECS service with auto-scaling, ALB, ACM, Route 53, CloudWatch alarms, and secret management via SSM Parameter Store.
+
+---
+
+## Environment variables
+
+The full list with descriptions lives in [`backend/app/core/config.py`](backend/app/core/config.py). The ones you must set in production:
+
+| Variable | Purpose |
+| --- | --- |
+| `SECRET_KEY` | JWT signing — 32+ random chars. Generate with `python -c 'import secrets; print(secrets.token_urlsafe(32))'`. |
+| `DATABASE_URL` | `postgresql+asyncpg://user:pass@host:port/db` |
+| `REDIS_URL` | `redis://...` — required for multi-replica rate limiting and websocket pub/sub. |
+| `FRONTEND_URL` | The Vercel URL — used for CORS allow-list and email links. |
+| `ENVIRONMENT` | `prod` enables HSTS, secure cookies, and strict storage/credential checks. |
+| `AWS_S3_BUCKET` + `AWS_S3_REGION` + `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` | S3 is the only supported storage backend in prod. Startup hard-fails if these are unset. |
+| `RAZORPAY_KEY_ID` + `RAZORPAY_KEY_SECRET` + `RAZORPAY_WEBHOOK_SECRET` | Online payments. Placeholder values are rejected in prod. |
+| `CRON_SECRET` | Shared secret for the fee-reminder cron job. |
+
+Optional but recommended:
+
+| Variable | Purpose |
+| --- | --- |
+| `SENTRY_DSN` | Error aggregation. |
+| `TWILIO_*` | Outbound voice calls for fee reminders. Silent no-op when unset. |
+| `EXPO_ACCESS_TOKEN` | Required only if you've enabled Enhanced Push Security in Expo. |
+| `GOOGLE_API_KEY` / `OPENAI_API_KEY` | AI lesson plan / question bank generation. |
+
+---
+
+## Operational notes
+
+- **Health endpoints:** `GET /health` (no DB) and `GET /ready` (validates DB). Use `/health` for liveness probes, `/ready` for readiness.
+- **Logs:** structured JSON in prod (`LOG_JSON=true` by default when `ENVIRONMENT=prod`), human-readable in dev. Every line carries `request_id` so you can grep one tag end-to-end.
+- **Rate limiting:** slowapi with Redis backend. Falls back to in-memory per-worker counters when `REDIS_URL` is unset — fine for a single replica, not fine in prod.
+- **Backups:** Neon does PITR automatically. If you migrate to RDS, configure automated snapshots + a weekly logical dump to S3.
+- **Migrations:** never edit a merged Alembic revision in place. Add a new revision instead. The deploy pipeline runs `alembic upgrade head` before booting workers.
+
+---
+
+## Contributing
+
+1. Branch off `main`. Keep PRs focused — one feature or fix per PR.
+2. Both CI workflows must pass before merge.
+3. New backend behaviour needs a pytest case in `backend/tests/`.
+4. Public-facing copy is India-first today (INR, IST timezone, Twilio `en-IN`). Localise behind config rather than hardcoding new strings.
+5. Never commit `.env` files. `.env.example` is the canonical template.
+
+---
+
+## License
+
+Proprietary — © EduTrack. All rights reserved.
