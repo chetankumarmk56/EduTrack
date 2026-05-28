@@ -6,6 +6,33 @@ export interface InstitutionCreate {
   slug: string;
 }
 
+/** Row shape returned by GET /admin/admins. */
+export interface AdminUser {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  institution_id?: number;
+  institution_name?: string;
+  is_active?: boolean;
+  created_at?: string;
+}
+
+export interface AdminCreate {
+  name: string;
+  email: string;
+  password: string;
+  // Backend defaults to 'admin' but the create endpoint accepts an
+  // override (e.g. 'finance') so we expose it as optional here.
+  role?: string;
+}
+
+export interface AdminUpdate {
+  name?: string;
+  email?: string;
+  password?: string;
+}
+
 export const superAdminApi = {
   getInstitutions: async () => {
     const response = await client.get<Institution[]>('admin/institutions');
@@ -47,17 +74,17 @@ export const superAdminApi = {
   // --- Admin Credential Management ---
   
   getAdmins: async () => {
-    const response = await client.get<any[]>('admin/admins');
+    const response = await client.get<AdminUser[]>('admin/admins');
     return response.data;
   },
 
-  createAdmin: async (institutionId: number, data: any) => {
-    const response = await client.post<any>(`admin/institutions/${institutionId}/admins`, data);
+  createAdmin: async (institutionId: number, data: AdminCreate) => {
+    const response = await client.post<AdminUser>(`admin/institutions/${institutionId}/admins`, data);
     return response.data;
   },
 
-  updateAdmin: async (id: number, data: any) => {
-    const response = await client.put<any>(`admin/admins/${id}`, data);
+  updateAdmin: async (id: number, data: AdminUpdate) => {
+    const response = await client.put<AdminUser>(`admin/admins/${id}`, data);
     return response.data;
   },
 

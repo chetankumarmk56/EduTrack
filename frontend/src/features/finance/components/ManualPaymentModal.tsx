@@ -37,8 +37,9 @@ export default function ManualPaymentModal({ isOpen, onClose, initialStudentId, 
       setFormStatus({ type: 'success', message: 'Payment recorded and allocated successfully.' });
       onRecorded();
       setTimeout(onClose, 2000);
-    } catch (err: any) {
-      setFormStatus({ type: 'error', message: err.message || 'Failed to record payment.' });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to record payment.';
+      setFormStatus({ type: 'error', message });
     } finally {
       setIsSubmitting(false);
     }

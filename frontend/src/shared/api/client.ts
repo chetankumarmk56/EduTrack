@@ -26,10 +26,14 @@ const getRequestSignature = (config: InternalAxiosRequestConfig): string | null 
 };
 
 // Queue to handle multiple simultaneous requests during token refresh
+interface QueuedRequest {
+  resolve: (value: string | null) => void;
+  reject: (reason?: unknown) => void;
+}
 let isRefreshing = false;
-let failedQueue: any[] = [];
+let failedQueue: QueuedRequest[] = [];
 
-const processQueue = (error: any, token: string | null = null) => {
+const processQueue = (error: unknown, token: string | null = null) => {
   if (error) console.error("[Auth] Rejecting queued requests:", error);
   else console.debug("[Auth] Retrying queued requests with new token");
 

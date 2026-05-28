@@ -1,16 +1,17 @@
 import { motion } from 'framer-motion';
 import { Pencil, Trash2, Loader, Mail, Phone, Calendar, Hash } from 'lucide-react';
+import type { Student } from '@/shared/types';
 
 interface StudentCardProps {
-  student: any;
+  student: Student;
   viewMode: 'grid' | 'list';
-  onEdit: (student: any) => void;
+  onEdit: (student: Student) => void;
   onDelete: (id: number, name: string) => void;
   deletingId: number | null;
 }
 
 export default function StudentCard({ student: s, viewMode, onEdit, onDelete, deletingId }: StudentCardProps) {
-  const initials = s.name.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase();
+  const initials = s.name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase();
 
   if (viewMode === 'list') {
     return (

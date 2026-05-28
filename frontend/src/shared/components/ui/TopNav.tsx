@@ -30,11 +30,11 @@ export default function TopNav({ onMenuClick }: TopNavProps) {
 
   const userDisplayName = useMemo(() => {
     if (isTeacher && user?.id && teacherDirectory.length) {
-      const teacher = teacherDirectory.find((t: any) => t.user_id === user.id);
+      const teacher = teacherDirectory.find((t) => t.user_id === user.id);
       if (teacher) return teacher.name;
     }
     if (user?.role === 'parent' && user?.id && classDirectory.length) {
-      const student = classDirectory.find((s: any) => s.id === user.id);
+      const student = classDirectory.find((s) => s.id === user.id);
       if (student) return `${student.name}'s Family`;
     }
     return user?.name || 'Guest User';

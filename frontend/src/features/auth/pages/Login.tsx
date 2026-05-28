@@ -73,11 +73,11 @@ export default function Login() {
                          data.role === 'admin' ? '/admin/directory' :
                          '/parent/dashboard';
       navigate(destination);
-    } catch (err: any) {
+    } catch (err) {
       console.error('Parent Login Error:', err);
       // Surface the server's friendly message when present; fall back to
       // a generic line so we don't leak whether it was the phone or DOB.
-      setError(err?.message || 'Invalid credentials. Please try again.');
+      setError(err instanceof Error ? err.message : 'Invalid credentials. Please try again.');
     }
   };
 

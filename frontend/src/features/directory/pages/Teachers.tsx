@@ -34,7 +34,7 @@ function initialsOf(name: string) {
 
 function uniqueSubjects(t: TeacherWithPassword): string[] {
   const set = new Set<string>();
-  (t.assignments ?? []).forEach((a: any) => {
+  (t.assignments ?? []).forEach((a) => {
     const s = (a.subject_ref?.name || a.subject || '').trim();
     if (s) set.add(s);
   });
@@ -43,7 +43,7 @@ function uniqueSubjects(t: TeacherWithPassword): string[] {
 
 function uniqueClasses(t: TeacherWithPassword): string[] {
   const set = new Set<string>();
-  (t.assignments ?? []).forEach((a: any) => {
+  (t.assignments ?? []).forEach((a) => {
     const c = a.school_class || a.classroom;
     const label =
       c?.display_name ||

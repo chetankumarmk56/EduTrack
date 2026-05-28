@@ -14,7 +14,7 @@ function AnimatedCounter({ value, suffix = '', className = '' }: { value: number
 
   useEffect(() => {
     if (!isInView) return;
-    let start = 0;
+    const start = 0;
     const end = value;
     const duration = 1500;
     const startTime = performance.now();
@@ -126,7 +126,7 @@ export default function Attendance() {
                     ].map(f => (
                        <button
                         key={f.id}
-                        onClick={() => setFilterState(f.id as any)}
+                        onClick={() => setFilterState(f.id as 'all' | 'present' | 'absent' | 'late')}
                         className={cn(
                            "w-full flex items-center justify-between p-4 rounded-2xl transition-all border",
                            filterState === f.id 

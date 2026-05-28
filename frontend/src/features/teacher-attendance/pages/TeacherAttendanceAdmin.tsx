@@ -7,6 +7,7 @@ import {
   BarChart3, ClipboardList, Inbox, History, Sparkles,
 } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
+import { getErrorMessage } from '@/shared/lib/errorHandler';
 import { teacherAttendanceApi, type TeacherAttendanceRecord, type TeacherLeaveRecord, type AuditLogRecord, type AttendanceSummary } from '@/features/teacher-attendance/api';
 import { useApp } from '@/shared/contexts/AppContext';
 
@@ -381,8 +382,8 @@ export default function TeacherAttendanceAdmin() {
       loadAttendance();
       loadSnapshot();
       setFeedback({ type: 'success', msg: 'Attendance updated successfully' });
-    } catch (e: any) {
-      setEditError(e?.response?.data?.detail || 'Update failed');
+    } catch (e) {
+      setEditError(getErrorMessage(e).message || 'Update failed');
     } finally {
       setEditLoading(false);
     }
@@ -394,8 +395,8 @@ export default function TeacherAttendanceAdmin() {
       loadLeaves();
       loadSnapshot();
       setFeedback({ type: 'success', msg: 'Leave approved' });
-    } catch (e: any) {
-      setFeedback({ type: 'error', msg: e?.response?.data?.detail || 'Action failed' });
+    } catch (e) {
+      setFeedback({ type: 'error', msg: getErrorMessage(e).message || 'Action failed' });
     }
   };
 
@@ -408,8 +409,8 @@ export default function TeacherAttendanceAdmin() {
       loadLeaves();
       loadSnapshot();
       setFeedback({ type: 'success', msg: 'Leave rejected' });
-    } catch (e: any) {
-      setFeedback({ type: 'error', msg: e?.response?.data?.detail || 'Action failed' });
+    } catch (e) {
+      setFeedback({ type: 'error', msg: getErrorMessage(e).message || 'Action failed' });
     } finally {
       setRejectLoading(false);
     }
@@ -578,7 +579,7 @@ export default function TeacherAttendanceAdmin() {
               <TeacherFilter
                 value={attTeacherId}
                 onChange={v => { setAttTeacherId(v); setAttPage(0); }}
-                teachers={teacherDirectory as any}
+                teachers={teacherDirectory}
               />
               <FilterSelect
                 label="Status"
@@ -661,7 +662,7 @@ export default function TeacherAttendanceAdmin() {
               <TeacherFilter
                 value={leaveTeacherId}
                 onChange={v => { setLeaveTeacherId(v); setLeavePage(0); }}
-                teachers={teacherDirectory as any}
+                teachers={teacherDirectory}
               />
               <ChipGroup
                 label="Status"
@@ -754,7 +755,7 @@ export default function TeacherAttendanceAdmin() {
               <TeacherFilter
                 value={summaryTeacherId}
                 onChange={setSummaryTeacherId}
-                teachers={teacherDirectory as any}
+                teachers={teacherDirectory}
               />
               <DateRangeFilter
                 from={summaryDateFrom}
@@ -819,7 +820,7 @@ export default function TeacherAttendanceAdmin() {
               <TeacherFilter
                 value={auditTeacherId}
                 onChange={v => { setAuditTeacherId(v); setAuditPage(0); }}
-                teachers={teacherDirectory as any}
+                teachers={teacherDirectory}
               />
             </FilterShell>
 
@@ -840,7 +841,7 @@ export default function TeacherAttendanceAdmin() {
                     </thead>
                     <tbody>
                       {groupAuditLogsByDay(auditLogs).map((row) => {
-                        const teacher = teacherDirectory.find((t: any) => t.id === row.teacher_id);
+                        const teacher = teacherDirectory.find((t) => t.id === row.teacher_id);
                         const status = row.status || (row.check_in_time ? 'PRESENT' : '');
                         const meta = STATUS_META[status];
                         return (
@@ -1051,7 +1052,7 @@ function KpiCard({
   highlight?: boolean;
   onClick?: () => void;
 }) {
-  const Wrapper: any = onClick ? 'button' : 'div';
+  const Wrapper = (onClick ? 'button' : 'div') as React.ElementType;
   return (
     <Wrapper
       onClick={onClick}

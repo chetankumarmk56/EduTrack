@@ -1,18 +1,26 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Calendar, Plus, Clock, MapPin, 
+import {
+  Calendar, Plus, Clock, MapPin,
   Trash2, Bell, Check, X, ArrowRight,
   Zap, CalendarDays, Star, Pencil
 } from 'lucide-react';
 import { eventsApi } from '@/features/events/api';
 import { useApp } from '@/shared/contexts/AppContext';
 import { cn } from '@/shared/lib/utils';
+import type { Event } from '@/shared/types';
+
+// Admin-only fields that aren't on the shared Event type (visibility lives
+// in the audience-targeting layer, category is admin-classification).
+interface AdminEvent extends Event {
+  category?: string;
+  visibility?: { parents: boolean; teachers: boolean; students: boolean };
+}
 
 export default function AdminEvents() {
   const { events, refreshDirectory } = useApp();
   const [isAdding, setIsAdding] = useState(false);
-  const [editingEvent, setEditingEvent] = useState<any | null>(null);
+  const [editingEvent, setEditingEvent] = useState<AdminEvent | null>(null);
   const [filter, setFilter] = useState('all');
   
   const [form, setForm] = useState({
@@ -26,7 +34,7 @@ export default function AdminEvents() {
     refreshDirectory();
   }, []);
 
-  const handleEdit = (event: any) => {
+  const handleEdit = (event: AdminEvent) => {
     setEditingEvent(event);
     setForm({
       title: event.title,
@@ -77,12 +85,12 @@ export default function AdminEvents() {
   const filteredEvents = filter === 'all'
     ? events
     : filter === 'holiday'
-      ? events.filter((e: any) => e.is_holiday)
+      ? events.filter((e) => e.is_holiday)
       : filter === 'working'
-        ? events.filter((e: any) => !e.is_holiday)
+        ? events.filter((e) => !e.is_holiday)
         : events;
 
-  const getEventIcon = (event: any) => {
+  const getEventIcon = (event: AdminEvent) => {
     if (event.is_holiday) return <Star className="w-5 h-5 text-amber-400" />;
     const type = (event.type || '').toLowerCase();
     if (type.includes('exam')) return <Zap className="w-5 h-5 text-indigo-400" />;
@@ -135,7 +143,7 @@ export default function AdminEvents() {
       {/* Events Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
         <AnimatePresence mode="popLayout">
-          {filteredEvents.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime()).map((e: any) => (
+          {filteredEvents.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).map((e) => (
             <motion.div
               layout
               key={e.id}
@@ -212,7 +220,7 @@ export default function AdminEvents() {
                       title={role}
                       className={cn(
                         "w-7 h-7 rounded-full border-2 border-obsidian flex items-center justify-center text-[8px] font-black uppercase",
-                        e.visibility?.[role] ? "bg-emerald-500 text-white" : "bg-white/5 text-text-secondary"
+                        e.visibility?.[role as 'parents' | 'teachers' | 'students'] ? "bg-emerald-500 text-white" : "bg-white/5 text-text-secondary"
                       )}
                     >
                       {role[0]}

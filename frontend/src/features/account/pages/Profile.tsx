@@ -23,7 +23,7 @@ export default function Profile() {
       let max = -1;
       let min = 101;
 
-      marks.forEach((m: any) => {
+      marks.forEach((m) => {
         const subjName = m.subject_ref?.name || m.subject || 'Unknown';
         const percentage = m.max_score > 0 ? (m.score / m.max_score) * 100 : 0;
         

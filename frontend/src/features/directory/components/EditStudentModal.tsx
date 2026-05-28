@@ -4,15 +4,16 @@ import { X, ArrowRight, AlertCircle, Loader, UserPlus, User } from 'lucide-react
 import { directoryApi } from '@/features/directory/api';
 import { cn } from '@/shared/lib/utils';
 import { getErrorMessage } from '@/shared/lib/errorHandler';
+import type { Student } from '@/shared/types';
 
 interface EditStudentModalProps {
-  student: any | null;
+  student: Student | null;
   onClose: () => void;
   onUpdated: () => void;
 }
 
 export default function EditStudentModal({ student, onClose, onUpdated }: EditStudentModalProps) {
-  const [localStudent, setLocalStudent] = useState<any | null>(null);
+  const [localStudent, setLocalStudent] = useState<Student | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -21,8 +22,8 @@ export default function EditStudentModal({ student, onClose, onUpdated }: EditSt
     else { setLocalStudent(null); setErrors({}); }
   }, [student]);
 
-  const update = (field: string, value: string) => {
-    setLocalStudent((prev: any) => ({ ...prev, [field]: value }));
+  const update = (field: keyof Student, value: string) => {
+    setLocalStudent((prev) => (prev ? { ...prev, [field]: value } : prev));
     if (errors.submit) setErrors({});
   };
 
@@ -40,11 +41,11 @@ export default function EditStudentModal({ student, onClose, onUpdated }: EditSt
         school_class_id: localStudent.school_class_id,
         parent_name: localStudent.parent_name,
         parent_email: localStudent.parent_email,
-        parent_phone: localStudent.parent_phone
-      } as any);
+        parent_phone: localStudent.parent_phone,
+      });
       onClose();
       onUpdated();
-    } catch (err: any) {
+    } catch (err) {
       const error = getErrorMessage(err);
       setErrors({ submit: error.message || "Failed to update student information. Please try again." });
     } finally {

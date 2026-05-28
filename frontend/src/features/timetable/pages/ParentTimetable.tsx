@@ -25,7 +25,11 @@ import {
 } from '@/features/timetable/lib';
 
 function PeriodIcon({ type }: { type: SchedulePeriodType }) {
+  // eslint-disable-next-line react-hooks/static-components -- periodIconFor
+  // returns one of 4 stable lucide icon refs by type; aliasing isn't a
+  // dynamic component creation.
   const Icon = periodIconFor(type);
+  // eslint-disable-next-line react-hooks/static-components
   return <Icon className="w-3.5 h-3.5" />;
 }
 
@@ -521,7 +525,7 @@ function StatTile({
   onClick?: () => void;
 }) {
   const interactive = !!onClick;
-  const Wrapper: any = interactive ? 'button' : 'div';
+  const Wrapper = (interactive ? 'button' : 'div') as React.ElementType;
   return (
     <Wrapper
       onClick={onClick}

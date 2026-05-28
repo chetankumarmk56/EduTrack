@@ -19,7 +19,7 @@ function AnimatedCounter({ value, suffix = '', className = '' }: { value: number
 
    useEffect(() => {
       if (!isInView) return;
-      let start = 0;
+      const start = 0;
       const end = value;
       const duration = 1500;
       const startTime = performance.now();
@@ -62,16 +62,16 @@ export default function Dashboard() {
    useEffect(() => {
       if (user?.role !== 'parent' && user?.role !== 'student') return;
       announcementApi.getMyAnnouncements()
-        .then(data => setUnreadCount(data.filter((a: any) => !a.is_read).length))
+        .then(data => setUnreadCount(data.filter((a) => !a.is_read).length))
         .catch((err) => console.error('Failed to load announcements for unread count:', err));
    }, [user?.role]);
 
-   const activeStudent = studentProfile || classDirectory.find((s: any) => s.user_id === user?.id || s.id === user?.id);
+   const activeStudent = studentProfile || classDirectory.find((s) => s.user_id === user?.id || s.id === user?.id);
    const studentClass = activeStudent?.school_class || activeStudent?.classroom;
 
-   const marks = useMemo(() => (rawMarks || []).filter((m: any) =>
-      teacherDirectory.some((t: any) =>
-         t.assignments?.some((a: any) => {
+   const marks = useMemo(() => (rawMarks || []).filter((m) =>
+      teacherDirectory.some((t) =>
+         t.assignments?.some((a) => {
             const aClass = a.school_class || a.classroom;
             const aGrade = aClass?.grade?.level || aClass?.grade?.name || a.class_level;
             const aSection = aClass?.section?.name || a.section;
@@ -86,25 +86,25 @@ export default function Dashboard() {
    ), [rawMarks, teacherDirectory, activeStudent, studentClass]);
 
    const subjectPerformance = useMemo(() => {
-      const subjects = Array.from(new Set(marks.map((m: any) => m.subject_ref?.name || m.subject).filter(Boolean)));
-      return subjects.map((subj: any) => {
-         const subjMarks = marks.filter((m: any) => (m.subject_ref?.name || m.subject) === subj);
-         const totalScore = subjMarks.reduce((a: number, b: any) => a + (b.score || 0), 0);
-         const totalMax = subjMarks.reduce((a: number, b: any) => a + (b.max_score || 0), 0);
+      const subjects = Array.from(new Set(marks.map((m) => m.subject_ref?.name || m.subject).filter(Boolean)));
+      return subjects.map((subj) => {
+         const subjMarks = marks.filter((m) => (m.subject_ref?.name || m.subject) === subj);
+         const totalScore = subjMarks.reduce((a, b) => a + (b.score || 0), 0);
+         const totalMax = subjMarks.reduce((a, b) => a + (b.max_score || 0), 0);
          const avg = totalMax > 0 ? Math.round((totalScore / totalMax) * 100) : 0;
          return { subject: subj, average: avg, count: subjMarks.length };
-      }).sort((a: any, b: any) => b.average - a.average);
+      }).sort((a, b) => b.average - a.average);
    }, [marks]);
 
    const attendanceCount = useMemo(() => {
-      const present = (rawAttendance || []).filter((a: any) => (a.status || '').toLowerCase() === 'present' || (a.status || '').toLowerCase() === 'late').length;
+      const present = (rawAttendance || []).filter((a) => (a.status || '').toLowerCase() === 'present' || (a.status || '').toLowerCase() === 'late').length;
       const total = (rawAttendance || []).length || 100;
       return total > 0 ? Math.round((present / total) * 100) : 100;
    }, [rawAttendance]);
 
    const overallGrade = useMemo(() => {
       if (subjectPerformance.length === 0) return 0;
-      return Math.round(subjectPerformance.reduce((a: number, b: any) => a + b.average, 0) / subjectPerformance.length);
+      return Math.round(subjectPerformance.reduce((a, b) => a + b.average, 0) / subjectPerformance.length);
    }, [subjectPerformance]);
 
    if (!user?.id || !activeStudent) {

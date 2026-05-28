@@ -12,6 +12,8 @@ import {
 import { useAuth } from '@/shared/contexts/AuthContext';
 import { useApp } from '@/shared/contexts/AppContext';
 import { announcementApi, type AnnouncementCreate, type Announcement, type HomeworkConfirmationsBreakdown } from '@/features/announcements/api';
+import type { TeacherAssignment } from '@/shared/types';
+import { getErrorMessage } from '@/shared/lib/errorHandler';
 import { cn } from '@/shared/lib/utils';
 import { SkeletonList } from '@/shared/components/ui/Skeleton';
 import { HomeworkFields } from '@/features/announcements/components/HomeworkFields';
@@ -41,7 +43,7 @@ function formatDate(iso: string) {
 
 export default function TeacherAnnouncements() {
   const { user } = useAuth();
-  const { teacherDirectory, students } = useApp() as any;
+  const { teacherDirectory, students } = useApp();
 
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [isLoading, setIsLoading]   = useState(true);
@@ -93,27 +95,27 @@ export default function TeacherAnnouncements() {
   const clearFilters = () => { setSearch(''); setFilterDate(''); setFilterPriority('ALL'); setFilterType('ALL'); setFilterCategory('ALL'); };
 
   // Resolve teacher from directory
-  const currentTeacher = teacherDirectory?.find((t: any) => t.user_id === user?.id);
+  const currentTeacher = teacherDirectory?.find((t) => t.user_id === user?.id);
   const teacherId       = currentTeacher?.id;
   const assignments     = currentTeacher?.assignments || [];
 
   // API serialises the class under `school_class` (TeacherAssignmentResponse).
   // The frontend type calls it `classroom`, so support both + the bare `school_class_id` fallback.
-  const getClassId = (a: any): number | undefined =>
+  const getClassId = (a: TeacherAssignment): number | undefined =>
     a.school_class?.id ?? a.classroom?.id ?? a.school_class_id;
-  const getClassName = (a: any): string =>
+  const getClassName = (a: TeacherAssignment): string =>
     a.school_class?.display_name ?? a.classroom?.display_name ?? `Class #${getClassId(a)}`;
 
   // Unique classes this teacher is assigned to
-  const assignedClasses = assignments.reduce((acc: any[], a: any) => {
+  const assignedClasses = assignments.reduce<TeacherAssignment[]>((acc, a) => {
     const id = getClassId(a);
-    if (id && !acc.find((x: any) => getClassId(x) === id)) acc.push(a);
+    if (id && !acc.find((x) => getClassId(x) === id)) acc.push(a);
     return acc;
   }, []);
 
   // Students in assigned classes
-  const assignedClassIds = assignedClasses.map((a: any) => getClassId(a)).filter(Boolean);
-  const availableStudents = (students || []).filter((s: any) =>
+  const assignedClassIds = assignedClasses.map((a) => getClassId(a)).filter(Boolean);
+  const availableStudents = (students || []).filter((s) =>
     assignedClassIds.includes(s.school_class_id)
   );
 
@@ -169,8 +171,8 @@ export default function TeacherAnnouncements() {
       setIsAdding(false);
       resetForm();
       fetchAnnouncements();
-    } catch (err: any) {
-      setFormError(err?.response?.data?.detail || 'Failed to send announcement. Please try again.');
+    } catch (err) {
+      setFormError(getErrorMessage(err).message || 'Failed to send announcement. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -209,8 +211,8 @@ export default function TeacherAnnouncements() {
       const { url } = await announcementApi.uploadAttachment(file);
       setForm(prev => ({ ...prev, attachment_url: url }));
       setUploadedFileName(file.name);
-    } catch (err: any) {
-      setFormError(err?.response?.data?.detail || 'Upload failed. Please try again.');
+    } catch (err) {
+      setFormError(getErrorMessage(err).message || 'Upload failed. Please try again.');
     } finally {
       setIsUploading(false);
     }
@@ -612,7 +614,7 @@ export default function TeacherAnnouncements() {
                         required
                       >
                         <option value="">Select a class...</option>
-                        {assignedClasses.map((a: any) => (
+                        {assignedClasses.map((a) => (
                           <option key={getClassId(a)} value={getClassId(a)}>
                             {getClassName(a)}
                           </option>
@@ -626,7 +628,7 @@ export default function TeacherAnnouncements() {
                         required
                       >
                         <option value="">Select a student...</option>
-                        {availableStudents.map((s: any) => (
+                        {availableStudents.map((s) => (
                           <option key={s.id} value={s.id}>
                             {s.name}
                             {s.school_class?.display_name ? ` (${s.school_class.display_name})` : ''}

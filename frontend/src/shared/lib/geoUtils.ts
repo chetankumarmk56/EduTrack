@@ -63,10 +63,14 @@ export function findNearestPointOnPath(point: LatLng, path: LatLng[]) {
 
 /**
  * Re-orders stops based on their relative position along the path.
+ *
+ * Stops are typed as a generic so callers don't have to share a single Stop
+ * interface — anything with lat/lng works, the function preserves the rest
+ * of each stop's shape via the spread.
  */
-export function sortStopsByPath(stops: any[], path: LatLng[]) {
-  if (path.length < 2) return stops;
-  
+export function sortStopsByPath<T extends LatLng>(stops: T[], path: LatLng[]): (T & { order: number })[] {
+  if (path.length < 2) return stops.map((stop, i) => ({ ...stop, order: i + 1 }));
+
   const stopsWithIndex = stops.map(stop => {
     const { pathIndex } = findNearestPointOnPath({ lat: stop.lat, lng: stop.lng }, path);
     return { ...stop, pathIndex };

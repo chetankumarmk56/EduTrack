@@ -25,7 +25,10 @@ export interface AssignmentCreatePayload {
 
 export interface StudentCreatePayload {
   name: string;
-  email: string;
+  // Student email is optional — most schools enroll students by name + class +
+  // DOB and never collect a student email. The backend derives a synthetic
+  // address when this is omitted.
+  email?: string;
   password: string;
   dob?: string;
   whatsapp?: string;

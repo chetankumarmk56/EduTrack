@@ -5,6 +5,17 @@ import { ShieldAlert, KeyRound, AlertCircle, Fingerprint } from 'lucide-react';
 import { useAuth } from '@/shared/contexts/AuthContext';
 import { useApp } from '@/shared/contexts/AppContext';
 import { authApi } from '@/features/auth/api';
+import { getErrorMessage } from '@/shared/lib/errorHandler';
+
+// Decorative particle field. Pre-computed at module load so React's
+// purity rule isn't violated (Math.random() during render is forbidden)
+// and the particle positions stay stable across re-renders of the page.
+const PARTICLES = Array.from({ length: 15 }, () => ({
+  x: Math.random() * 100,
+  y: Math.random() * 100,
+  duration: Math.random() * 8 + 6,
+  delay: Math.random() * 8,
+}));
 
 export default function AdminLogin() {
   const { login } = useAuth();
@@ -38,14 +49,12 @@ export default function AdminLogin() {
       });
       const destination = data.role === 'super_admin' ? '/superadmin/dashboard' : '/admin/directory';
       navigate(destination);
-    } catch (err: any) {
+    } catch (err) {
       console.error("Admin Login Failed:", err);
-      setError(err.message || "Authentication failed. Please check your credentials.");
+      setError(getErrorMessage(err).message || "Authentication failed. Please check your credentials.");
     }
   };
 
-  // Floating particles for background
-  const particles = Array.from({ length: 15 });
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 relative overflow-hidden">
@@ -73,12 +82,12 @@ export default function AdminLogin() {
         />
 
         {/* Floating particles */}
-        {particles.map((_, i) => (
+        {PARTICLES.map((p, i) => (
           <motion.div
             key={i}
             initial={{
-              x: Math.random() * 100 + "%",
-              y: Math.random() * 100 + "%",
+              x: `${p.x}%`,
+              y: `${p.y}%`,
               opacity: 0,
             }}
             animate={{
@@ -86,10 +95,10 @@ export default function AdminLogin() {
               opacity: [0, 0.5, 0],
             }}
             transition={{
-              duration: Math.random() * 8 + 6,
+              duration: p.duration,
               repeat: Infinity,
               ease: "linear",
-              delay: Math.random() * 8,
+              delay: p.delay,
             }}
             className="absolute w-1 h-1 bg-indigo-400 rounded-full"
             style={{

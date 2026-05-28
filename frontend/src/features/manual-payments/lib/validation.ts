@@ -16,7 +16,7 @@ export interface ParentFormState {
 
 export type ParentFormErrors = Partial<Record<keyof ParentFormState, string>>;
 
-const UPI_REGEX = /^[\w.\-]{2,}@[a-zA-Z]{2,}$/;
+const UPI_REGEX = /^[\w.-]{2,}@[a-zA-Z]{2,}$/;
 // UTRs are usually 12 digits; UPI refs vary (12 alphanumeric typical).
 // We accept anything that looks like a real reference: 4-32 chars, alnum + dashes.
 const TXN_REGEX = /^[A-Za-z0-9\-_/]{4,32}$/;

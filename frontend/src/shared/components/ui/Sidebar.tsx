@@ -92,7 +92,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
 
       <div className="relative flex-1 overflow-y-auto py-4 px-4 custom-scrollbar">
         <ul className="space-y-1">
-          {navItems.map((item: any, index: number) => {
+          {navItems.map((item, index: number) => {
             const isActive = location.pathname.startsWith(item.path);
             return (
               <motion.li

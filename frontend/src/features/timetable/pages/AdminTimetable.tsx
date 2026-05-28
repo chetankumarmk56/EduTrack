@@ -10,6 +10,7 @@ import type {
 } from '@/shared/types';
 import { useApp } from '@/shared/contexts/AppContext';
 import { cn } from '@/shared/lib/utils';
+import { getErrorMessage } from '@/shared/lib/errorHandler';
 import {
   DAY_LABELS,
   formatTime,
@@ -26,7 +27,10 @@ const PERIOD_TYPE_OPTIONS: { value: SchedulePeriodType; label: string }[] = [
 ];
 
 function PeriodIcon({ type }: { type: SchedulePeriodType }) {
+  // eslint-disable-next-line react-hooks/static-components -- periodIconFor
+  // returns one of 4 stable lucide icon refs; aliasing isn't dynamic.
   const Icon = periodIconFor(type);
+  // eslint-disable-next-line react-hooks/static-components
   return <Icon className="w-3.5 h-3.5" />;
 }
 
@@ -202,9 +206,9 @@ export default function AdminTimetable() {
       });
       setEditingCell(null);
       await loadClassTimetable(selectedClassId);
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
-      alert(err.response?.data?.detail || 'Could not save the slot.');
+      alert(getErrorMessage(err).message || 'Could not save the slot.');
     }
   };
 

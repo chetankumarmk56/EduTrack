@@ -5,13 +5,39 @@ import {
   Clock, AlertTriangle, Loader2, Calendar, Users
 } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
-import type { StudentDuesResponse } from '@/features/finance/api';
+import type { StudentDuesResponse, PaymentRecord } from '@/features/finance/api';
 import { financeApi } from '@/features/finance/api';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Skeleton, SkeletonHeader, SkeletonStatGrid, SkeletonList } from '@/shared/components/ui/Skeleton';
 
+// Minimal Razorpay browser SDK surface — just enough to satisfy the
+// inline checkout flow below. Razorpay ships its own d.ts but it's
+// distributed via their CDN script, not npm; this local interface
+// avoids pulling in the full untyped dependency.
+interface RazorpayInstance {
+  open(): void;
+}
+interface RazorpayPaymentResponse {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+}
+interface RazorpayOptions {
+  key: string;
+  amount: number;
+  currency: string;
+  name: string;
+  description?: string;
+  order_id: string;
+  prefill?: { name?: string; email?: string; contact?: string };
+  theme?: { color?: string };
+  handler: (response: RazorpayPaymentResponse) => void | Promise<void>;
+  modal?: { ondismiss?: () => void };
+}
+type RazorpayConstructor = new (options: RazorpayOptions) => RazorpayInstance;
+
 declare global {
-  interface Window { Razorpay: any; }
+  interface Window { Razorpay: RazorpayConstructor; }
 }
 
 export default function Payments() {
@@ -21,7 +47,7 @@ export default function Payments() {
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
+  const [paymentHistory, setPaymentHistory] = useState<PaymentRecord[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
 
   useEffect(() => { loadDues(); }, []);
@@ -82,7 +108,7 @@ export default function Payments() {
         name: 'EduTrack School Fees',
         description: `Fee payment for ${dues.student_name}`,
         order_id: order.order_id,
-        handler: async (response: any) => {
+        handler: async (response: RazorpayPaymentResponse) => {
           try {
             await financeApi.verifyPayment({
               razorpay_order_id: response.razorpay_order_id,
@@ -91,8 +117,9 @@ export default function Payments() {
             });
             setStatus({ type: 'success', message: 'Payment successful! Your dues have been updated.' });
             loadDues();
-          } catch (err: any) {
-            setStatus({ type: 'error', message: err.message || 'Verification failed.' });
+          } catch (err) {
+            const message = err instanceof Error ? err.message : 'Verification failed.';
+            setStatus({ type: 'error', message });
           } finally {
             setIsProcessing(false);
           }
@@ -115,9 +142,10 @@ export default function Payments() {
           }
         }
       };
-      new (window as any).Razorpay(options).open();
-    } catch (err: any) {
-      setStatus({ type: 'error', message: err.message || 'Failed to initiate payment.' });
+      new window.Razorpay(options).open();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to initiate payment.';
+      setStatus({ type: 'error', message });
       setIsProcessing(false);
     }
   };
@@ -456,7 +484,7 @@ export default function Payments() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {paymentHistory.map((p: any) => (
+                  {paymentHistory.map((p) => (
                     <tr key={p.id} className="hover:bg-slate-50/20 transition-colors">
                       <td className="px-8 py-5 text-sm text-muted-foreground">
                         {new Date(p.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}

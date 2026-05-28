@@ -5,6 +5,17 @@ import { Fingerprint, KeyRound, AlertCircle, Globe } from 'lucide-react';
 import { useAuth } from '@/shared/contexts/AuthContext';
 import { useApp } from '@/shared/contexts/AppContext';
 import { authApi } from '@/features/auth/api';
+import { getErrorMessage } from '@/shared/lib/errorHandler';
+
+// Decorative particle field. Pre-computed at module load so the
+// react-hooks/purity rule isn't violated and positions stay stable
+// across re-renders.
+const PARTICLES = Array.from({ length: 20 }, () => ({
+  x: Math.random() * 100,
+  y: Math.random() * 100,
+  duration: Math.random() * 8 + 8,
+  delay: Math.random() * 10,
+}));
 
 export default function SuperAdminLogin() {
   const { login } = useAuth();
@@ -37,13 +48,12 @@ export default function SuperAdminLogin() {
         institution_id: data.institution_id
       });
       navigate('/superadmin/dashboard');
-    } catch (err: any) {
+    } catch (err) {
       console.error("Super Admin Login Failed:", err);
-      setError(err.message || "Authentication failed. Unauthorized access detected.");
+      setError(getErrorMessage(err).message || "Authentication failed. Unauthorized access detected.");
     }
   };
 
-  const particles = Array.from({ length: 20 });
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 relative overflow-hidden">
@@ -64,12 +74,12 @@ export default function SuperAdminLogin() {
         />
         
         {/* Particles */}
-        {particles.map((_, i) => (
+        {PARTICLES.map((p, i) => (
           <motion.div
             key={i}
-            initial={{ x: Math.random() * 100 + "%", y: Math.random() * 100 + "%", opacity: 0 }}
+            initial={{ x: `${p.x}%`, y: `${p.y}%`, opacity: 0 }}
             animate={{ y: [null, "-30%", "130%"], opacity: [0, 0.6, 0] }}
-            transition={{ duration: Math.random() * 8 + 8, repeat: Infinity, ease: "linear", delay: Math.random() * 10 }}
+            transition={{ duration: p.duration, repeat: Infinity, ease: "linear", delay: p.delay }}
             className="absolute w-1.5 h-1.5 bg-cyan-400 rounded-full"
             style={{ boxShadow: '0 0 6px rgba(34,211,238,0.5)' }}
           />

@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { motion, type Transition } from 'framer-motion';
 import type { ReactNode } from 'react';
 
 interface PageWrapperProps {
@@ -7,7 +7,7 @@ interface PageWrapperProps {
 }
 
 export function PageWrapper({ children, speed = 'smooth' }: PageWrapperProps) {
-  const transition: any = speed === 'fast'
+  const transition: Transition = speed === 'fast'
     ? { duration: 0.15, ease: 'easeOut' }
     : { duration: 0.22, ease: 'easeOut' };
 

@@ -1,18 +1,17 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, Shield, Edit3, Trash2, Mail, Building2 } from 'lucide-react';
-import { superAdminApi } from '@/features/super-admin/api';
+import { superAdminApi, type AdminUser as ApiAdminUser } from '@/features/super-admin/api';
 import type { Institution } from '@/shared/types';
 import { Skeleton } from '@/shared/components/ui/Skeleton';
 
-interface AdminUser {
-  id: number;
-  name: string;
-  email: string;
-  role: string;
+// Narrows the API's AdminUser to the fields this page actually uses
+// (and makes is_active / institution_id required for the table view).
+type AdminUser = ApiAdminUser & {
   is_active: boolean;
   institution_id: number;
-}
+  role: string;
+};
 
 export default function SuperAdminCredentials() {
   const [admins, setAdmins] = useState<AdminUser[]>([]);
@@ -38,7 +37,7 @@ export default function SuperAdminCredentials() {
         superAdminApi.getAdmins(),
         superAdminApi.getInstitutions()
       ]);
-      setAdmins(adminData);
+      setAdmins(adminData as AdminUser[]);
       setInstitutions(instData);
     } catch (err) {
       console.error("Failed to fetch data:", err);
@@ -78,7 +77,10 @@ export default function SuperAdminCredentials() {
     e.preventDefault();
     if (!editingAdmin) return;
     try {
-      const updateData: any = { name: editName, email: editEmail };
+      const updateData: { name: string; email: string; password?: string } = {
+        name: editName,
+        email: editEmail,
+      };
       if (editPassword) updateData.password = editPassword;
       
       await superAdminApi.updateAdmin(editingAdmin.id, updateData);

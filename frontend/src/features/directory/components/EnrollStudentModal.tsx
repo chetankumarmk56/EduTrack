@@ -114,11 +114,11 @@ export default function EnrollStudentModal({ isOpen, onClose, selectedSchoolClas
         parent_email: form.parent_email.trim(),
         parent_phone: form.parent_phone.trim(),
         password: form.dob,
-        school_class_id: selectedSchoolClassId
-      } as any);
+        school_class_id: selectedSchoolClassId,
+      });
       handleClose();
       onEnrolled();
-    } catch (err: any) {
+    } catch (err) {
       const error = getErrorMessage(err);
       setErrors({ submit: error.message || "Failed to enroll student. Please check your input and try again." });
     } finally {

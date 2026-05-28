@@ -27,16 +27,31 @@ export default function TeacherTransport() {
   const { user } = useAuth();
   const { teacherDirectory } = useApp();
   
-  const currentTeacher = useMemo(() => teacherDirectory.find((t: any) => t.user_id === user?.id), [teacherDirectory, user]);
-  const assignments: any[] = currentTeacher?.assignments || [];
+  const currentTeacher = useMemo(() => teacherDirectory.find((t) => t.user_id === user?.id), [teacherDirectory, user]);
+  const assignments = currentTeacher?.assignments || [];
+
+  interface RosterStudent {
+    student_id: number;
+    student_name: string;
+    bus_id?: number | null;
+    bus_number?: string | null;
+    stop_name?: string | null;
+  }
+  interface TrackingContext {
+    id: number;
+    name: string;
+    bus_id?: number | null;
+    polyline?: { lat: number; lng: number }[];
+    stops?: { name: string; latitude: number; longitude: number; stop_order: number }[];
+  }
 
   const [activeClassId, setActiveClassId] = useState<number | null>(null);
-  const [roster, setRoster] = useState<any[]>([]);
+  const [roster, setRoster] = useState<RosterStudent[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   // Tracking state
   const [selectedBusId, setSelectedBusId] = useState<number | null>(null);
-  const [trackingContext, setTrackingContext] = useState<any>(null); 
+  const [trackingContext, setTrackingContext] = useState<TrackingContext | null>(null);
   const [busLocation, setBusLocation] = useState<{lat: number, lng: number} | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -77,7 +92,7 @@ export default function TeacherTransport() {
       const fetchContext = async () => {
           try {
               const allRoutes = await transportApi.getRoutes();
-              const assignedRoute = allRoutes.find((r: any) => r.bus_id === selectedBusId);
+              const assignedRoute = allRoutes.find((r) => r.bus_id === selectedBusId);
               if (assignedRoute) {
                  setTrackingContext(assignedRoute);
               }
@@ -121,7 +136,7 @@ export default function TeacherTransport() {
 
   // Convert polyline to leaflet format [lat, lng][]
   const routePositions: [number, number][] = trackingContext?.polyline 
-    ? trackingContext.polyline.map((p: any) => [p.lat, p.lng]) 
+    ? trackingContext.polyline.map((p) => [p.lat, p.lng]) 
     : [];
 
   const mapCenter: [number, number] = busLocation 
@@ -131,7 +146,7 @@ export default function TeacherTransport() {
   // Filter unique assignments for dropdown
   const uniqueClasses = useMemo(() => {
       const map = new Map();
-      assignments.forEach((a: any) => {
+      assignments.forEach((a) => {
           if (!map.has(a.school_class.id)) {
               map.set(a.school_class.id, a.school_class);
           }
@@ -183,7 +198,7 @@ export default function TeacherTransport() {
                }}
                className="bg-transparent text-sm font-black text-foreground focus:outline-none cursor-pointer pr-2 appearance-none"
             >
-               {uniqueClasses.map((cls: any) => (
+               {uniqueClasses.map((cls) => (
                  <option key={cls.id} value={cls.id} className="bg-card text-foreground font-sans">
                    {cls.grade.name}-{cls.section.name}
                  </option>
@@ -238,7 +253,7 @@ export default function TeacherTransport() {
                               
                               {student.bus_id && (
                                  <button 
-                                    onClick={() => setSelectedBusId(student.bus_id)}
+                                    onClick={() => setSelectedBusId(student.bus_id ?? null)}
                                     className={cn(
                                        "shrink-0 px-3 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all",
                                        selectedBusId === student.bus_id ? "bg-indigo-500 text-white" : "bg-white/5 text-text-secondary hover:bg-white/10 hover:text-white"

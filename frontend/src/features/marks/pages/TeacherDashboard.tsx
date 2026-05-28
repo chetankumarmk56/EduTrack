@@ -13,12 +13,13 @@ import { cn } from '@/shared/lib/utils';
 import { StaggerContainer, StaggerItem } from '@/shared/components/ui/PageWrapper';
 import { marksApi, type Exam } from '@/features/marks/api';
 import { directoryApi } from '@/features/directory/api';
+import type { Student } from '@/shared/types';
 
 interface ClassStudent {
   roll: number;
   student_id: number;
   name: string;
-  marks: { test: string | number; score: number }[];
+  marks: { test: string | number | undefined; score: number }[];
 }
 
 export default function TeacherDashboard() {
@@ -35,7 +36,7 @@ export default function TeacherDashboard() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Direct fetch — bypass AppContext cache so newly-enrolled students always show.
-  const [classDirectory, setClassDirectory] = useState<any[]>([]);
+  const [classDirectory, setClassDirectory] = useState<Student[]>([]);
   useEffect(() => {
     refreshDirectory(true);
     directoryApi.getMyStudents()
@@ -43,8 +44,8 @@ export default function TeacherDashboard() {
       .catch(err => console.error('[TeacherDashboard] getMyStudents failed', err));
   }, [refreshDirectory]);
 
-  const currentTeacher = useMemo(() => teacherDirectory.find((t: any) => t.user_id === user?.id), [teacherDirectory, user]);
-  const assignments: any[] = currentTeacher?.assignments || [];
+  const currentTeacher = useMemo(() => teacherDirectory.find((t) => t.user_id === user?.id), [teacherDirectory, user]);
+  const assignments = currentTeacher?.assignments || [];
 
   const [students, setStudents] = useState<ClassStudent[]>([]);
   const [exams, setExams] = useState<Exam[]>([]);
@@ -53,13 +54,13 @@ export default function TeacherDashboard() {
 
   const activeAssignment = useMemo(() => {
     if (!activeAssignmentId) return assignments[0];
-    return assignments.find((a: any) => a.id === activeAssignmentId) || assignments[0];
+    return assignments.find((a) => a.id === activeAssignmentId) || assignments[0];
   }, [assignments, activeAssignmentId]);
 
   // Set initial assignment OR reset if cached id doesn't belong to this teacher
   useEffect(() => {
     if (assignments.length === 0) return;
-    const stillValid = assignments.some((a: any) => a.id === activeAssignmentId);
+    const stillValid = assignments.some((a) => a.id === activeAssignmentId);
     if (!activeAssignmentId || !stillValid) {
       setActiveAssignmentId(assignments[0].id);
     }
@@ -108,9 +109,9 @@ export default function TeacherDashboard() {
       
       const marksData = await fetchClassMarks(subjectName, schoolClassId, activeExamId);
       
-      setStudents(filteredDB.map((student: any, idx: number) => {
-        const marksRecords = marksData.filter((d: any) => d.student_id === student.id);
-        const mappedMarks = marksRecords.map((m: any) => ({
+      setStudents(filteredDB.map((student, idx: number) => {
+        const marksRecords = marksData.filter((d) => d.student_id === student.id);
+        const mappedMarks = marksRecords.map((m) => ({
           test: m.exam_id || m.test_name,
           score: m.score
         }));
@@ -136,13 +137,13 @@ export default function TeacherDashboard() {
   const filteredDB = useMemo(() => {
     if (!activeAssignment) return [];
     const targetClassId = activeAssignment.school_class?.id;
-    const list = classDirectory.filter((s: any) => {
+    const list = classDirectory.filter((s) => {
       const sClassId = s.school_class?.id ?? s.school_class_id;
       return String(sClassId) === String(targetClassId);
     });
     // Order by backend-assigned roll_number; fall back to name for any rows
     // that haven't been backfilled yet.
-    return list.sort((a: any, b: any) => {
+    return list.sort((a, b) => {
       const ra = a.roll_number ?? Number.MAX_SAFE_INTEGER;
       const rb = b.roll_number ?? Number.MAX_SAFE_INTEGER;
       return ra - rb || a.name.localeCompare(b.name);
@@ -167,7 +168,7 @@ export default function TeacherDashboard() {
   //    this with real marks once an exam is selected.
   useEffect(() => {
     if (activeExamId) return; // marks fetch will handle this case
-    setStudents(filteredDB.map((s: any, idx: number) => ({
+    setStudents(filteredDB.map((s, idx: number) => ({
       roll: s.roll_number ?? idx + 1,
       student_id: s.id,
       name: s.name,
@@ -198,7 +199,16 @@ export default function TeacherDashboard() {
     if (!activeAssignment || !activeExamId) return;
     if (!window.confirm(`Synchronize marks for ${activeAssignment.subject_ref.name} (${activeExam?.name}) to the central ledger?`)) return;
 
-    const batchPayload: any[] = [];
+    interface BatchMarkPayload {
+        student_id: number;
+        subject: string;
+        subject_id?: number;
+        test_name?: string;
+        exam_id: number;
+        score: number;
+        max_score: number;
+    }
+    const batchPayload: BatchMarkPayload[] = [];
     students.forEach(student => {
         student.marks.forEach(mark => {
             if (mark.test === activeExamId && mark.score !== undefined && mark.score !== null) {
@@ -250,9 +260,9 @@ export default function TeacherDashboard() {
           marks: [...s.marks, { test: newExam.id, score: 0 }]
         })));
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
-      alert(`Ledger Error: ${err.message || 'Could not synchronize assessment structure.'}`);
+      alert(`Ledger Error: ${err instanceof Error ? err.message : 'Could not synchronize assessment structure.'}`);
     }
   };
   
@@ -263,7 +273,7 @@ export default function TeacherDashboard() {
     try {
       const updated = await marksApi.updateExam(examId, newName);
       setExams(prev => prev.map(e => e.id === examId ? updated : e));
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
       alert("Failed to update assessment designation.");
     }
@@ -278,7 +288,7 @@ export default function TeacherDashboard() {
       if (activeExamId === examId) {
         setActiveExamId(undefined);
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
       alert("Failed to decommission assessment.");
     }
@@ -328,9 +338,9 @@ export default function TeacherDashboard() {
                    onChange={(e) => setActiveAssignmentId(Number(e.target.value))}
                    className="bg-transparent text-sm font-black text-foreground focus:outline-none cursor-pointer pr-2 appearance-none"
                 >
-                  {assignments.map((a: any) => (
+                  {assignments.map((a) => (
                     <option key={a.id} value={a.id} className="bg-card text-foreground font-sans">
-                      {a.school_class.grade.name}-{a.school_class.section.name} ({a.subject_ref.name})
+                      {a.school_class.grade?.name}-{a.school_class.section?.name} ({a.subject_ref.name})
                     </option>
                   ))}
                 </select>

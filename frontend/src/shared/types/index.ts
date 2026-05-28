@@ -108,6 +108,10 @@ export interface Teacher {
   whatsapp?: string;
   is_active: boolean;
   assignments: TeacherAssignment[];
+  // Surfaced only on admin-scoped endpoints (GET /api/directory/teachers
+  // returns the seed password so admins can hand it to teachers). Optional
+  // because non-admin endpoints never include it.
+  plain_password?: string;
 }
 
 export interface Attendance {
@@ -140,6 +144,9 @@ export interface Mark {
   exam?: Exam;
   subject_ref?: Subject;
   subject?: string;
+  // Legacy fields some older endpoints still return.
+  test_name?: string;
+  created_at?: string;
 }
 
 export interface Event {
@@ -152,6 +159,10 @@ export interface Event {
   time: string;
   location: string;
   is_holiday?: boolean;
+  // Admin-only classification & audience targeting. Optional because parent
+  // / student endpoints never return them.
+  category?: string;
+  visibility?: { parents: boolean; teachers: boolean; students: boolean };
 }
 
 export interface Announcement {

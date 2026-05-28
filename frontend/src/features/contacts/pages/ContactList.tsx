@@ -67,7 +67,7 @@ export default function ContactList() {
     studentName: s.name,
     parentName: s.parent?.name,
     relation: s.parent?.relation,
-    phone: s.whatsapp || (s as any).alternate,  // whatsapp = primary parent contact, alternate = secondary
+    phone: s.whatsapp || s.alternate,  // whatsapp = primary parent contact, alternate = secondary
     classLevel: s.class_level || String(s.school_class?.grade?.name ?? ''),
     section: s.section || (s.school_class?.section?.name ?? ''),
   })), [students]);

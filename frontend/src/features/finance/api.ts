@@ -1,4 +1,22 @@
 import client from '@/shared/api/client';
+import type { ParentFeeItem } from '@/shared/types';
+
+export interface PaymentRecord {
+  id: number;
+  student_id: number;
+  amount: number;
+  status: string;
+  source?: string;             // 'razorpay' | 'manual' | etc.
+  fee_type?: string | null;
+  note?: string | null;
+  paid_at?: string | null;
+  created_at: string;
+  razorpay_payment_id?: string | null;
+  razorpay_order_id?: string | null;
+  // Legacy field — some older endpoints / payment rows expose the
+  // payment channel under this name ("ONLINE", "CASH", "UPI", ...).
+  payment_mode?: string | null;
+}
 
 export interface CategoryWiseDue {
   fee_type: string;
@@ -94,12 +112,12 @@ export const financeApi = {
   // },
 
   getParentFees: async () => {
-    const response = await client.get<any[]>('parent/fees');
+    const response = await client.get<ParentFeeItem[]>('parent/fees');
     return response.data;
   },
 
   getStudentPayments: async (studentId: number) => {
-    const response = await client.get<any[]>(`finance/payments/student/${studentId}`);
+    const response = await client.get<PaymentRecord[]>(`finance/payments/student/${studentId}`);
     return response.data;
   },
 

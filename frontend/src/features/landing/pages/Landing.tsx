@@ -5,10 +5,95 @@ import {
   useSpring,
   useTransform,
   useMotionTemplate,
+  type MotionValue,
 } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { GraduationCap, BookOpen, ShieldAlert, Sparkles, ArrowRight, Target, Star } from 'lucide-react';
 import { useAuth } from '@/shared/contexts/AuthContext';
+
+// Pre-compute decorative geometry once at module load. Math.random() during
+// render violates react-hooks/purity; pinning the values here also keeps the
+// floating shapes / particle field stable across re-renders.
+const SHAPE_SEEDS = Array.from({ length: 5 }, (_, i) => ({
+  xStart: Math.random() * 200 - 100,
+  xEnd: Math.random() * -200 + 100,
+  yStart: Math.random() * 200 - 100,
+  yEnd: Math.random() * -200 + 100,
+  rotateEnd: i * 90,
+  initialTop: Math.random() * 100,
+  initialLeft: Math.random() * 100,
+}));
+
+const PARTICLE_SEEDS = Array.from({ length: 14 }, () => ({
+  xStart: Math.random() * 100 - 50,
+  xEnd: Math.random() * -100 + 50,
+  translateYStart: Math.random() * 80,
+  translateYEnd: Math.random() * -80,
+  initialX: Math.random() * 100,
+  initialY: Math.random() * 100,
+  initialScale: Math.random() * 0.5 + 0.5,
+  animateYEnd: Math.random() * -100 - 50,
+  duration: Math.random() * 10 + 8,
+  delay: Math.random() * 5,
+}));
+
+function FloatingShape({
+  seed,
+  smoothX,
+  smoothY,
+}: {
+  seed: typeof SHAPE_SEEDS[number];
+  smoothX: MotionValue<number>;
+  smoothY: MotionValue<number>;
+}) {
+  const x = useTransform(smoothX, [-0.5, 0.5], [seed.xStart, seed.xEnd]);
+  const y = useTransform(smoothY, [-0.5, 0.5], [seed.yStart, seed.yEnd]);
+  const rotate = useTransform(smoothX, [-0.5, 0.5], [0, seed.rotateEnd]);
+  return (
+    <motion.div
+      style={{ x, y, rotate }}
+      className="absolute z-[2] opacity-20 pointer-events-none"
+      initial={{ top: `${seed.initialTop}%`, left: `${seed.initialLeft}%` }}
+    >
+      <div className="w-32 h-32 border border-white/10 rounded-3xl rotate-45 backdrop-blur-sm" />
+    </motion.div>
+  );
+}
+
+function NeuralParticle({
+  seed,
+  smoothX,
+  smoothY,
+}: {
+  seed: typeof PARTICLE_SEEDS[number];
+  smoothX: MotionValue<number>;
+  smoothY: MotionValue<number>;
+}) {
+  const x = useTransform(smoothX, [-0.5, 0.5], [seed.xStart, seed.xEnd]);
+  const translateY = useTransform(smoothY, [-0.5, 0.5], [seed.translateYStart, seed.translateYEnd]);
+  return (
+    <motion.div
+      initial={{
+        x: `${seed.initialX}%`,
+        y: `${seed.initialY}%`,
+        opacity: 0,
+        scale: seed.initialScale,
+      }}
+      style={{ x, translateY }}
+      animate={{
+        y: [null, `${seed.animateYEnd}%`],
+        opacity: [0, 0.8, 0],
+      }}
+      transition={{
+        duration: seed.duration,
+        repeat: Infinity,
+        ease: 'easeInOut',
+        delay: seed.delay,
+      }}
+      className="absolute h-1 w-1 rounded-full bg-indigo-400/30 shadow-[0_0_12px_rgba(129,140,248,0.5)]"
+    />
+  );
+}
 
 export default function Landing() {
   const navigate = useNavigate();
@@ -53,8 +138,6 @@ export default function Landing() {
   // Dynamic Background Gradient based on mouse
   const bgGradient = useMotionTemplate`radial-gradient(circle at ${useTransform(smoothX, [-0.5, 0.5], [20, 80])}% ${useTransform(smoothY, [-0.5, 0.5], [20, 80])}%, rgba(99,102,241,0.08) 0%, transparent 50%)`;
 
-  const particles = Array.from({ length: 14 });
-
   const portalCards = [
     { 
       title: "Family Hub", 
@@ -88,7 +171,7 @@ export default function Landing() {
     }
   ];
 
-  const handlePortalClick = async (item: any) => {
+  const handlePortalClick = async (item: { path: string; role: string }) => {
     // If user is logged in with a different role, log them out first to prevent GuestRoute loops.
     // Await so the server-side cookie clear lands before we navigate —
     // otherwise the cached session auto-logs them straight into their
@@ -149,48 +232,14 @@ export default function Landing() {
       </div>
 
       {/* Floating Interactive Geometric Shapes */}
-      {[...Array(5)].map((_, i) => (
-        <motion.div
-          key={i}
-          style={{
-            x: useTransform(smoothX, [-0.5, 0.5], [Math.random() * 200 - 100, Math.random() * -200 + 100]),
-            y: useTransform(smoothY, [-0.5, 0.5], [Math.random() * 200 - 100, Math.random() * -200 + 100]),
-            rotate: useTransform(smoothX, [-0.5, 0.5], [0, i * 90])
-          }}
-          className="absolute z-[2] opacity-20 pointer-events-none"
-          initial={{ top: Math.random() * 100 + "%", left: Math.random() * 100 + "%" }}
-        >
-          <div className="w-32 h-32 border border-white/10 rounded-3xl rotate-45 backdrop-blur-sm" />
-        </motion.div>
+      {SHAPE_SEEDS.map((seed, i) => (
+        <FloatingShape key={i} seed={seed} smoothX={smoothX} smoothY={smoothY} />
       ))}
 
       {/* Neural Mesh Particle System */}
       <div className="absolute inset-0 z-10 pointer-events-none">
-        {particles.map((_, i) => (
-          <motion.div
-            key={i}
-            initial={{ 
-              x: Math.random() * 100 + "%", 
-              y: Math.random() * 100 + "%",
-              opacity: 0,
-              scale: Math.random() * 0.5 + 0.5
-            }}
-            style={{
-              x: useTransform(smoothX, [-0.5, 0.5], [Math.random() * 100 - 50, Math.random() * -100 + 50]),
-              translateY: useTransform(smoothY, [-0.5, 0.5], [Math.random() * 80, Math.random() * -80])
-            }}
-            animate={{ 
-              y: [null, Math.random() * -100 - 50 + "%"],
-              opacity: [0, 0.8, 0],
-            }}
-            transition={{ 
-              duration: Math.random() * 10 + 8, 
-              repeat: Infinity, 
-              ease: "easeInOut",
-              delay: Math.random() * 5
-            }}
-            className="absolute h-1 w-1 rounded-full bg-indigo-400/30 shadow-[0_0_12px_rgba(129,140,248,0.5)]"
-          />
+        {PARTICLE_SEEDS.map((seed, i) => (
+          <NeuralParticle key={i} seed={seed} smoothX={smoothX} smoothY={smoothY} />
         ))}
       </div>
 

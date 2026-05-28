@@ -9,6 +9,8 @@ import {
 import { academicApi } from '@/features/academics/api';
 import { useApp } from '@/shared/contexts/AppContext';
 import { cn } from '@/shared/lib/utils';
+import { getErrorMessage } from '@/shared/lib/errorHandler';
+import type { Grade, Subject } from '@/shared/types';
 
 export default function AdminClasses() {
   const { grades: classes, sections, subjects, refreshDirectory } = useApp();
@@ -18,8 +20,8 @@ export default function AdminClasses() {
   const [isAddingSection, setIsAddingSection] = useState(false);
   const [isAddingSubject, setIsAddingSubject] = useState(false);
   
-  const [editingSubject, setEditingSubject] = useState<any | null>(null);
-  const [editingClass, setEditingClass] = useState<any | null>(null);
+  const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
+  const [editingClass, setEditingClass] = useState<Grade | null>(null);
   
   const [classForm, setClassForm] = useState({ name: '', level: 0, tuition_fee: 0, fee_due_date: '' });
   const [sectionName, setSectionName] = useState('');
@@ -84,9 +86,9 @@ export default function AdminClasses() {
       setIsAddingSubject(false);
       setSubjectForm({ name: '', code: '' });
       await refreshDirectory(true);
-    } catch (err: any) { 
+    } catch (err) { 
       console.error(err);
-      alert(err.response?.data?.detail || "Failed to initialize discipline.");
+      alert(getErrorMessage(err).message || "Failed to initialize discipline.");
     }
   };
 
@@ -111,9 +113,9 @@ export default function AdminClasses() {
       if (type === 'section') await academicApi.deleteSection(id);
       if (type === 'subject') await academicApi.deleteSubject(id);
       await refreshDirectory(true);
-    } catch (err: any) { 
+    } catch (err) { 
       console.error(err);
-      alert(err.response?.data?.detail || "Action blocked. Ensure no active assignments or students exist.");
+      alert(getErrorMessage(err).message || "Action blocked. Ensure no active assignments or students exist.");
     }
   };
 
@@ -155,7 +157,7 @@ export default function AdminClasses() {
 
           <div className="flex flex-col gap-3">
             <AnimatePresence mode="popLayout">
-              {classes.sort((a,b) => a.level - b.level).map((c: any) => (
+              {classes.sort((a,b) => a.level - b.level).map((c) => (
                 <motion.div
                   layout
                   key={c.id}
@@ -277,7 +279,7 @@ export default function AdminClasses() {
               {selectedGradeId ? (
                 <>
                   <AnimatePresence mode="popLayout">
-                    {filteredSections.map((s: any) => (
+                    {filteredSections.map((s) => (
                       <motion.div layout key={s.id} className="obsidian-card group p-6 flex items-center justify-between border-glass-border hover:border-brand-indigo/30 transition-all shadow-sm bg-white/[0.01]">
                         <div className="flex items-center gap-4">
                           <div className="w-14 h-14 rounded-2xl bg-white/5 border border-glass-border flex items-center justify-center font-black text-2xl italic group-hover:text-brand-indigo group-hover:scale-110 transition-all shadow-inner">
@@ -349,7 +351,7 @@ export default function AdminClasses() {
 
           <div className="grid grid-cols-1 gap-4">
             <AnimatePresence mode="popLayout">
-              {subjects.map((sub: any) => (
+              {subjects.map((sub) => (
                 <motion.div layout key={sub.id} className="obsidian-card group p-6 flex items-center justify-between border-glass-border hover:border-brand-indigo/30 transition-all shadow-sm bg-white/[0.01]">
                   <div className="flex items-center gap-5">
                     <div className="w-14 h-14 rounded-2xl bg-brand-indigo/5 border border-brand-indigo/10 flex items-center justify-center transition-all group-hover:rotate-6 group-hover:bg-brand-indigo/10 shadow-inner">

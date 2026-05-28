@@ -6,6 +6,7 @@ import {
 import toast from 'react-hot-toast';
 import { cn } from '@/shared/lib/utils';
 import { financeApi } from '@/features/finance/api';
+import { getErrorMessage } from '@/shared/lib/errorHandler';
 import { Skeleton } from '@/shared/components/ui/Skeleton';
 import type {
   LedgerEntry, LedgerListParams, LedgerSummary, LedgerFilterOptions,
@@ -131,7 +132,7 @@ export default function PaymentLedger() {
           return { ...prev, date_from: earliestStr, date_to: latestStr };
         });
       }
-    } catch (err: any) {
+    } catch (err) {
       // Non-fatal — falls back to month-to-date defaults and empty dropdowns
       console.warn('Failed to load ledger facets', err);
     }
@@ -146,8 +147,8 @@ export default function PaymentLedger() {
       setEntries(data.items);
       setSummary(data.summary);
       setTotal(data.total);
-    } catch (err: any) {
-      setError(err?.response?.data?.detail || err?.message || 'Failed to load ledger.');
+    } catch (err) {
+      setError(getErrorMessage(err).message || 'Failed to load ledger.');
     } finally {
       setIsLoading(false);
     }
@@ -217,8 +218,8 @@ export default function PaymentLedger() {
       const blob = await financeApi.downloadLedgerReceipt(entry.id);
       const filename = `${entry.receipt_number || `receipt-${entry.id}`}.pdf`;
       downloadBlob(blob, filename);
-    } catch (err: any) {
-      const detail = err?.response?.data?.detail || err?.message || 'Failed to download receipt.';
+    } catch (err) {
+      const detail = getErrorMessage(err).message || 'Failed to download receipt.';
       toast.error(detail);
     } finally {
       setDownloadingReceiptId(null);
@@ -233,6 +234,9 @@ export default function PaymentLedger() {
     setIsExporting(format);
     setError(null);
     try {
+      // date_from / date_to are required at this point (we returned above
+       // when either was empty), so the cast back to LedgerExportParams is
+       // safe even though stripEmpty's return is Partial<T>.
       const blob = await financeApi.exportLedger(
         stripEmpty({
           date_from: filters.date_from,
@@ -244,12 +248,12 @@ export default function PaymentLedger() {
           academic_year: filters.academic_year,
           student_id: filters.student_id,
           class_id: filters.class_id,
-        }) as any,
+        }) as Parameters<typeof financeApi.exportLedger>[0],
       );
       const ext = format === 'excel' ? 'xlsx' : format;
       downloadBlob(blob, `finance-ledger_${filters.date_from}_${filters.date_to}.${ext}`);
-    } catch (err: any) {
-      setError(err?.response?.data?.detail || err?.message || `Failed to export ${format}.`);
+    } catch (err) {
+      setError(getErrorMessage(err).message || `Failed to export ${format}.`);
     } finally {
       setIsExporting(null);
     }

@@ -70,6 +70,17 @@ export default function PaymentRequestForm({
     return URL.createObjectURL(state.screenshot);
   }, [state.screenshot]);
 
+  // Pinned upper bound for the transaction date input. Computed once at mount
+  // so the date picker's `max` attribute is stable instead of drifting on
+  // every render. Being a few seconds stale is fine for a "yesterday or
+  // earlier" sanity guard.
+  const maxTransactionDate = useMemo(
+    // Date.now is the whole point; useMemo with empty deps means we read it once at mount.
+    // eslint-disable-next-line react-hooks/purity
+    () => toLocalDatetimeInputValue(new Date(Date.now() + 1000 * 60 * 60 * 24)),
+    []
+  );
+
   useEffect(() => {
     return () => {
       if (screenshotPreviewUrl) URL.revokeObjectURL(screenshotPreviewUrl);
@@ -227,7 +238,7 @@ export default function PaymentRequestForm({
             <input
               type="datetime-local"
               value={state.transaction_at}
-              max={toLocalDatetimeInputValue(new Date(Date.now() + 1000 * 60 * 60 * 24))}
+              max={maxTransactionDate}
               onChange={(e) => set('transaction_at', e.target.value)}
               onBlur={() => handleBlur('transaction_at')}
               className={cn(fieldClass('transaction_at'), 'pl-10')}

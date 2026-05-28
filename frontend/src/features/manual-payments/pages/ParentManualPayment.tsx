@@ -59,7 +59,7 @@ export default function ParentManualPayment() {
         setStudents(studentsRes);
         setSchoolInfo(schoolRes);
         setHistory(historyRes?.items || []);
-        setDues(duesRes as any);
+        setDues(duesRes as Array<{ student_id: number; student_name: string; total_due: number; total_paid: number }>);
       } finally {
         if (!cancelled) setIsLoading(false);
       }

@@ -16,7 +16,9 @@ import type { Mark } from '@/shared/types';
 export interface MarkCreate {
     student_id: number;
     subject: string;
-    test_name: string;
+    test_name?: string;
+    subject_id?: number;
+    exam_id?: number;
     score: number;
     max_score: number;
 }
@@ -36,12 +38,29 @@ export interface ExamCreate {
     date?: string;
 }
 
+export interface LeaderboardEntry {
+    student_id: number;
+    name: string;
+    average: number;
+    rank: number;
+    percentage?: number;
+}
+
+export interface RankingsResponse {
+    class_rank?: number;
+    class_total?: number;
+    grade_rank?: number;
+    grade_total?: number;
+    class_leaderboard?: LeaderboardEntry[];
+    grade_leaderboard?: LeaderboardEntry[];
+}
+
 export const marksApi = {
     /**
      * Fetch formal assessment records for a class/subject.
      */
     getExams: async (classId?: number, subjectId?: number) => {
-        const params: any = {};
+        const params: Record<string, number> = {};
         if (classId) params.school_class_id = classId;
         if (subjectId) params.subject_id = subjectId;
         const response = await client.get<Exam[]>('marks/exams', { params });
@@ -63,7 +82,7 @@ export const marksApi = {
      * Create a formal assessment record.
      */
     createExam: async (exam: ExamCreate, classId?: number, subjectId?: number) => {
-        const params: any = {};
+        const params: Record<string, number> = {};
         if (classId) params.school_class_id = classId;
         if (subjectId) params.subject_id = subjectId;
         const response = await client.post<Exam>('marks/exams', exam, { params });
@@ -102,7 +121,7 @@ export const marksApi = {
      * Fetch marks for a specific subject/class (Teacher view).
      */
     getClassMarks: async (subject: string, schoolClassId?: number, examId?: number) => {
-        const params: any = schoolClassId ? { school_class_id: schoolClassId } : {};
+        const params: Record<string, number> = schoolClassId ? { school_class_id: schoolClassId } : {};
         if (examId) params.exam_id = examId;
         const response = await client.get<Mark[]>(`marks/subject/${subject}`, { params });
         return response.data;
@@ -140,7 +159,7 @@ export const marksApi = {
      * Fetch dynamic rankings for a student.
      */
     getRankings: async (studentId: number) => {
-        const response = await client.get(`marks/${studentId}/rankings`);
+        const response = await client.get<RankingsResponse>(`marks/${studentId}/rankings`);
         return response.data;
     }
 };

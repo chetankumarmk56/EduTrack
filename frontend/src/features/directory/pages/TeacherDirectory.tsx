@@ -5,9 +5,10 @@ import {
   Key, Shield, Mail, Phone, BookOpen, X, Search,
   School, CheckCircle, AlertCircle, Users, ChevronDown, Loader
 } from 'lucide-react';
-import { directoryApi } from '@/features/directory/api';
+import { directoryApi, type TeacherWithPassword } from '@/features/directory/api';
 import { useApp } from '@/shared/contexts/AppContext';
 import { cn } from '@/shared/lib/utils';
+import { getErrorMessage } from '@/shared/lib/errorHandler';
 
 export default function TeacherDirectory() {
   const {
@@ -23,7 +24,7 @@ export default function TeacherDirectory() {
   }, []);
 
   const [isAdding, setIsAdding] = useState(false);
-  const [editingTeacher, setEditingTeacher] = useState<any | null>(null);
+  const [editingTeacher, setEditingTeacher] = useState<TeacherWithPassword | null>(null);
   const [isAssigningId, setIsAssigningId] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -47,7 +48,7 @@ export default function TeacherDirectory() {
   const filteredTeachers = useMemo(() => {
     if (!searchTerm.trim()) return teachers;
     const low = searchTerm.toLowerCase();
-    return teachers.filter((t: any) =>
+    return teachers.filter((t) =>
       t.name.toLowerCase().includes(low) ||
       t.email?.toLowerCase().includes(low) ||
       t.phone?.includes(low)
@@ -64,8 +65,8 @@ export default function TeacherDirectory() {
       setForm({ name: '', email: '', phone: '', password: '' });
       refreshTeachers();
       setTimeout(() => { setFormSuccess(false); setIsAdding(false); }, 1200);
-    } catch (err: any) {
-      setFormError(err?.response?.data?.detail || err?.message || 'Failed to add teacher.');
+    } catch (err) {
+      setFormError(getErrorMessage(err).message || 'Failed to add teacher.');
     } finally {
       setIsSubmittingForm(false);
     }
@@ -84,8 +85,8 @@ export default function TeacherDirectory() {
       });
       setEditingTeacher(null);
       refreshTeachers();
-    } catch (err: any) {
-      setEditError(err?.response?.data?.detail || err?.message || 'Failed to update teacher.');
+    } catch (err) {
+      setEditError(getErrorMessage(err).message || 'Failed to update teacher.');
     } finally {
       setIsSubmittingEdit(false);
     }
@@ -111,8 +112,8 @@ export default function TeacherDirectory() {
       });
       setAssignmentForm({ school_class_id: 0, subject_id: 0 });
       await refreshTeachers();
-    } catch (err: any) {
-      setAssignError(err?.response?.data?.detail || err?.message || 'Failed to add assignment.');
+    } catch (err) {
+      setAssignError(getErrorMessage(err).message || 'Failed to add assignment.');
     } finally {
       setIsSubmittingAssign(false);
     }
@@ -126,7 +127,7 @@ export default function TeacherDirectory() {
   };
 
   const totalAssignments = useMemo(() =>
-    teachers.reduce((sum: number, t: any) => sum + (t.assignments?.length ?? 0), 0),
+    teachers.reduce((sum, t) => sum + (t.assignments?.length ?? 0), 0),
     [teachers]
   );
 
@@ -217,7 +218,7 @@ export default function TeacherDirectory() {
           ))
         ) : (
           <AnimatePresence mode="popLayout">
-            {filteredTeachers.map((t: any) => (
+            {filteredTeachers.map((t) => (
               <motion.div
                 layout
                 key={t.id}
@@ -293,7 +294,7 @@ export default function TeacherDirectory() {
                     </div>
 
                     <div className="flex flex-wrap gap-1.5 min-h-[28px]">
-                      {t.assignments?.map((a: any) => (
+                      {t.assignments?.map((a) => (
                         <div key={a.id} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/5 border border-glass-border group/tag hover:border-brand-indigo/30 transition-all text-[10px] font-bold">
                           <span className="uppercase tracking-tight">
                             {a.school_class.display_name} · {a.subject_ref.name}
@@ -473,11 +474,11 @@ export default function TeacherDirectory() {
                     Current Assignments ({isAssigning.assignments?.length ?? 0})
                   </h4>
                   <div className="space-y-2">
-                    {isAssigning.assignments?.map((a: any) => (
+                    {isAssigning.assignments?.map((a) => (
                       <div key={a.id} className="flex items-center justify-between p-4 rounded-xl bg-white/[0.02] border border-glass-border hover:border-brand-indigo/20 transition-all group/item">
                         <div className="flex items-center gap-3">
                           <div className="w-9 h-9 rounded-lg bg-brand-indigo/5 border border-brand-indigo/15 flex items-center justify-center font-black text-brand-indigo text-xs">
-                            {a.school_class.display_name.split('-').pop()}
+                            {a.school_class.display_name?.split('-').pop()}
                           </div>
                           <div>
                             <p className="text-sm font-black uppercase tracking-tight">{a.subject_ref.name}</p>

@@ -11,6 +11,7 @@ import { getErrorMessage } from '@/shared/lib/errorHandler';
 import StudentCard from '@/features/directory/components/StudentCard';
 import EnrollStudentModal from '@/features/directory/components/EnrollStudentModal';
 import EditStudentModal from '@/features/directory/components/EditStudentModal';
+import type { Student } from '@/shared/types';
 
 export default function StudentDirectory() {
   const {
@@ -46,7 +47,7 @@ export default function StudentDirectory() {
   });
   const [searchTerm, setSearchTerm] = useState('');
   const [isAdding, setIsAdding] = useState(false);
-  const [editingStudent, setEditingStudent] = useState<any | null>(null);
+  const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
@@ -79,7 +80,7 @@ export default function StudentDirectory() {
   const filteredStudents = useMemo(() => {
     if (!selectedSchoolClassId) return [];
 
-    let list = students.filter((s: any) => {
+    const list = students.filter((s) => {
       return s.school_class_id === selectedSchoolClassId ||
         s.school_class?.id === selectedSchoolClassId ||
         s.classroom?.id === selectedSchoolClassId;
@@ -109,7 +110,7 @@ export default function StudentDirectory() {
 
   const totalInClass = useMemo(() => {
     if (!selectedSchoolClassId) return 0;
-    return students.filter((s: any) =>
+    return students.filter((s) =>
       s.school_class_id === selectedSchoolClassId ||
       s.school_class?.id === selectedSchoolClassId ||
       s.classroom?.id === selectedSchoolClassId
@@ -123,7 +124,7 @@ export default function StudentDirectory() {
     try {
       await directoryApi.deleteStudent(id);
       refreshStudents();
-    } catch (err: any) {
+    } catch (err) {
       const error = getErrorMessage(err);
       setDeleteError(error.message || 'Failed to remove student. Please try again.');
     } finally {
@@ -308,7 +309,7 @@ export default function StudentDirectory() {
                 ))
               ) : (
                 <AnimatePresence mode="popLayout">
-                  {filteredStudents.map((s: any) => (
+                  {filteredStudents.map((s) => (
                     <StudentCard
                       key={s.id}
                       student={s}

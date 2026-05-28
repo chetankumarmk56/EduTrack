@@ -54,7 +54,7 @@ const fromSettings = (s: InstitutionPaymentSettings): FormState => ({
   payment_instructions: s.payment_instructions || '',
 });
 
-const UPI_REGEX = /^[\w.\-]{2,}@[a-zA-Z]{2,}$/;
+const UPI_REGEX = /^[\w.-]{2,}@[a-zA-Z]{2,}$/;
 const IFSC_REGEX = /^[A-Z]{4}0[A-Z0-9]{6}$/;
 
 function validate(state: FormState): Partial<Record<keyof FormState, string>> {

@@ -7,6 +7,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { getPerformanceStyles } from '@/shared/lib/styleUtils';
 import { StaggerContainer, StaggerItem } from '@/shared/components/ui/PageWrapper';
 import { cn } from '@/shared/lib/utils';
+import type { RankingsResponse, LeaderboardEntry } from '@/features/marks/api';
 
 // Reusable Animated Counter
 function AnimatedCounter({ value, suffix = '', className = '' }: { value: number; suffix?: string; className?: string }) {
@@ -16,7 +17,7 @@ function AnimatedCounter({ value, suffix = '', className = '' }: { value: number
 
    useEffect(() => {
       if (!isInView) return;
-      let start = 0;
+      const start = 0;
       const end = value;
       const duration = 1500;
       const startTime = performance.now();
@@ -48,9 +49,9 @@ export default function Academics() {
 
    const [selectedSubjectName, setSelectedSubjectName] = useState<string | null>(null);
 
-   const activeStudent = studentProfile || classDirectory.find((s: any) => s.user_id === user?.id || s.id === user?.id);
+   const activeStudent = studentProfile || classDirectory.find((s) => s.user_id === user?.id || s.id === user?.id);
    const studentClass = activeStudent?.school_class || activeStudent?.classroom;
-   const [rankings, setRankings] = useState<any>(null);
+   const [rankings, setRankings] = useState<RankingsResponse | null>(null);
 
    useEffect(() => {
       if (activeStudent?.id) {
@@ -63,8 +64,8 @@ export default function Academics() {
    useEffect(() => {
       const classId = studentClass?.id || activeStudent?.class_level;
       if (activeStudent?.id && classId && (marks || []).length > 0) {
-         const subjects = Array.from(new Set(marks.map((m: any) => m.subject_ref?.name || m.subject).filter(Boolean)));
-         subjects.forEach((subj: any) => {
+         const subjects = Array.from(new Set(marks.map((m) => m.subject_ref?.name || m.subject).filter(Boolean))) as string[];
+         subjects.forEach((subj) => {
             fetchSubjectSummary(subj, Number(classId));
          });
       }
@@ -74,15 +75,17 @@ export default function Academics() {
       // Filter marks to only include those from the current class that are linked to actual exams
       // This ensures consistency with the Teacher's Marks Ledger
       const currentClassId = studentClass?.id || activeStudent?.school_class_id;
-      const validMarks = marks.filter((m: any) => 
+      const validMarks = marks.filter((m) =>
          m.exam_id && (m.school_class_id === currentClassId || !m.school_class_id)
       );
 
-      const subjects = Array.from(new Set(validMarks.map((m: any) => m.subject_ref?.name || m.subject).filter(Boolean)));
-      return subjects.map((subj: any) => {
-         const subjMarks = validMarks.filter((m: any) => (m.subject_ref?.name || m.subject) === subj);
-         const totalScore = subjMarks.reduce((a: number, b: any) => a + (b.score || 0), 0);
-         const totalMax = subjMarks.reduce((a: number, b: any) => a + (b.max_score || 0), 0);
+      const subjects = Array.from(
+         new Set(validMarks.map((m) => m.subject_ref?.name || m.subject).filter(Boolean))
+      ) as string[];
+      return subjects.map((subj) => {
+         const subjMarks = validMarks.filter((m) => (m.subject_ref?.name || m.subject) === subj);
+         const totalScore = subjMarks.reduce((a, b) => a + (b.score || 0), 0);
+         const totalMax = subjMarks.reduce((a, b) => a + (b.max_score || 0), 0);
          const avg = totalMax > 0 ? Math.round((totalScore / totalMax) * 100) : 0;
 
          // Calculate Class Average via Summary
@@ -90,8 +93,8 @@ export default function Academics() {
          const summary = subjectSummaries[key];
          const cAvg = summary?.average || 0;
 
-         const teacher = teacherDirectory.find((t: any) =>
-            t.assignments?.some((a: any) => {
+         const teacher = teacherDirectory.find((t) =>
+            t.assignments?.some((a) => {
                const aClass = a.school_class || a.classroom;
                const aGrade = aClass?.grade?.level || aClass?.grade?.name || a.class_level;
                const aSection = aClass?.section?.name || a.section;
@@ -115,7 +118,7 @@ export default function Academics() {
             recent: subjMarks.length > 0 ? subjMarks[subjMarks.length - 1].score : 0,
             allMarks: subjMarks
          };
-      }).sort((a: any, b: any) => b.average - a.average);
+      }).sort((a, b) => b.average - a.average);
    }, [marks, subjectSummaries, teacherDirectory, activeStudent, studentClass]);
 
    const selectedSubjectData = useMemo(() => {
@@ -128,7 +131,7 @@ export default function Academics() {
 
       const topSubj = subjectPerformance[0];
       const lowSubj = subjectPerformance[subjectPerformance.length - 1];
-      const overallAvg = Math.round(subjectPerformance.reduce((a: number, b: any) => a + b.average, 0) / subjectPerformance.length);
+      const overallAvg = Math.round(subjectPerformance.reduce((a, b) => a + b.average, 0) / subjectPerformance.length);
 
       if (overallAvg >= 90) return `Exceptional mastery across all domains. ${activeStudent?.name}'s synthesis of ${topSubj.subject} principles is particularly noteworthy. Recommend advancing to extended curriculum challenges.`;
       if (overallAvg >= 75) return `${activeStudent?.name} demonstrates robust comprehension in ${topSubj.subject}. A strategic focus on the qualitative nuances of ${lowSubj.subject} could further optimize their academic trajectory.`;
@@ -136,14 +139,14 @@ export default function Academics() {
    }, [subjectPerformance, activeStudent]);
 
    const chartData = useMemo(() => {
-      return subjectPerformance.map((s: any) => ({
+      return subjectPerformance.map((s) => ({
          name: s.subject,
          Score: s.average,
          Avg: s.classAverage
       }));
    }, [subjectPerformance]);
 
-   const [selectedLeaderboard, setSelectedLeaderboard] = useState<any[] | null>(null);
+   const [selectedLeaderboard, setSelectedLeaderboard] = useState<LeaderboardEntry[] | null>(null);
    const [leaderboardTitle, setLeaderboardTitle] = useState<string>('');
 
    if (!user?.id) return null;
@@ -161,7 +164,7 @@ export default function Academics() {
                <div className="flex gap-4">
                   <motion.button 
                      onClick={() => {
-                        setSelectedLeaderboard(rankings?.class_leaderboard);
+                        setSelectedLeaderboard(rankings?.class_leaderboard ?? null);
                         setLeaderboardTitle('Section Rankings');
                      }}
                      whileHover={{ y: -5 }}
@@ -179,7 +182,7 @@ export default function Academics() {
 
                   <motion.button 
                      onClick={() => {
-                        setSelectedLeaderboard(rankings?.grade_leaderboard);
+                        setSelectedLeaderboard(rankings?.grade_leaderboard ?? null);
                         setLeaderboardTitle('Grade-Wide Rankings');
                      }}
                      whileHover={{ y: -5 }}
@@ -236,7 +239,7 @@ export default function Academics() {
                               itemStyle={{ fontSize: '14px', fontWeight: 900, textTransform: 'uppercase' }}
                            />
                            <Bar name="Your Child" dataKey="Score" radius={[12, 12, 0, 0]} barSize={36}>
-                              {chartData.map((entry: any, index: number) => (
+                              {chartData.map((entry, index) => (
                                  <Cell key={`cell-${index}`} fill={entry.Score >= 80 ? 'var(--primary)' : 'rgba(79,70,229,0.5)'} />
                               ))}
                            </Bar>
@@ -281,7 +284,7 @@ export default function Academics() {
                </div>
 
                <StaggerContainer className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-                  {subjectPerformance.map((subj: any) => {
+                  {subjectPerformance.map((subj) => {
                      const styles = getPerformanceStyles(subj.average, 100);
 
                      return (
@@ -385,7 +388,7 @@ export default function Academics() {
                         <div className="space-y-4">
                            <h4 className="text-sm font-black text-foreground uppercase tracking-widest px-2">History Log</h4>
                            <div className="space-y-3">
-                              {selectedSubjectData.allMarks.map((m: any, i: number) => (
+                              {selectedSubjectData.allMarks.map((m, i) => (
                                  <motion.div
                                     key={i}
                                     initial={{ opacity: 0, x: -10 }}

@@ -40,9 +40,9 @@ export default function FinanceDashboard() {
       setSummary(sumData);
       setDefaulters(defData);
       setClassBreakdown(cbData);
-    } catch (err: any) {
+    } catch (err) {
       console.error("Dashboard Data Fetch Error:", err);
-      setLoadError(err?.message || 'Failed to load financial data. Please refresh.');
+      setLoadError(err instanceof Error ? err.message : 'Failed to load financial data. Please refresh.');
     } finally {
       setIsLoading(false);
     }
@@ -56,8 +56,8 @@ export default function FinanceDashboard() {
       const result = await financeApi.backfillFees();
       setSyncResult(result.message);
       loadAllData();
-    } catch (err: any) {
-      setSyncResult(`Error: ${err.message || 'Sync failed'}`);
+    } catch (err) {
+      setSyncResult(`Error: ${err instanceof Error ? err.message : 'Sync failed'}`);
     } finally {
       setIsSyncing(false);
     }

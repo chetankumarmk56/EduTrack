@@ -11,7 +11,7 @@ export default function TeacherProfile() {
   const teacherIdentity = user?.id; // Assuming user.id is the teacher identity
 
   const currentTeacher = useMemo(() => 
-    teacherDirectory.find((t: any) => t.user_id === teacherIdentity),
+    teacherDirectory.find((t) => t.user_id === teacherIdentity),
     [teacherDirectory, teacherIdentity]
   );
 
@@ -21,10 +21,10 @@ export default function TeacherProfile() {
   const studentCount = useMemo(() => {
     if (!assignments.length) return 0;
     const studentIds = new Set<number>();
-    assignments.forEach((a: any) => {
+    assignments.forEach((a) => {
       classDirectory
-        .filter((s: any) => s.school_class_id === a.school_class_id)
-        .forEach((s: any) => studentIds.add(s.id));
+        .filter((s) => s.school_class_id === a.school_class_id)
+        .forEach((s) => studentIds.add(s.id));
     });
     return studentIds.size;
   }, [assignments, classDirectory]);
@@ -38,7 +38,7 @@ export default function TeacherProfile() {
     );
   }
 
-  const initials = currentTeacher.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase();
+  const initials = currentTeacher.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
@@ -129,9 +129,9 @@ export default function TeacherProfile() {
                   <p>No class assignments found. Contact administration.</p>
                 </div>
               ) : (
-                assignments.map((a: any, i: number) => {
+                assignments.map((a, i) => {
                   const classStudents = classDirectory.filter(
-                    (s: any) => s.school_class_id === a.school_class_id
+                    (s) => s.school_class_id === a.school_class_id
                   );
                   return (
                     <motion.div 

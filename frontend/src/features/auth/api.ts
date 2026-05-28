@@ -2,6 +2,21 @@ import client from '@/shared/api/client';
 import { getCurrentPortalRole } from '@/shared/lib/portalRole';
 import type { AuthResponse, User } from '@/shared/types';
 
+/**
+ * Discriminator-free union of all credential shapes the login dispatcher
+ * accepts. The dispatcher inspects which keys are present to choose the
+ * correct backend endpoint, so optional fields are how we route.
+ */
+export interface LoginCredentials {
+  username?: string;          // admin / super-admin (OAuth2 form login)
+  email?: string;             // teacher (email + password)
+  password?: string;
+  name?: string;              // student
+  school_class_id?: number;   // student
+  dob?: string;               // student / parent
+  parent_phone?: string;      // parent (alternate flow uses parentLogin())
+}
+
 export const authApi = {
   /**
    * Unified login dispatcher for all portals.
@@ -11,14 +26,14 @@ export const authApi = {
    * Student/Parent and Admin flows still pass it because their identity
    * resolution depends on the tenant scope.
    */
-  login: async (credentials: any, institutionId?: string) => {
+  login: async (credentials: LoginCredentials, institutionId?: string) => {
     // Specialized login for portals
     const isTeacher = credentials.password && !credentials.dob && !credentials.username;
     const isStudent = !!credentials.dob;
     const isAdmin = !!credentials.username; // OAuth2 style for Admin
 
     let endpoint = 'auth/login';
-    let data = credentials;
+    let data: LoginCredentials | URLSearchParams = credentials;
     const headers: Record<string, string> = {};
 
     if (institutionId) {
@@ -40,10 +55,11 @@ export const authApi = {
       endpoint = 'directory/students/login';
     } else if (isAdmin) {
       endpoint = 'auth/login';
-      // Convert to form data for OAuth2
+      // Convert to form data for OAuth2. username/password are guaranteed
+      // by the isAdmin discriminator above.
       const formData = new URLSearchParams();
-      formData.append('username', credentials.username);
-      formData.append('password', credentials.password);
+      formData.append('username', credentials.username ?? '');
+      formData.append('password', credentials.password ?? '');
       data = formData;
       headers['Content-Type'] = 'application/x-www-form-urlencoded';
     }

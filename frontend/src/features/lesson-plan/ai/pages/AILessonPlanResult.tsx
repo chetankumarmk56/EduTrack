@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, Loader2 } from 'lucide-react';
 
 import { lessonPlanAIApi } from '@/features/lesson-plan/ai/api';
+import { getErrorMessage } from '@/shared/lib/errorHandler';
 import type {
   ChapterIdentity,
   LessonPlanOutputResponse,
@@ -33,17 +34,25 @@ export default function AILessonPlanResult() {
 
   const [data, setData] = useState<LessonPlanOutputResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Initialize from URL state instead of a setState-in-effect, which the
+  // new react-hooks/set-state-in-effect rule flags as cascading-render risk.
+  const [error, setError] = useState<string | null>(() =>
+    identity
+      ? null
+      : 'Provide all 5 IDs as query params: school_id, teacher_id, grade_id, subject_id, chapter_id.'
+  );
 
   useEffect(() => {
-    if (!identity) {
-      setError(
-        'Provide all 5 IDs as query params: school_id, teacher_id, grade_id, subject_id, chapter_id.',
-      );
-      return;
-    }
+    if (!identity) return;
     let cancelled = false;
+    // This is a standard data-fetching effect: flip the spinner on,
+    // request, then flip it off. React 19's set-state-in-effect rule
+    // flags the synchronous setLoading(true) but there's no cleaner
+    // alternative without switching to use()/Suspense, which would be
+    // a much larger refactor for the same observable behaviour.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setError(null);
     lessonPlanAIApi
       .fetchOutput(identity)
@@ -52,9 +61,7 @@ export default function AILessonPlanResult() {
       })
       .catch((err) => {
         if (cancelled) return;
-        const detail =
-          err?.response?.data?.detail ??
-          (err instanceof Error ? err.message : 'Failed to load lesson plan.');
+        const detail = getErrorMessage(err).message;
         setError(typeof detail === 'string' ? detail : 'Failed to load.');
       })
       .finally(() => {

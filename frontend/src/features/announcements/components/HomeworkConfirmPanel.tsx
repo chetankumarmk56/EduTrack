@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { BookOpenCheck, CheckCircle2, Loader2, User, Calendar, AlertCircle } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
+import { getErrorMessage } from '@/shared/lib/errorHandler';
 import { announcementApi, type Announcement, type HomeworkChildStatus } from '../api';
 
 /**
@@ -50,8 +51,8 @@ export function HomeworkConfirmPanel({
       };
       setLocalState((s) => ({ ...s, [studentId]: next }));
       onConfirmed?.(next);
-    } catch (e: any) {
-      setError(e?.response?.data?.detail || 'Could not confirm. Please try again.');
+    } catch (e) {
+      setError(getErrorMessage(e).message || 'Could not confirm. Please try again.');
     } finally {
       setPending(null);
     }

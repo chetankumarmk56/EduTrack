@@ -6,6 +6,7 @@ import { CheckCircle2, Save, AlertCircle, Check, ChevronDown, Hash, UserCircle, 
 import { cn } from '@/shared/lib/utils';
 import { attendanceApi } from '@/features/attendance/api';
 import { directoryApi } from '@/features/directory/api';
+import type { Student } from '@/shared/types';
 
 export default function TeacherAttendance() {
   const { user } = useAuth();
@@ -16,7 +17,7 @@ export default function TeacherAttendance() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
   // Direct fetch — bypass AppContext cache so newly-enrolled students always show.
-  const [classDirectory, setClassDirectory] = useState<any[]>([]);
+  const [classDirectory, setClassDirectory] = useState<Student[]>([]);
   useEffect(() => {
     refreshDirectory(true);
     directoryApi.getMyStudents()
@@ -26,19 +27,19 @@ export default function TeacherAttendance() {
 
   // Find current teacher's assignments
   const teacherIdentity = user?.id;
-  const currentTeacher = teacherDirectory.find((t: any) => t.user_id === teacherIdentity);
-  const assignments: any[] = currentTeacher?.assignments || [];
+  const currentTeacher = teacherDirectory.find((t) => t.user_id === teacherIdentity);
+  const assignments = currentTeacher?.assignments || [];
 
   // Set initial assignment OR reset if the cached id doesn't belong to this teacher
   useEffect(() => {
     if (assignments.length === 0) return;
-    const stillValid = assignments.some((a: any) => a.id === activeAssignmentId);
+    const stillValid = assignments.some((a) => a.id === activeAssignmentId);
     if (!activeAssignmentId || !stillValid) {
       setActiveAssignmentId(assignments[0].id);
     }
   }, [assignments, activeAssignmentId]);
 
-  const activeAssignment = assignments.find((a: any) => a.id === activeAssignmentId) || assignments[0];
+  const activeAssignment = assignments.find((a) => a.id === activeAssignmentId) || assignments[0];
 
   // Local state to track dynamic attendance status per student ID for the selected date
   const [localAttendance, setLocalAttendance] = useState<Record<number, 'present' | 'absent' | 'late'>>({});
@@ -50,7 +51,7 @@ export default function TeacherAttendance() {
   }, [selectedDate]);
 
   // Sync from backend natively!
-  const fetchAttendanceForDate = async (filteredStudents: any[]) => {
+  const fetchAttendanceForDate = async (filteredStudents: Student[]) => {
     if (!activeAssignment) return;
     
     setIsFetching(true);
@@ -68,8 +69,8 @@ export default function TeacherAttendance() {
             activeAssignment.subject_ref.name
         );
         
-        data.forEach((record: any) => {
-            newLocalStatus[record.student_id] = record.status.toLowerCase() as any;
+        data.forEach((record) => {
+            newLocalStatus[record.student_id] = record.status.toLowerCase() as 'present' | 'absent' | 'late';
         });
     } catch(err) {
         console.error("Error fetching class attendance:", err);
@@ -84,13 +85,13 @@ export default function TeacherAttendance() {
   const filteredDB = useMemo(() => {
     if (!activeAssignment) return [];
     const targetClassId = activeAssignment.school_class?.id;
-    const list = classDirectory.filter((s: any) => {
+    const list = classDirectory.filter((s) => {
       const sClassId = s.school_class?.id ?? s.school_class_id;
       return String(sClassId) === String(targetClassId);
     });
     // Backend assigns roll_number in alphabetical order; sort by it so the row
     // numbers shown match the persisted roll numbers everywhere else.
-    return list.sort((a: any, b: any) => {
+    return list.sort((a, b) => {
       const ra = a.roll_number ?? Number.MAX_SAFE_INTEGER;
       const rb = b.roll_number ?? Number.MAX_SAFE_INTEGER;
       return ra - rb || a.name.localeCompare(b.name);
@@ -118,11 +119,11 @@ export default function TeacherAttendance() {
     setIsSaving(true);
     setSaveStatus('idle');
 
-    const records = filteredDB.map((student: any) => ({
+    const records = filteredDB.map((student) => ({
       student_id: student.id,
       subject: activeAssignment.subject_ref.name,
       date: selectedDate,
-      status: (localAttendance[student.id] || 'present').charAt(0).toUpperCase() + (localAttendance[student.id] || 'present').slice(1) as any
+      status: ((localAttendance[student.id] || 'present').charAt(0).toUpperCase() + (localAttendance[student.id] || 'present').slice(1)) as 'Present' | 'Absent' | 'Late'
     }));
 
     try {
@@ -130,7 +131,7 @@ export default function TeacherAttendance() {
         date: selectedDate,
         school_class_id: activeAssignment.school_class.id,
         subject: activeAssignment.subject_ref.name,
-        records: records.map((r: any) => ({ student_id: r.student_id, status: r.status }))
+        records: records.map((r) => ({ student_id: r.student_id, status: r.status }))
       });
       setSaveStatus('success');
       fetchTeacherStats();
@@ -200,9 +201,9 @@ export default function TeacherAttendance() {
                    className="bg-transparent text-sm font-black text-foreground focus:outline-none cursor-pointer pr-2 appearance-none"
                 >
                   {assignments.length === 0 && <option value="">No Classes Assigned</option>}
-                  {assignments.map((a: any) => (
+                  {assignments.map((a) => (
                     <option key={a.id} value={a.id} className="bg-card text-foreground font-sans">
-                      {a.school_class.grade.name}-{a.school_class.section.name} ({a.subject_ref.name})
+                      {a.school_class.grade?.name}-{a.school_class.section?.name} ({a.subject_ref.name})
                     </option>
                   ))}
                 </select>
@@ -304,7 +305,7 @@ export default function TeacherAttendance() {
                     </td>
                   </motion.tr>
                 ) : (
-                  filteredDB.map((student: any, idx: number) => {
+                  filteredDB.map((student, idx: number) => {
                     const status = localAttendance[student.id];
                     
                     if (!status) return (

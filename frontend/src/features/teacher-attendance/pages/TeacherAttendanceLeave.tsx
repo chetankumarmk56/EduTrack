@@ -5,6 +5,7 @@ import {
   CheckCircle2, AlertCircle, Loader2, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
+import { getErrorMessage } from '@/shared/lib/errorHandler';
 import { teacherAttendanceApi, type TeacherAttendanceRecord, type TeacherLeaveRecord } from '@/features/teacher-attendance/api';
 import { SkeletonStatGrid, SkeletonTable, SkeletonList } from '@/shared/components/ui/Skeleton';
 
@@ -135,8 +136,8 @@ export default function TeacherAttendanceLeave() {
       const rec = await teacherAttendanceApi.checkIn();
       setTodayRecord(rec);
       setActionSuccess('Checked in successfully!');
-    } catch (e: any) {
-      setActionError(e?.response?.data?.detail || 'Check-in failed');
+    } catch (e) {
+      setActionError(getErrorMessage(e).message || 'Check-in failed');
     } finally {
       setIsActionLoading(false);
     }
@@ -150,8 +151,8 @@ export default function TeacherAttendanceLeave() {
       const rec = await teacherAttendanceApi.checkOut();
       setTodayRecord(rec);
       setActionSuccess('Checked out successfully!');
-    } catch (e: any) {
-      setActionError(e?.response?.data?.detail || 'Check-out failed');
+    } catch (e) {
+      setActionError(getErrorMessage(e).message || 'Check-out failed');
     } finally {
       setIsActionLoading(false);
     }
@@ -173,8 +174,8 @@ export default function TeacherAttendanceLeave() {
       setShowLeaveForm(false);
       setLeaveForm({ leave_type: 'CASUAL', start_date: localDateStr(new Date()), end_date: localDateStr(new Date()), reason: '' });
       loadLeaves();
-    } catch (e: any) {
-      setLeaveError(e?.response?.data?.detail || 'Failed to apply leave');
+    } catch (e) {
+      setLeaveError(getErrorMessage(e).message || 'Failed to apply leave');
     } finally {
       setLeaveSubmitting(false);
     }
@@ -184,8 +185,8 @@ export default function TeacherAttendanceLeave() {
     try {
       await teacherAttendanceApi.cancelLeave(id);
       loadLeaves();
-    } catch (e: any) {
-      alert(e?.response?.data?.detail || 'Failed to cancel leave');
+    } catch (e) {
+      alert(getErrorMessage(e).message || 'Failed to cancel leave');
     }
   };
 

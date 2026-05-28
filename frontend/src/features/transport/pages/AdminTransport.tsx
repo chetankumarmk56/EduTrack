@@ -49,10 +49,25 @@ function MapClickInterceptor({ onMapClick }: { onMapClick: (lat: number, lng: nu
   return null;
 }
 
+interface BusRow {
+  id: number;
+  bus_number: string;
+  driver_name?: string;
+  capacity?: number;
+}
+
+interface RouteRow {
+  id: number;
+  name: string;
+  bus_id?: number | null;
+  polyline?: LatLng[];
+  stops?: { id: number; name: string; latitude: number; longitude: number; stop_order: number }[];
+}
+
 export default function AdminTransport() {
   const { students } = useApp();
-  const [routes, setRoutes] = useState<any[]>([]);
-  const [buses, setBuses] = useState<any[]>([]);
+  const [routes, setRoutes] = useState<RouteRow[]>([]);
+  const [buses, setBuses] = useState<BusRow[]>([]);
   
   const [selectedRouteId, setSelectedRouteId] = useState<number | null>(null);
   const [stops, setStops] = useState<Stop[]>([]);
@@ -91,7 +106,7 @@ export default function AdminTransport() {
     if (active) {
       setRoutePath(active.polyline || []);
       if (active.stops) {
-          setStops(active.stops.map((s: any) => ({
+          setStops(active.stops.map((s) => ({
               id: s.id.toString(),
               name: s.name,
               lat: s.latitude,
@@ -209,7 +224,7 @@ export default function AdminTransport() {
       try {
           await transportApi.updateRoute(selectedRouteId, { bus_id: busId });
           setRoutes(prev => prev.map(r => r.id === selectedRouteId ? { ...r, bus_id: busId } : r));
-      } catch (err) {
+      } catch {
           alert('Failed to link vehicle to route.');
       }
   };
@@ -229,7 +244,7 @@ export default function AdminTransport() {
               stop_id: stopId
           });
           alert('Student allocated to bus stop successfully!');
-      } catch (err) {
+      } catch {
           alert('Failed to allocate student.');
       } finally {
           setAssigningStudent(null);
@@ -321,7 +336,7 @@ export default function AdminTransport() {
                 </button>
              </div>
              <div className="flex-1 overflow-y-auto pr-2 space-y-2 custom-scrollbar">
-                {routes.map((r: any) => (
+                {routes.map((r) => (
                    <button key={r.id} onClick={() => setSelectedRouteId(r.id)} className={cn("w-full p-4 rounded-xl border text-left transition-all flex items-center justify-between group", selectedRouteId === r.id ? "bg-indigo-600/10 border-indigo-500/40 text-white" : "bg-white/[0.02] border-glass-border text-text-secondary hover:bg-white/5")}>
                       <div className="flex items-center gap-3">
                          <div className={cn("p-2 rounded-lg", selectedRouteId === r.id ? "bg-indigo-500 text-white" : "bg-white/5")}>
