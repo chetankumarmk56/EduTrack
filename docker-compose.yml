@@ -36,15 +36,25 @@ services:
     build: ./backend
     container_name: edutrack_api
     restart: always
-    # Default CMD in the Dockerfile uses gunicorn -c gunicorn_conf.py.
-    # Override with `command: ["uvicorn", "app.main:app", "--reload"]` if
-    # you need hot-reload during local development.
+    # Dev: uvicorn with --reload so host-side Python edits hot-reload
+    # without a rebuild. The Dockerfile's default gunicorn command is for
+    # prod-like runs; override here for local iteration.
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     ports:
       - "8000:8000"
+    # Source mount for hot-reload. Anonymous volumes shield bake-time
+    # dirs we don't want the host to clobber.
+    volumes:
+      - ./backend:/app
+    # Pull everything from backend/.env (S3 creds, third-party API keys,
+    # etc.). The explicit `environment:` block below overrides anything
+    # that needs container-specific values (DB host = `db` service, not
+    # localhost; same for Redis).
+    env_file:
+      - ./backend/.env
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-luffy}:${POSTGRES_PASSWORD:-secret}@db:5432/${POSTGRES_DB:-school}
       - ENVIRONMENT=${ENVIRONMENT:-dev}
-      - SECRET_KEY=${SECRET_KEY:-change-me-to-32-or-more-random-chars-please}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
       - REDIS_URL=redis://redis:6379/0
       # Scheduler runs in the `worker` service; keep it off on the web replicas.
@@ -69,10 +79,13 @@ services:
     container_name: edutrack_worker
     restart: always
     command: ["python", "worker.py"]
+    volumes:
+      - ./backend:/app
+    env_file:
+      - ./backend/.env
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-luffy}:${POSTGRES_PASSWORD:-secret}@db:5432/${POSTGRES_DB:-school}
       - ENVIRONMENT=${ENVIRONMENT:-dev}
-      - SECRET_KEY=${SECRET_KEY:-change-me-to-32-or-more-random-chars-please}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
       - REDIS_URL=redis://redis:6379/0
       - FEE_REMINDER_SCHEDULER_ENABLED=true
