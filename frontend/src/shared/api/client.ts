@@ -132,15 +132,20 @@ client.interceptors.response.use(
 
       console.error(`[Auth] 401 Unauthorized (${errorCode || 'UNKNOWN'}) for ${originalRequest.url}:`, errorDetail);
 
-      // If we are already retrying or on a login page, don't try to refresh
-      if (originalRequest._retry || window.location.pathname.includes('-login')) {
+      // If we are already retrying, on a login page, or on the public
+      // landing page, don't try to refresh. The landing route is the
+      // public entry — a 401 from a backgrounded /auth/me there should
+      // just leave the user on Landing, not bounce them to login.
+      const onPublicPage = window.location.pathname === '/' || window.location.pathname.includes('-login');
+      if (originalRequest._retry || onPublicPage) {
         return Promise.reject(error);
       }
 
       // If it's a terminal auth error (like INVALID_TOKEN), don't even try to refresh
       if (errorCode === 'INVALID_TOKEN') {
         console.warn("[Auth] Terminal token error. Skipping refresh.");
-        if (!window.location.pathname.includes('-login')) {
+        const onPublicPageTerminal = window.location.pathname === '/' || window.location.pathname.includes('-login');
+        if (!onPublicPageTerminal) {
           // No token in localStorage anymore (it lives in an HttpOnly
           // cookie). Just drop the user metadata so the next mount
           // hydrates fresh from /api/auth/me, which will 401 and route
@@ -187,10 +192,12 @@ client.interceptors.response.use(
         console.error("[Auth] Refresh Failed. Clearing session for role:", role);
         processQueue(refreshError, null);
 
-        // Only clear and redirect if we are NOT already on a login page.
-        // The access token cookie is HttpOnly so the server clears it
-        // for us on /logout. Here we only wipe the JS-visible bits.
-        if (!window.location.pathname.includes('-login')) {
+        // Only clear and redirect if we are NOT already on a login page
+        // or the public landing page. The access token cookie is HttpOnly
+        // so the server clears it for us on /logout. Here we only wipe
+        // the JS-visible bits.
+        const onPublicPageAfterRefresh = window.location.pathname === '/' || window.location.pathname.includes('-login');
+        if (!onPublicPageAfterRefresh) {
           localStorage.removeItem(`edu_user_${role}`);
           localStorage.removeItem(`edu_institution_id_${role}`);
 

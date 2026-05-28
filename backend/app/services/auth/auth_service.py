@@ -46,10 +46,16 @@ def set_auth_cookies(
     it. The refresh cookie keeps the existing narrow path "/api/auth/refresh"
     so it's never sent on any other endpoint.
     """
+    # SameSite=None is required when the frontend and backend live on
+    # different sites (e.g. Vercel + Render). Lax cookies are dropped on
+    # cross-site XHR, which is why a "successful" login was immediately
+    # followed by 401s and a "session expired" bounce. None mandates
+    # Secure=True, which prod already forces.
+    is_cross_site = _settings.ENVIRONMENT == "prod"
     common = {
         "httponly": True,
         "secure": _settings.COOKIE_SECURE,
-        "samesite": "lax",
+        "samesite": "none" if is_cross_site else "lax",
         "domain": _settings.COOKIE_DOMAIN if _settings.COOKIE_DOMAIN else None,
     }
     # Access token cookie — JS-inaccessible. Lifetime matches the JWT exp.
@@ -81,10 +87,15 @@ def clear_auth_cookies(response, *, role: str, user_id: Optional[int] = None) ->
     enumerate-and-delete pattern below covers the typical case; any
     cookies the request never sent stay alive until their TTL.
     """
-    # If we know the exact user_id we hit the right cookies on the first
-    # try. Otherwise we still try the role-only key.
+    # Browsers only honour a Set-Cookie deletion when the SameSite +
+    # Secure attributes match the original. Mirror set_auth_cookies'
+    # cross-site policy or the deletion is silently dropped.
+    is_cross_site = _settings.ENVIRONMENT == "prod"
     common = {
         "domain": _settings.COOKIE_DOMAIN if _settings.COOKIE_DOMAIN else None,
+        "secure": _settings.COOKIE_SECURE,
+        "samesite": "none" if is_cross_site else "lax",
+        "httponly": True,
     }
     suffixes = [str(user_id)] if user_id is not None else [""]
     for suffix in suffixes:
