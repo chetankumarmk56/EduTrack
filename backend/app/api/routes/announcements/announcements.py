@@ -169,8 +169,10 @@ async def create_announcement(
         db, user.institution_id, user.id, data
     )
 
-    # Notify target parents in the background so the response is instant
-    announcement_id = result.id
+    # Notify target parents in the background so the response is instant.
+    # create_announcement returns a serialized dict (with the presigned
+    # attachment URL already resolved), not the ORM row — index by key.
+    announcement_id = result["id"]
     async def _notify():
         async with AsyncSessionLocal() as session:
             await announcement_service.trigger_announcement_notifications(session, announcement_id)
