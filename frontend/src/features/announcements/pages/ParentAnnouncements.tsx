@@ -138,17 +138,30 @@ function AttachmentPreview({ url, onPreview }: { url: string, onPreview: (url: s
 }
 
 function FilePreviewModal({ url, type, onClose }: { url: string, type: string, onClose: () => void }) {
+  // Try to fetch into a same-origin blob URL so the viewer keeps working
+  // even if the source serves headers that block embedding. We always
+  // fall back to the direct URL if the fetch fails (presigned S3 URLs
+  // are typically blocked by CORS for fetch() but render fine in an
+  // iframe/img), so the preview never shows a broken state.
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let currentUrl: string | null = null;
-    fetch(url).then(res => res.blob()).then(blob => {
-      currentUrl = URL.createObjectURL(blob);
-      setBlobUrl(currentUrl);
-      setLoading(false);
-    }).catch(() => setLoading(false));
-    return () => { if (currentUrl) URL.revokeObjectURL(currentUrl); };
+    let cancelled = false;
+    fetch(url)
+      .then(res => res.blob())
+      .then(blob => {
+        if (cancelled) return;
+        currentUrl = URL.createObjectURL(blob);
+        setBlobUrl(currentUrl);
+      })
+      .catch(() => { /* fall through to direct URL */ })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => {
+      cancelled = true;
+      if (currentUrl) URL.revokeObjectURL(currentUrl);
+    };
   }, [url]);
 
   useEffect(() => {
@@ -156,6 +169,8 @@ function FilePreviewModal({ url, type, onClose }: { url: string, type: string, o
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [onClose]);
+
+  const src = blobUrl || url;
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-slate-900/95 backdrop-blur-xl flex flex-col p-4 md:p-8">
@@ -169,8 +184,12 @@ function FilePreviewModal({ url, type, onClose }: { url: string, type: string, o
         </button>
       </div>
       <div className="flex-1 rounded-[2rem] overflow-hidden bg-white relative">
-        {loading && <div className="absolute inset-0 flex items-center justify-center"><RefreshCw className="w-8 h-8 animate-spin text-primary" /></div>}
-        {type === 'image' ? <img src={blobUrl || url} className="w-full h-full object-contain" /> : <iframe src={`${blobUrl}#toolbar=0`} className="w-full h-full border-none" />}
+        {loading && <div className="absolute inset-0 flex items-center justify-center z-10"><RefreshCw className="w-8 h-8 animate-spin text-primary" /></div>}
+        {!loading && (
+          type === 'image'
+            ? <img src={src} className="w-full h-full object-contain" />
+            : <iframe src={`${src}#toolbar=0`} className="w-full h-full border-none" />
+        )}
       </div>
     </motion.div>
   );
