@@ -312,11 +312,11 @@ export default function SchoolPaymentSettingsForm({ className }: Props) {
         <div className="lg:col-span-5 rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.03] shadow-md p-5 sm:p-6">
           <div className="flex items-center gap-2 mb-4">
             <QrCode className="w-4 h-4 text-primary" />
-            <h3 className="text-sm font-black uppercase tracking-widest text-foreground">
+            <h3 className="text-sm font-black uppercase tracking-widest text-slate-900 dark:text-white">
               QR image
             </h3>
           </div>
-          <p className="text-xs text-muted-foreground mb-4">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
             Upload a UPI QR image you've generated from your bank app — parents will be able to scan it to pay directly.
           </p>
 
@@ -363,7 +363,7 @@ export default function SchoolPaymentSettingsForm({ className }: Props) {
                 <ImageUp className="w-6 h-6" />
               )}
               <p className="text-xs font-black uppercase tracking-widest">Upload QR image</p>
-              <p className="text-[11px] text-muted-foreground">PNG / JPG / WEBP up to 4 MB</p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">PNG / JPG / WEBP up to 4 MB</p>
             </button>
           )}
 
@@ -413,7 +413,7 @@ interface SectionProps {
 function Section({ title, icon, children }: SectionProps) {
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2 text-foreground">
+      <div className="flex items-center gap-2 text-slate-900 dark:text-white">
         {icon}
         <h4 className="text-xs font-black uppercase tracking-widest">{title}</h4>
       </div>
@@ -432,7 +432,7 @@ interface FieldProps {
 function Field({ label, hint, error, children }: FieldProps) {
   return (
     <div>
-      <label className="block text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1.5">
+      <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-1.5">
         {label}
       </label>
       {children}
@@ -441,7 +441,7 @@ function Field({ label, hint, error, children }: FieldProps) {
           <X className="w-3 h-3" /> {error}
         </p>
       ) : hint ? (
-        <p className="mt-1 text-[11px] text-muted-foreground">{hint}</p>
+        <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{hint}</p>
       ) : null}
     </div>
   );

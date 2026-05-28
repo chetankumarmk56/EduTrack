@@ -8,9 +8,10 @@ this table. The admin manually verifies the receipt against the school's
 real account before approving — only then do we update StudentFee dues
 and generate a receipt.
 
-The legacy `payments` / `finance_ledger` tables are not touched by this
-workflow. If a future revision wants to mirror approved manual payments
-into the ledger, that can be done additively without changing this model.
+On approval the service additively mirrors the row into FinanceLedger
+(linked via FinanceLedger.manual_payment_request_id) so the unified finance
+page reflects manual collections too. The mirror is idempotent and never
+touches the `payments` table.
 """
 from sqlalchemy import (
     Column, Integer, String, Float, DateTime, ForeignKey, Text, Index,

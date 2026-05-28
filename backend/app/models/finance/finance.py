@@ -159,6 +159,13 @@ class FinanceLedger(Base, TimestampMixin):
 
     # Linkage
     payment_id = Column(Integer, ForeignKey("payments.id"), index=True, nullable=True)
+    # Cross-reference to the manual-payment workflow. Populated only when a
+    # FinanceLedger row was synthesised from an approved ManualPaymentRequest.
+    # NULL for gateway/Razorpay rows. Lets the ledger UI stream the original
+    # PDF receipt without re-rendering or duplicating receipt storage.
+    manual_payment_request_id = Column(
+        Integer, ForeignKey("manual_payment_requests.id"), index=True, nullable=True,
+    )
     student_id = Column(Integer, ForeignKey("students.id"), index=True, nullable=False)
     class_id = Column(Integer, ForeignKey("school_classes.id"), index=True, nullable=True)
     institution_id = Column(Integer, ForeignKey("institutions.id"), nullable=False, index=True)

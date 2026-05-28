@@ -28,6 +28,7 @@ from app.models.finance import (
 )
 from app.models.directory import Student
 from app.models.academic import SchoolClass
+from app.models.manual_payment import ManualPaymentRequest
 
 
 # Razorpay charges (rough): 2% on UPI/cards. Used only when the gateway
@@ -199,3 +200,101 @@ async def write_ledger_entry(
             select(FinanceLedger).where(FinanceLedger.payment_id == payment.id)
         )
         return pid_existing_res.scalars().first()
+
+
+async def write_manual_payment_ledger_entry(
+    db: AsyncSession,
+    *,
+    institution_id: int,
+    request: ManualPaymentRequest,
+    student: Student,
+    recorded_by_id: Optional[int] = None,
+) -> FinanceLedger:
+    """
+    Mirror an approved/partial ManualPaymentRequest into FinanceLedger so it
+    surfaces alongside Razorpay payments on the admin finance page.
+
+    Idempotent: looks up an existing row by manual_payment_request_id first
+    and returns it unchanged if found (so a re-approval or backfill never
+    duplicates the entry).
+    """
+    existing_res = await db.execute(
+        select(FinanceLedger).where(
+            FinanceLedger.manual_payment_request_id == request.id
+        )
+    )
+    existing = existing_res.scalars().first()
+    if existing:
+        logger.info(
+            f"LEDGER IDEMPOTENT (manual): row {existing.id} exists for "
+            f"manual_payment_request_id={request.id}."
+        )
+        return existing
+
+    # Resolve denormalised class name (if not already on the request snapshot)
+    class_name: Optional[str] = request.class_name
+    class_id: Optional[int] = student.school_class_id
+    if class_id and not class_name:
+        sc_res = await db.execute(
+            select(SchoolClass).where(SchoolClass.id == class_id)
+        )
+        sc = sc_res.scalars().first()
+        if sc:
+            class_name = sc.display_name or f"Grade {sc.grade_id}"
+
+    amount = float(request.approved_amount or request.amount or 0.0)
+    payment_date = request.reviewed_at or datetime.utcnow()
+
+    # Prefer the manual-payment receipt number as the ledger receipt number
+    # so the same identifier appears on the PDF, the parent's history, and
+    # the admin's finance ledger.
+    receipt_number = request.receipt_number or await generate_receipt_number(
+        db, institution_id, payment_date
+    )
+
+    entry = FinanceLedger(
+        receipt_number=receipt_number,
+        entry_type=LedgerEntryType.PAYMENT,
+        payment_id=None,
+        manual_payment_request_id=request.id,
+        student_id=student.id,
+        class_id=class_id,
+        institution_id=institution_id,
+        student_name=request.student_name or student.name,
+        class_name=class_name,
+        fee_type=request.fee_type or "TUITION",
+        academic_year=resolve_academic_year(payment_date.date()),
+        razorpay_order_id=None,
+        razorpay_payment_id=None,
+        amount=amount,
+        gateway_fee=0.0,
+        net_amount=amount,
+        payment_method="MANUAL_UPI",
+        payment_status="SUCCESS",
+        payment_date=payment_date,
+        notes=(
+            f"UTR {request.transaction_reference}"
+            + (f" · {request.installment_label}" if request.installment_label else "")
+        ),
+        recorded_by_id=recorded_by_id,
+    )
+    db.add(entry)
+    try:
+        await db.flush()
+        logger.info(
+            f"LEDGER WRITE (manual): receipt={receipt_number} "
+            f"manual_payment_request_id={request.id} amount=₹{amount}"
+        )
+        return entry
+    except IntegrityError as e:
+        logger.warning(
+            f"LEDGER RACE (manual): IntegrityError for request {request.id} — "
+            f"refetching. Detail: {e}"
+        )
+        await db.rollback()
+        existing_res = await db.execute(
+            select(FinanceLedger).where(
+                FinanceLedger.manual_payment_request_id == request.id
+            )
+        )
+        return existing_res.scalars().first()

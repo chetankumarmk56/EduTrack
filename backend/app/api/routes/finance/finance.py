@@ -626,11 +626,126 @@ async def get_ledger_filter_options(
     return await finance_service.get_ledger_facets(db, admin.institution_id)
 
 
+@router.get("/ledger/{ledger_id}/receipt")
+async def download_ledger_receipt(
+    ledger_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin: UserContext = Depends(require_payment_admin),
+):
+    """
+    Stream a PDF receipt for a successful FinanceLedger entry.
+
+    Routing:
+      * Entries mirrored from the manual-payment workflow render the same
+        receipt the parent sees (richer template, includes UTR + payer
+        details).
+      * Other SUCCESS entries (Razorpay / cash) get a compact on-the-fly
+        receipt built from the ledger row itself.
+
+    FAILED / PENDING / CANCELLED / REFUNDED entries return 409 — there's
+    nothing to receipt for them.
+    """
+    from app.models.finance import FinanceLedger
+    from app.models.core import Institution
+    from app.models.manual_payment import ManualPaymentRequest
+    from app.services.manual_payment.receipt import generate_receipt_pdf_bytes
+    from app.services.manual_payment.service import manual_payment_service
+    from app.services.finance.ledger_helpers import _estimate_gateway_fee  # noqa: F401
+
+    res = await db.execute(
+        select(FinanceLedger).where(
+            FinanceLedger.id == ledger_id,
+            FinanceLedger.institution_id == admin.institution_id,
+        )
+    )
+    entry = res.scalars().first()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Ledger entry not found.")
+    if entry.payment_status != "SUCCESS":
+        raise HTTPException(
+            status_code=409,
+            detail="Receipts are only available for successful payments.",
+        )
+
+    inst_res = await db.execute(
+        select(Institution.name).where(Institution.id == entry.institution_id)
+    )
+    school_name = inst_res.scalar() or "Your School"
+
+    # Manual-payment path: render the same receipt the parent gets.
+    if entry.manual_payment_request_id:
+        mp_res = await db.execute(
+            select(ManualPaymentRequest).where(
+                ManualPaymentRequest.id == entry.manual_payment_request_id,
+                ManualPaymentRequest.institution_id == admin.institution_id,
+            )
+        )
+        mp = mp_res.scalars().first()
+        if not mp:
+            raise HTTPException(
+                status_code=404,
+                detail="Linked manual payment record is missing.",
+            )
+        balance = await manual_payment_service.get_balance_due(
+            db, institution_id=admin.institution_id, student_id=mp.student_id,
+        )
+        pdf_bytes = generate_receipt_pdf_bytes(
+            school_name=school_name,
+            payment_request=mp,
+            balance_due=balance,
+            verified_by_name=admin.name,
+        )
+        filename = f"{entry.receipt_number or f'MR-{mp.id}'}.pdf"
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    # Gateway/cash path: synthesise a ManualPaymentRequest-shaped object so we
+    # can reuse the same receipt template without duplicating the renderer.
+    class _LedgerReceiptStub:
+        pass
+
+    stub = _LedgerReceiptStub()
+    stub.id = entry.id
+    stub.institution_id = entry.institution_id
+    stub.receipt_number = entry.receipt_number
+    stub.student_name = entry.student_name
+    stub.parent_name = "—"
+    stub.class_name = entry.class_name
+    stub.section_name = None
+    stub.fee_type = entry.fee_type or "TUITION"
+    stub.installment_label = None
+    stub.amount = float(entry.amount or 0.0)
+    stub.approved_amount = float(entry.amount or 0.0)
+    stub.transaction_reference = entry.razorpay_payment_id or entry.razorpay_order_id or "—"
+    stub.transaction_at = entry.payment_date
+    stub.payer_name = None
+    stub.payer_upi = None
+    stub.status = entry.payment_status
+    stub.reviewed_at = entry.payment_date
+    stub.receipt_generated_at = entry.payment_date
+
+    pdf_bytes = generate_receipt_pdf_bytes(
+        school_name=school_name,
+        payment_request=stub,  # type: ignore[arg-type]
+        balance_due=None,
+        verified_by_name=admin.name,
+    )
+    filename = f"{entry.receipt_number}.pdf"
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.get("/ledger/export")
 async def export_ledger(
     date_from: date = Query(..., description="Inclusive start date (YYYY-MM-DD)"),
     date_to: date = Query(..., description="Inclusive end date (YYYY-MM-DD)"),
-    format: str = Query("excel", regex="^(excel|csv|pdf)$"),
+    format: str = Query("excel", pattern="^(excel|csv|pdf)$"),
     student_id: Optional[int] = None,
     class_id: Optional[int] = None,
     fee_type: Optional[str] = None,

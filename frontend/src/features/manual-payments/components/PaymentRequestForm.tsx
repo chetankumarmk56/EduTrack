@@ -100,13 +100,13 @@ export default function PaymentRequestForm({
 
   const fieldClass = (field: keyof ParentFormState) =>
     cn(
-      'w-full rounded-2xl border-2 bg-white dark:bg-white/[0.05] px-4 py-3 text-sm font-bold text-foreground focus:outline-none transition-colors',
+      'w-full rounded-2xl border-2 bg-white dark:bg-white/[0.05] px-4 py-3 text-sm font-bold text-slate-900 dark:text-white focus:outline-none transition-colors',
       errors[field] && touched[field]
         ? 'border-rose-400 focus:border-rose-500'
         : 'border-slate-200 dark:border-white/10 focus:border-primary',
     );
 
-  const labelClass = 'text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1.5';
+  const labelClass = 'text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-1.5';
 
   const fieldError = (k: keyof ParentFormState) =>
     errors[k] && touched[k] ? (
@@ -142,7 +142,7 @@ export default function PaymentRequestForm({
         <div>
           <label className={labelClass}>Your name *</label>
           <div className="relative">
-            <UserSquare2 className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <UserSquare2 className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400 pointer-events-none" />
             <input
               type="text"
               value={state.parent_name}
@@ -185,7 +185,7 @@ export default function PaymentRequestForm({
         <div>
           <label className={labelClass}>Amount paid (₹) *</label>
           <div className="relative">
-            <IndianRupee className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <IndianRupee className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400 pointer-events-none" />
             <input
               type="number"
               inputMode="decimal"
@@ -205,7 +205,7 @@ export default function PaymentRequestForm({
         <div>
           <label className={labelClass}>Transaction ID / UTR *</label>
           <div className="relative">
-            <Hash className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <Hash className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400 pointer-events-none" />
             <input
               type="text"
               value={state.transaction_reference}
@@ -223,7 +223,7 @@ export default function PaymentRequestForm({
         <div>
           <label className={labelClass}>Date &amp; time of transaction *</label>
           <div className="relative">
-            <CalendarClock className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <CalendarClock className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400 pointer-events-none" />
             <input
               type="datetime-local"
               value={state.transaction_at}
@@ -233,7 +233,7 @@ export default function PaymentRequestForm({
               className={cn(fieldClass('transaction_at'), 'pl-10')}
             />
           </div>
-          <div className="mt-1 text-[11px] text-muted-foreground">
+          <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
             <button
               type="button"
               onClick={() => set('transaction_at', toLocalDatetimeInputValue(new Date()))}
@@ -261,7 +261,7 @@ export default function PaymentRequestForm({
         <div className="sm:col-span-2">
           <label className={labelClass}>Sender UPI (optional)</label>
           <div className="relative">
-            <Smartphone className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <Smartphone className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400 pointer-events-none" />
             <input
               type="text"
               value={state.payer_upi}
@@ -279,7 +279,7 @@ export default function PaymentRequestForm({
         <div className="sm:col-span-2">
           <label className={labelClass}>Note / remark (optional)</label>
           <div className="relative">
-            <NotebookPen className="w-4 h-4 absolute left-4 top-4 text-muted-foreground pointer-events-none" />
+            <NotebookPen className="w-4 h-4 absolute left-4 top-4 text-slate-500 dark:text-slate-400 pointer-events-none" />
             <textarea
               value={state.parent_note}
               onChange={(e) => set('parent_note', e.target.value)}
@@ -317,7 +317,7 @@ export default function PaymentRequestForm({
                 </button>
               </div>
             ) : (
-              <p className="text-xs text-muted-foreground self-center">
+              <p className="text-xs text-slate-500 dark:text-slate-400 self-center">
                 JPG / PNG / WEBP / PDF up to 8 MB. The school will manually verify
                 the payment in the bank app, so this is only supporting proof.
               </p>

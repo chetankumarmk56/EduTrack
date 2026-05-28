@@ -27,8 +27,9 @@ import SchoolPaymentSettingsForm from '../components/SchoolPaymentSettingsForm';
  * Defaults to oldest-first so the queue is processed in submission order.
  * Filters: status (multi), student/UTR search, class, amount range, date range.
  * The selected row opens a right-side drawer with the full detail + decision
- * controls. Decisions are persisted via the manual-payments API only —
- * the legacy `payments` / `finance_ledger` tables are never touched here.
+ * controls. On Approve/Partial the backend also mirrors the row into
+ * FinanceLedger (via manual_payment_request_id) so the admin finance ledger
+ * page stays in sync without duplicating receipt storage.
  */
 
 const EMPTY_SUMMARY: ManualPaymentSummary = {
@@ -151,10 +152,10 @@ export default function AdminManualPayments() {
           <div className="inline-flex items-center gap-2 text-emerald-600 text-[10px] font-black uppercase tracking-[0.3em] bg-emerald-500/10 px-3 py-1.5 rounded-full border border-emerald-500/20">
             <Sparkles className="w-3.5 h-3.5" /> New · Manual Verification Queue
           </div>
-          <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tighter text-foreground leading-none">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tighter text-slate-900 dark:text-white leading-none">
             Manual <span className="text-emerald-500 italic">Payments</span>
           </h1>
-          <p className="text-sm text-muted-foreground max-w-2xl">
+          <p className="text-sm text-slate-500 dark:text-slate-400 max-w-2xl">
             Review parent-submitted UPI / bank transfers and confirm them against
             the school's actual account. Approving here updates the student's
             ledger and issues a receipt.
@@ -170,7 +171,7 @@ export default function AdminManualPayments() {
                 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-colors',
                 activeTab === 'queue'
                   ? 'bg-primary text-primary-foreground shadow'
-                  : 'text-muted-foreground',
+                  : 'text-slate-500 dark:text-slate-400',
               )}
             >
               <Clock className="w-3.5 h-3.5" />
@@ -183,7 +184,7 @@ export default function AdminManualPayments() {
                 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-colors',
                 activeTab === 'settings'
                   ? 'bg-primary text-primary-foreground shadow'
-                  : 'text-muted-foreground',
+                  : 'text-slate-500 dark:text-slate-400',
               )}
             >
               <Settings className="w-3.5 h-3.5" />
@@ -195,7 +196,7 @@ export default function AdminManualPayments() {
               <button
                 type="button"
                 onClick={() => void load({ quiet: true })}
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-2xl border border-slate-200 dark:border-white/10 text-xs font-black uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors"
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-2xl border border-slate-200 dark:border-white/10 text-xs font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:text-white transition-colors"
               >
                 {isRefreshing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
                 Refresh
@@ -206,7 +207,7 @@ export default function AdminManualPayments() {
                   onClick={() => setOrder('asc')}
                   className={cn(
                     'px-3 py-1.5 rounded-xl transition-colors',
-                    order === 'asc' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground',
+                    order === 'asc' ? 'bg-primary text-primary-foreground' : 'text-slate-500 dark:text-slate-400',
                   )}
                 >
                   Oldest first
@@ -216,7 +217,7 @@ export default function AdminManualPayments() {
                   onClick={() => setOrder('desc')}
                   className={cn(
                     'px-3 py-1.5 rounded-xl transition-colors',
-                    order === 'desc' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground',
+                    order === 'desc' ? 'bg-primary text-primary-foreground' : 'text-slate-500 dark:text-slate-400',
                   )}
                 >
                   Newest first
@@ -267,7 +268,7 @@ export default function AdminManualPayments() {
       <div className="space-y-3">
         <div className="flex items-center gap-2 flex-wrap">
           <div className="relative flex-1 min-w-[14rem]">
-            <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400" />
             <input
               type="text"
               value={search}
@@ -283,7 +284,7 @@ export default function AdminManualPayments() {
               'inline-flex items-center gap-2 px-3 py-2.5 rounded-2xl border text-xs font-black uppercase tracking-widest transition-colors',
               showAdvanced
                 ? 'bg-primary text-primary-foreground border-primary'
-                : 'border-slate-200 dark:border-white/10 text-muted-foreground hover:text-foreground',
+                : 'border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:text-white',
             )}
           >
             <Filter className="w-3.5 h-3.5" />
@@ -304,7 +305,7 @@ export default function AdminManualPayments() {
                   'px-3 py-1.5 rounded-full border text-[10px] font-black uppercase tracking-widest transition-all',
                   active
                     ? 'bg-primary text-primary-foreground border-primary shadow-md'
-                    : 'border-slate-200 dark:border-white/10 text-muted-foreground hover:text-foreground',
+                    : 'border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:text-white',
                 )}
               >
                 {STATUS_LABEL[s]}
@@ -390,7 +391,7 @@ export default function AdminManualPayments() {
               <thead>
                 <tr className="border-b border-slate-200/60 dark:border-white/5 bg-slate-50/70 dark:bg-white/[0.02]">
                   {['#', 'Student', 'Class', 'Amount', 'UTR / Txn', 'Submitted', 'Status', ''].map((h) => (
-                    <th key={h} className="px-4 sm:px-5 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                    <th key={h} className="px-4 sm:px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
                       {h}
                     </th>
                   ))}
@@ -408,34 +409,34 @@ export default function AdminManualPayments() {
                         : 'bg-amber-500/5 hover:bg-amber-500/10',
                     )}
                   >
-                    <td className="px-4 sm:px-5 py-3 text-xs font-mono text-muted-foreground">
+                    <td className="px-4 sm:px-5 py-3 text-xs font-mono text-slate-500 dark:text-slate-400">
                       #{r.id}
                     </td>
                     <td className="px-4 sm:px-5 py-3">
-                      <p className="text-sm font-black text-foreground">{r.student_name}</p>
-                      <p className="text-[11px] text-muted-foreground">{r.parent_name}</p>
+                      <p className="text-sm font-black text-slate-900 dark:text-white">{r.student_name}</p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">{r.parent_name}</p>
                     </td>
-                    <td className="px-4 sm:px-5 py-3 text-xs font-bold text-muted-foreground">
+                    <td className="px-4 sm:px-5 py-3 text-xs font-bold text-slate-500 dark:text-slate-400">
                       {r.class_name || '—'}
                       {r.section_name && <span className="opacity-60"> · {r.section_name}</span>}
                     </td>
                     <td className="px-4 sm:px-5 py-3">
-                      <p className="text-sm font-black text-foreground">
+                      <p className="text-sm font-black text-slate-900 dark:text-white">
                         {formatINR(r.approved_amount ?? r.amount)}
                       </p>
                       {r.approved_amount != null && r.approved_amount !== r.amount && (
-                        <p className="text-[11px] text-muted-foreground line-through">
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 line-through">
                           {formatINR(r.amount)}
                         </p>
                       )}
                     </td>
                     <td className="px-4 sm:px-5 py-3">
-                      <p className="text-xs font-mono text-foreground truncate max-w-[10rem]">
+                      <p className="text-xs font-mono text-slate-900 dark:text-white truncate max-w-[10rem]">
                         {r.transaction_reference}
                       </p>
-                      <p className="text-[11px] text-muted-foreground">{formatDateTime(r.transaction_at)}</p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">{formatDateTime(r.transaction_at)}</p>
                     </td>
-                    <td className="px-4 sm:px-5 py-3 text-xs text-muted-foreground">
+                    <td className="px-4 sm:px-5 py-3 text-xs text-slate-500 dark:text-slate-400">
                       {formatDateTime(r.submitted_at)}
                     </td>
                     <td className="px-4 sm:px-5 py-3">
@@ -460,7 +461,7 @@ export default function AdminManualPayments() {
                             <Download className="w-3.5 h-3.5" />
                           </a>
                         )}
-                        <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+                        <Eye className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
                       </div>
                     </td>
                   </tr>
@@ -473,7 +474,7 @@ export default function AdminManualPayments() {
         {/* Pagination */}
         {items.length > 0 && (
           <div className="px-4 sm:px-5 py-3 border-t border-slate-200/60 dark:border-white/5 flex items-center gap-3">
-            <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
               Showing {page * PAGE_SIZE + 1}–{page * PAGE_SIZE + items.length} of {total}
             </p>
             <div className="ml-auto inline-flex items-center gap-2">
@@ -555,12 +556,12 @@ function SummaryCard({ icon, label, value, sub, tone }: SummaryCardProps) {
       <div className={cn('h-9 w-9 rounded-2xl flex items-center justify-center mb-3', tones)}>
         {icon}
       </div>
-      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-0.5">
+      <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-0.5">
         {label}
       </p>
-      <p className="text-xl sm:text-2xl font-black text-foreground tracking-tight">{value}</p>
+      <p className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">{value}</p>
       {sub && (
-        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-1 truncate">
+        <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mt-1 truncate">
           {sub}
         </p>
       )}
@@ -576,7 +577,7 @@ interface FilterFieldProps {
 function FilterField({ label, children }: FilterFieldProps) {
   return (
     <div>
-      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1.5">
+      <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-1.5">
         {label}
       </p>
       {children}
@@ -590,16 +591,16 @@ function EmptyState() {
       <div className="mx-auto h-14 w-14 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
         <ShieldCheck className="w-6 h-6" />
       </div>
-      <p className="text-sm font-black text-foreground">Nothing to review right now.</p>
-      <p className="text-xs text-muted-foreground max-w-md mx-auto">
+      <p className="text-sm font-black text-slate-900 dark:text-white">Nothing to review right now.</p>
+      <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
         Parent submissions will appear here ordered oldest first. Adjust filters above
         to surface approved, rejected, or older submissions.
       </p>
-      <p className="text-[10px] text-muted-foreground inline-flex items-center gap-1.5">
+      <p className="text-[10px] text-slate-500 dark:text-slate-400 inline-flex items-center gap-1.5">
         <AlertTriangle className="w-3 h-3 opacity-60" />
         Tip: keep "Pending Verification" + "Need Verification" pinned for your queue.
       </p>
-      <p className="text-[10px] text-muted-foreground inline-flex items-center gap-1.5">
+      <p className="text-[10px] text-slate-500 dark:text-slate-400 inline-flex items-center gap-1.5">
         <Coins className="w-3 h-3 opacity-60" />
         Approvals flow into student fee ledgers automatically.
       </p>

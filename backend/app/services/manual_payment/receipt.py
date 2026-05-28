@@ -13,8 +13,9 @@ in depth — the receipt should never be unrecoverable once approved).
 from __future__ import annotations
 
 import io
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from fastapi import UploadFile
 from reportlab.lib import colors
@@ -25,6 +26,7 @@ from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
 )
 
+from app.core.config import settings
 from app.core.logger import logger
 from app.models.manual_payment import ManualPaymentRequest
 from app.services.storage_service import storage_service
@@ -47,7 +49,38 @@ def _fmt_amount(amount: Optional[float]) -> str:
 def _fmt_dt(dt: Optional[datetime]) -> str:
     if not dt:
         return "—"
-    return dt.strftime("%d %b %Y, %I:%M %p")
+    # Stored timestamps are UTC (timezone-aware via DateTime(timezone=True),
+    # or naive utcnow() for reviewed_at/receipt_generated_at). Render in the
+    # configured display timezone so receipts read in local wall-clock time.
+    try:
+        local_tz = ZoneInfo(settings.FEE_REMINDER_TIMEZONE)
+    except Exception:
+        local_tz = ZoneInfo("Asia/Kolkata")
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(local_tz).strftime("%d %b %Y, %I:%M %p")
+
+
+def _fmt_class_section(class_name: Optional[str], section_name: Optional[str]) -> str:
+    """Combine class + section without duplicating a section already in class_name.
+
+    Class display names often already include the section (e.g. "10-A"), so
+    blindly appending the section_name produces "10-A A". Only append when
+    the section isn't already a suffix/token of the class label.
+    """
+    cls = (class_name or "").strip()
+    sec = (section_name or "").strip()
+    if not cls and not sec:
+        return "—"
+    if not sec:
+        return cls or "—"
+    if not cls:
+        return sec
+    # Already contains the section as a suffix (e.g. "10-A" + "A", "10 A" + "A").
+    tail = cls.split()[-1] if " " in cls else cls.split("-")[-1]
+    if tail.upper() == sec.upper() or cls.upper().endswith(sec.upper()):
+        return cls
+    return f"{cls} {sec}"
 
 
 def generate_receipt_pdf_bytes(
@@ -117,7 +150,7 @@ def generate_receipt_pdf_bytes(
     student_rows = [
         ["Student Name", payment_request.student_name],
         ["Parent / Guardian", payment_request.parent_name],
-        ["Class / Section", f"{payment_request.class_name or '—'} {payment_request.section_name or ''}".strip()],
+        ["Class / Section", _fmt_class_section(payment_request.class_name, payment_request.section_name)],
         ["Fee Type", payment_request.fee_type or "TUITION"],
     ]
     if payment_request.installment_label:

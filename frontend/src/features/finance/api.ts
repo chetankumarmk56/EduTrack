@@ -200,6 +200,13 @@ export const financeApi = {
     const response = await client.get<LedgerFilterOptions>('finance/ledger/filters');
     return response.data;
   },
+
+  downloadLedgerReceipt: async (ledgerId: number): Promise<Blob> => {
+    const response = await client.get(`finance/ledger/${ledgerId}/receipt`, {
+      responseType: 'blob',
+    });
+    return response.data as Blob;
+  },
 };
 
 // --- Ledger types ---
@@ -247,6 +254,10 @@ export interface LedgerEntry {
   refunded_amount: number | null;
   // For FAILED / CANCELLED entries: the human-readable reason.
   error_message: string | null;
+  // True when a PDF receipt can be downloaded for this entry.
+  has_receipt: boolean;
+  // Non-null when the ledger row was mirrored from a manual payment.
+  manual_payment_request_id: number | null;
 }
 
 export interface LedgerSummary {

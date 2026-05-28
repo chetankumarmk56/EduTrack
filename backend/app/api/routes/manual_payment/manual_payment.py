@@ -98,6 +98,17 @@ async def _to_response(
         }
         for a in (request.audit_logs or [])
     ]
+    # Presign S3 keys at response time so the client always sees a
+    # fetchable URL. Legacy Cloudinary URLs stored in these columns
+    # pass through unchanged.
+    screenshot_url = await storage_service.resolve_url(request.screenshot_url)
+    receipt_filename = (
+        f"receipt-{request.receipt_number}.pdf"
+        if request.receipt_number else None
+    )
+    receipt_url = await storage_service.resolve_url(
+        request.receipt_url, filename=receipt_filename,
+    )
     return ManualPaymentRequestResponse(
         id=request.id,
         institution_id=request.institution_id,
@@ -114,7 +125,7 @@ async def _to_response(
         transaction_at=request.transaction_at,
         payer_name=request.payer_name,
         payer_upi=request.payer_upi,
-        screenshot_url=request.screenshot_url,
+        screenshot_url=screenshot_url,
         parent_note=request.parent_note,
         status=request.status,
         admin_note=request.admin_note,
@@ -124,7 +135,7 @@ async def _to_response(
         reviewed_at=request.reviewed_at,
         first_viewed_at=request.first_viewed_at,
         receipt_number=request.receipt_number,
-        receipt_url=request.receipt_url,
+        receipt_url=receipt_url,
         receipt_generated_at=request.receipt_generated_at,
         submitted_at=request.submitted_at,
         submitted_by_user_id=request.submitted_by_user_id,
@@ -415,7 +426,7 @@ async def list_manual_payments(
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
     search: Optional[str] = None,
-    order: str = Query("asc", regex="^(asc|desc)$"),
+    order: str = Query("asc", pattern="^(asc|desc)$"),
     skip: int = 0,
     limit: int = Query(50, le=200),
     db: AsyncSession = Depends(get_db),
@@ -496,11 +507,15 @@ async def apply_decision(
         actor_name=admin.name,
     )
 
-    # Auto-generate receipt on positive outcomes.
+    # Auto-generate receipt on positive outcomes. We key off
+    # receipt_generated_at (not receipt_number) because the service layer now
+    # reserves the receipt number up-front so the FinanceLedger mirror and
+    # the PDF share the same identifier — only the actual PDF render step is
+    # still pending here.
     if req.status in (
         ManualPaymentStatus.APPROVED.value,
         ManualPaymentStatus.PARTIAL_PAYMENT.value,
-    ) and not req.receipt_number:
+    ) and not req.receipt_generated_at:
         try:
             await _generate_and_attach_receipt(
                 db, request=req, actor=admin,

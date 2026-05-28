@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Search, Download, Calendar, Loader2, RefreshCw, FileText, FileSpreadsheet,
-  CheckCircle2, AlertCircle, Clock, RotateCcw, X,
+  CheckCircle2, AlertCircle, Clock, RotateCcw, X, Receipt,
 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { cn } from '@/shared/lib/utils';
 import { financeApi } from '@/features/finance/api';
 import { Skeleton } from '@/shared/components/ui/Skeleton';
@@ -106,6 +107,7 @@ export default function PaymentLedger() {
   const [facets, setFacets] = useState<LedgerFilterOptions | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isExporting, setIsExporting] = useState<'csv' | 'excel' | 'pdf' | null>(null);
+  const [downloadingReceiptId, setDownloadingReceiptId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Client-side ordering on top of the backend's date-desc default.
   const [sortBy, setSortBy] = useState<SortValue>('date_desc');
@@ -206,6 +208,21 @@ export default function PaymentLedger() {
   const refresh = async () => {
     await loadFacets();
     await loadLedger();
+  };
+
+  const handleDownloadReceipt = async (entry: LedgerEntry) => {
+    if (!entry.has_receipt) return;
+    setDownloadingReceiptId(entry.id);
+    try {
+      const blob = await financeApi.downloadLedgerReceipt(entry.id);
+      const filename = `${entry.receipt_number || `receipt-${entry.id}`}.pdf`;
+      downloadBlob(blob, filename);
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail || err?.message || 'Failed to download receipt.';
+      toast.error(detail);
+    } finally {
+      setDownloadingReceiptId(null);
+    }
   };
 
   const handleExport = async (format: 'csv' | 'excel' | 'pdf') => {
@@ -550,13 +567,14 @@ export default function PaymentLedger() {
                 <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Status</th>
                 <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Refund</th>
                 <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Remarks</th>
+                <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground">Receipt</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {isLoading && (
                 Array.from({ length: 6 }).map((_, i) => (
                   <tr key={`skel-${i}`}>
-                    {Array.from({ length: 10 }).map((__, c) => (
+                    {Array.from({ length: 11 }).map((__, c) => (
                       <td key={c} className="px-4 py-3">
                         <Skeleton rounded="md" className="h-4 w-full" />
                       </td>
@@ -566,7 +584,7 @@ export default function PaymentLedger() {
               )}
 
               {!isLoading && sortedEntries.length === 0 && (
-                <tr><td colSpan={10} className="px-4 py-12 text-center text-muted-foreground text-sm font-bold">
+                <tr><td colSpan={11} className="px-4 py-12 text-center text-muted-foreground text-sm font-bold">
                   No transactions match the current filters.
                 </td></tr>
               )}
@@ -624,6 +642,26 @@ export default function PaymentLedger() {
                       <p className="text-xs text-muted-foreground italic truncate" title={e.error_message || e.notes || ''}>
                         {e.error_message || e.notes}
                       </p>
+                    ) : (
+                      <span className="text-[10px] opacity-40">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    {e.has_receipt ? (
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadReceipt(e)}
+                        disabled={downloadingReceiptId === e.id}
+                        title={e.manual_payment_request_id ? 'Download manual-payment receipt' : 'Download payment receipt'}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border border-emerald-500/20 text-[10px] font-black uppercase tracking-widest disabled:opacity-50 transition-colors"
+                      >
+                        {downloadingReceiptId === e.id ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Receipt className="w-3 h-3" />
+                        )}
+                        PDF
+                      </button>
                     ) : (
                       <span className="text-[10px] opacity-40">—</span>
                     )}

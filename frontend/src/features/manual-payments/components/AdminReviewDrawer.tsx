@@ -166,17 +166,17 @@ export default function AdminReviewDrawer({ request, onClose, onUpdated }: Props
               <FileSearch className="w-5 h-5" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
                 Review submission #{request.id}
               </p>
-              <h3 className="text-base font-black text-foreground truncate">
+              <h3 className="text-base font-black text-slate-900 dark:text-white truncate">
                 {request.student_name} · {request.class_name || '—'}
               </h3>
             </div>
             <StatusBadge status={request.status} size="md" />
             <button
               onClick={onClose}
-              className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 text-muted-foreground"
+              className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 text-slate-500 dark:text-slate-400"
               aria-label="Close drawer"
             >
               <X className="w-4 h-4" />
@@ -210,10 +210,10 @@ export default function AdminReviewDrawer({ request, onClose, onUpdated }: Props
               )}
               {request.parent_note && (
                 <div className="rounded-xl bg-white dark:bg-white/[0.04] border border-slate-200 dark:border-white/5 p-3">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-1">
                     Parent note
                   </p>
-                  <p className="text-xs text-foreground whitespace-pre-line">{request.parent_note}</p>
+                  <p className="text-xs text-slate-900 dark:text-white whitespace-pre-line">{request.parent_note}</p>
                 </div>
               )}
             </section>
@@ -239,7 +239,7 @@ export default function AdminReviewDrawer({ request, onClose, onUpdated }: Props
             {/* Decision section */}
             {!isFinalised && (
               <section className="space-y-4">
-                <h4 className="text-sm font-black uppercase tracking-widest text-foreground">
+                <h4 className="text-sm font-black uppercase tracking-widest text-slate-900 dark:text-white">
                   Make a decision
                 </h4>
                 <div className="grid sm:grid-cols-2 gap-2">
@@ -270,7 +270,7 @@ export default function AdminReviewDrawer({ request, onClose, onUpdated }: Props
 
                 {(selectedDecision === 'APPROVE' || selectedDecision === 'PARTIAL') && (
                   <div>
-                    <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1.5 block">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-1.5 block">
                       Approved amount (₹)
                     </label>
                     <input
@@ -283,7 +283,7 @@ export default function AdminReviewDrawer({ request, onClose, onUpdated }: Props
                       className="w-full rounded-2xl border-2 border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.05] px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary"
                     />
                     {selectedDecision === 'PARTIAL' && (
-                      <p className="mt-1 text-[11px] text-muted-foreground">
+                      <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
                         Must be less than ₹{request.amount.toLocaleString('en-IN')}.
                       </p>
                     )}
@@ -292,7 +292,7 @@ export default function AdminReviewDrawer({ request, onClose, onUpdated }: Props
 
                 {(selectedDecision === 'REJECT' || selectedDecision === 'FAIL') && (
                   <div>
-                    <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1.5 block">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-1.5 block">
                       Reason for {selectedDecision === 'REJECT' ? 'rejection' : 'failure'}
                     </label>
                     <textarea
@@ -301,13 +301,13 @@ export default function AdminReviewDrawer({ request, onClose, onUpdated }: Props
                       rows={3}
                       maxLength={500}
                       placeholder="Visible to the parent. Be specific so they can fix and resubmit."
-                      className="w-full rounded-2xl border-2 border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.05] px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary resize-none"
+                      className="w-full rounded-2xl border-2 border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.05] text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary resize-none"
                     />
                   </div>
                 )}
 
                 <div>
-                  <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1.5 block">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-1.5 block">
                     Internal note (optional, admin-only)
                   </label>
                   <textarea
@@ -316,7 +316,7 @@ export default function AdminReviewDrawer({ request, onClose, onUpdated }: Props
                     rows={2}
                     maxLength={2000}
                     placeholder="e.g. matched against UPI app screenshot at 10:22 IST"
-                    className="w-full rounded-2xl border-2 border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.05] px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary resize-none"
+                    className="w-full rounded-2xl border-2 border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.05] text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 px-4 py-3 text-sm font-bold focus:outline-none focus:border-primary resize-none"
                   />
                 </div>
 
@@ -362,16 +362,16 @@ export default function AdminReviewDrawer({ request, onClose, onUpdated }: Props
 
             {/* Notes + audit */}
             <section className="space-y-3">
-              <h4 className="text-sm font-black uppercase tracking-widest text-foreground flex items-center gap-2">
+              <h4 className="text-sm font-black uppercase tracking-widest text-slate-900 dark:text-white flex items-center gap-2">
                 <NotebookPen className="w-4 h-4 text-primary" />
                 Admin notes
               </h4>
               {request.admin_note ? (
-                <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/[0.03] p-4 text-xs text-foreground whitespace-pre-line">
+                <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/[0.03] p-4 text-xs text-slate-900 dark:text-white whitespace-pre-line">
                   {request.admin_note}
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground">No notes yet.</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">No notes yet.</p>
               )}
               <div className="flex items-end gap-2">
                 <textarea
@@ -380,7 +380,7 @@ export default function AdminReviewDrawer({ request, onClose, onUpdated }: Props
                   rows={2}
                   maxLength={2000}
                   placeholder="Append an internal note"
-                  className="flex-1 rounded-2xl border-2 border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.05] px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary resize-none"
+                  className="flex-1 rounded-2xl border-2 border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.05] text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 px-4 py-3 text-xs font-bold focus:outline-none focus:border-primary resize-none"
                 />
                 <button
                   type="button"
@@ -394,12 +394,12 @@ export default function AdminReviewDrawer({ request, onClose, onUpdated }: Props
             </section>
 
             <section className="space-y-2">
-              <h4 className="text-sm font-black uppercase tracking-widest text-foreground flex items-center gap-2">
+              <h4 className="text-sm font-black uppercase tracking-widest text-slate-900 dark:text-white flex items-center gap-2">
                 <User className="w-4 h-4 text-primary" />
                 Audit trail
               </h4>
               {request.audit_logs.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No events yet.</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">No events yet.</p>
               ) : (
                 <ul className="space-y-2">
                   {request.audit_logs.map((a) => (
@@ -411,20 +411,20 @@ export default function AdminReviewDrawer({ request, onClose, onUpdated }: Props
                         {a.event.slice(0, 1)}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-black text-foreground">
+                        <p className="text-xs font-black text-slate-900 dark:text-white">
                           {a.event.replaceAll('_', ' ')}
                           {a.from_status && a.to_status && (
-                            <span className="text-muted-foreground font-bold">
+                            <span className="text-slate-500 dark:text-slate-400 font-bold">
                               {' '}· {a.from_status} → {a.to_status}
                             </span>
                           )}
                         </p>
                         {a.message && (
-                          <p className="text-[11px] text-muted-foreground mt-0.5 whitespace-pre-line">
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 whitespace-pre-line">
                             {a.message}
                           </p>
                         )}
-                        <p className="text-[10px] text-muted-foreground mt-1">
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
                           {a.actor_name || 'System'}
                           {a.actor_role && ` · ${a.actor_role}`} · {formatDateTime(a.created_at)}
                         </p>
@@ -453,12 +453,12 @@ interface KeyValueProps {
 function KeyValue({ label, value, highlight, mono }: KeyValueProps) {
   return (
     <div>
-      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+      <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
         {label}
       </p>
       <p
         className={cn(
-          'text-sm font-bold text-foreground',
+          'text-sm font-bold text-slate-900 dark:text-white',
           highlight && 'text-base text-primary',
           mono && 'font-mono tracking-tight',
         )}

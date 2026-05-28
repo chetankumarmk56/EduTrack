@@ -370,11 +370,21 @@ class LedgerServiceMixin:
         if row.payment_status in {"FAILED", "CANCELLED"}:
             error_message = row.notes
 
+        # Any SUCCESS payment row (real ledger id > 0) can have a PDF rendered;
+        # REFUND/ADJUSTMENT rows are not receiptable.
+        has_receipt = (
+            entry_type == "PAYMENT"
+            and row.payment_status == "SUCCESS"
+            and row.id is not None
+            and row.id > 0
+        )
+
         return {
             "id": row.id,
             "receipt_number": row.receipt_number,
             "entry_type": entry_type,
             "payment_id": row.payment_id,
+            "manual_payment_request_id": row.manual_payment_request_id,
             "student_id": row.student_id,
             "student_name": row.student_name,
             "class_id": row.class_id,
@@ -394,6 +404,7 @@ class LedgerServiceMixin:
             "refund_status": refund_status,
             "refunded_amount": refunded_amount or None,
             "error_message": error_message,
+            "has_receipt": has_receipt,
         }
 
     @staticmethod
@@ -419,6 +430,7 @@ class LedgerServiceMixin:
             "receipt_number": f"PEND-{payment.id:06d}",
             "entry_type": "PAYMENT",
             "payment_id": payment.id,
+            "manual_payment_request_id": None,
             "student_id": payment.student_id,
             "student_name": student_name or f"Student #{payment.student_id}",
             "class_id": student_class_id,
@@ -438,6 +450,8 @@ class LedgerServiceMixin:
             "refund_status": None,
             "refunded_amount": None,
             "error_message": payment.note if status_val in {"FAILED", "CANCELLED"} else None,
+            # Orphan payments have no real ledger id, so no receipt to render.
+            "has_receipt": False,
         }
 
     async def fetch_unified_for_export(

@@ -144,10 +144,10 @@ export default function ParentManualPayment() {
             <div className="inline-flex items-center gap-2 text-emerald-600 text-[10px] font-black uppercase tracking-[0.3em] bg-emerald-500/10 px-3 py-1.5 rounded-full border border-emerald-500/20">
               <Sparkles className="w-3.5 h-3.5" /> New · Direct UPI / Bank Pay
             </div>
-            <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tighter text-foreground leading-[0.95]">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tighter text-slate-900 dark:text-white leading-[0.95]">
               Pay Fees <span className="text-emerald-600 italic">Directly</span>
             </h1>
-            <p className="text-sm text-muted-foreground max-w-xl">
+            <p className="text-sm text-slate-500 dark:text-slate-400 max-w-xl">
               Pay into the school's UPI or bank account using your own bank app, then
               submit the transaction details below. The school office will verify and
               issue an official receipt after confirmation.
@@ -156,7 +156,7 @@ export default function ParentManualPayment() {
           <button
             type="button"
             onClick={() => setRefreshKey((k) => k + 1)}
-            className="self-start md:self-end inline-flex items-center gap-2 px-4 py-2 rounded-2xl border border-slate-200 dark:border-white/10 text-xs font-black uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors"
+            className="self-start md:self-end inline-flex items-center gap-2 px-4 py-2 rounded-2xl border border-slate-200 dark:border-white/10 text-xs font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:text-white transition-colors"
           >
             <RefreshCw className="w-3.5 h-3.5" />
             Refresh
@@ -198,7 +198,7 @@ export default function ParentManualPayment() {
               <div className="rounded-3xl border border-slate-200/60 dark:border-white/10 shadow-md bg-white/70 dark:bg-white/[0.03] backdrop-blur-md p-5 sm:p-6">
                 <div className="flex items-center gap-2 mb-4">
                   <FileText className="w-4 h-4 text-primary" />
-                  <h3 className="text-sm font-black uppercase tracking-widest text-foreground">
+                  <h3 className="text-sm font-black uppercase tracking-widest text-slate-900 dark:text-white">
                     Pending Fees
                   </h3>
                 </div>
@@ -209,10 +209,10 @@ export default function ParentManualPayment() {
                       className="flex items-center justify-between p-4 rounded-2xl bg-slate-50/70 dark:bg-white/[0.04] border border-slate-200/60 dark:border-white/5"
                     >
                       <div className="min-w-0">
-                        <p className="text-sm font-black text-foreground truncate">
+                        <p className="text-sm font-black text-slate-900 dark:text-white truncate">
                           {d.student_name}
                         </p>
-                        <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">
+                        <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
                           Paid: {formatINR(d.total_paid)}
                         </p>
                       </div>
@@ -239,10 +239,10 @@ export default function ParentManualPayment() {
                   <ReceiptText className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="text-lg sm:text-xl font-black text-foreground tracking-tight">
+                  <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
                     Submit a payment for verification
                   </h2>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     Fill in the transaction details after paying via UPI or bank transfer.
                   </p>
                 </div>
@@ -272,7 +272,7 @@ export default function ParentManualPayment() {
         <div className="rounded-3xl border border-slate-200/60 dark:border-white/10 shadow-xl bg-white/70 dark:bg-white/[0.03] backdrop-blur-md overflow-hidden">
           <div className="p-5 sm:p-6 border-b border-slate-200/60 dark:border-white/5 flex items-center gap-3">
             <ClipboardList className="w-4 h-4 text-primary" />
-            <h2 className="text-sm font-black uppercase tracking-widest text-foreground">
+            <h2 className="text-sm font-black uppercase tracking-widest text-slate-900 dark:text-white">
               My Submissions
             </h2>
             <span className="ml-auto px-3 py-1 rounded-full bg-primary/10 text-primary text-[10px] font-black uppercase tracking-widest">
@@ -280,7 +280,7 @@ export default function ParentManualPayment() {
             </span>
           </div>
           {history.length === 0 ? (
-            <div className="p-10 text-center text-muted-foreground">
+            <div className="p-10 text-center text-slate-500 dark:text-slate-400">
               <Loader2 className="w-8 h-8 opacity-20 mx-auto" />
               <p className="mt-2 text-sm font-bold">No submissions yet.</p>
               <p className="text-xs">Once you submit a manual payment, it will appear here.</p>
@@ -298,15 +298,15 @@ export default function ParentManualPayment() {
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-sm font-black text-foreground">
+                        <p className="text-sm font-black text-slate-900 dark:text-white">
                           {h.student_name}
                         </p>
                         <StatusBadge status={h.status} />
-                        <span className="text-[11px] font-mono text-muted-foreground truncate">
+                        <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400 truncate">
                           UTR: {h.transaction_reference}
                         </span>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                         Submitted {formatDateTime(h.submitted_at)} · {h.fee_type || 'TUITION'}
                         {h.installment_label && ` · ${h.installment_label}`}
                       </p>
@@ -322,7 +322,7 @@ export default function ParentManualPayment() {
                       )}
                     </div>
                     <div className="flex items-center gap-3 self-stretch sm:self-auto">
-                      <p className="text-base font-black text-foreground">
+                      <p className="text-base font-black text-slate-900 dark:text-white">
                         {formatINR(h.approved_amount ?? h.amount)}
                       </p>
                       {h.screenshot_url && (
@@ -380,12 +380,12 @@ function StatCard({ icon, label, value, sub, tone }: StatCardProps) {
       <div className={cn('h-10 w-10 rounded-2xl flex items-center justify-center mb-3', tonal)}>
         {icon}
       </div>
-      <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest mb-1">
+      <p className="text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 tracking-widest mb-1">
         {label}
       </p>
-      <p className="text-2xl font-black text-foreground tracking-tight truncate">{value}</p>
+      <p className="text-2xl font-black text-slate-900 dark:text-white tracking-tight truncate">{value}</p>
       {sub && (
-        <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest mt-1">
+        <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mt-1">
           {sub}
         </p>
       )}

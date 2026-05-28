@@ -233,6 +233,12 @@ class LedgerEntryResponse(BaseModel):
     refunded_amount: Optional[float] = None
     # Surfaced for FAILED / CANCELLED rows so the UI can show why.
     error_message: Optional[str] = None
+    # True when a PDF receipt can be streamed for this entry — i.e. status
+    # is SUCCESS and the row was either mirrored from manual_payment or
+    # carries a real ledger id we can render an on-the-fly PDF from.
+    has_receipt: bool = False
+    # When non-null, the ledger row was mirrored from this manual payment.
+    manual_payment_request_id: Optional[int] = None
 
     class Config:
         from_attributes = True

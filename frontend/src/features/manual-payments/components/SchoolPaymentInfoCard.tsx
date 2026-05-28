@@ -41,11 +41,11 @@ function CopyRow({ label, value, icon, mono }: CopyRowProps) {
         </div>
       )}
       <div className="flex-1 min-w-0">
-        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
           {label}
         </p>
         <p className={cn(
-          'text-sm font-bold text-foreground truncate',
+          'text-sm font-bold text-slate-900 dark:text-white truncate',
           mono && 'font-mono tracking-tight',
         )}>
           {value}
@@ -85,7 +85,7 @@ export default function SchoolPaymentInfoCard({ info, className }: Props) {
             <p className="text-[10px] font-black uppercase tracking-[0.25em] text-emerald-600">
               Pay directly to
             </p>
-            <h3 className="text-lg sm:text-xl font-black text-foreground tracking-tight truncate">
+            <h3 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight truncate">
               {info.school_name}
             </h3>
           </div>
@@ -109,8 +109,8 @@ export default function SchoolPaymentInfoCard({ info, className }: Props) {
             mono
           />
           {info.upi_display_name && (
-            <div className="text-[11px] font-bold text-muted-foreground -mt-2 ml-12">
-              Beneficiary: <span className="text-foreground">{info.upi_display_name}</span>
+            <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 -mt-2 ml-12">
+              Beneficiary: <span className="text-slate-900 dark:text-white">{info.upi_display_name}</span>
             </div>
           )}
 
@@ -122,7 +122,7 @@ export default function SchoolPaymentInfoCard({ info, className }: Props) {
           />
           <CopyRow label="IFSC" value={info.bank_ifsc} mono />
           {info.bank_name && (
-            <div className="text-[11px] font-bold text-muted-foreground ml-3">
+            <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 ml-3">
               {info.bank_name}
               {info.bank_account_holder && ` · A/c holder: ${info.bank_account_holder}`}
             </div>
@@ -131,7 +131,7 @@ export default function SchoolPaymentInfoCard({ info, className }: Props) {
 
         {info.qr_image_url && (
           <div className="rounded-2xl bg-gradient-to-br from-emerald-500/5 to-primary/5 border border-emerald-500/20 p-4 sm:p-5 flex flex-col sm:flex-row items-center gap-4">
-            <div className="h-32 w-32 sm:h-36 sm:w-36 rounded-2xl overflow-hidden bg-white border border-slate-200 shadow-inner shrink-0 flex items-center justify-center">
+            <div className="h-48 w-48 sm:h-60 sm:w-60 rounded-2xl overflow-hidden bg-white border border-slate-200 shadow-inner shrink-0 flex items-center justify-center p-2">
               <img
                 src={info.qr_image_url}
                 alt="Scan to pay"
@@ -146,10 +146,10 @@ export default function SchoolPaymentInfoCard({ info, className }: Props) {
                   Scan to pay
                 </p>
               </div>
-              <p className="text-sm font-bold text-foreground leading-snug">
+              <p className="text-sm font-bold text-slate-900 dark:text-white leading-snug">
                 Open any UPI app and scan to pay.
               </p>
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                 After paying, enter the UTR/transaction ID below to submit for verification.
               </p>
             </div>

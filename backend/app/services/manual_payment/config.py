@@ -23,6 +23,7 @@ from app.schemas.manual_payment import (
     InstitutionPaymentSettingsUpdate,
     SchoolPaymentInfoResponse,
 )
+from app.services.storage_service import storage_service
 
 
 async def _resolve_institution_name(db: AsyncSession, institution_id: int) -> str:
@@ -55,6 +56,7 @@ async def get_school_payment_info(
     """Parent-facing read view. Always returns a payload — empty when unset."""
     school_name = await _resolve_institution_name(db, institution_id)
     row = await _get_settings_row(db, institution_id)
+    qr_url = await storage_service.resolve_url(row.qr_image_url) if row else None
     return SchoolPaymentInfoResponse(
         school_name=school_name,
         upi_id=row.upi_id if row else None,
@@ -63,7 +65,7 @@ async def get_school_payment_info(
         bank_account_number=row.bank_account_number if row else None,
         bank_ifsc=row.bank_ifsc if row else None,
         bank_account_holder=row.bank_account_holder if row else None,
-        qr_image_url=row.qr_image_url if row else None,
+        qr_image_url=qr_url,
         payment_instructions=row.payment_instructions if row else None,
         is_configured=_is_configured(row),
     )
@@ -83,6 +85,7 @@ async def get_admin_settings(
         )
         updated_by_name = ur.scalar()
 
+    qr_url = await storage_service.resolve_url(row.qr_image_url) if row else None
     return InstitutionPaymentSettingsResponse(
         school_name=school_name,
         upi_id=row.upi_id if row else None,
@@ -91,7 +94,7 @@ async def get_admin_settings(
         bank_account_number=row.bank_account_number if row else None,
         bank_ifsc=row.bank_ifsc if row else None,
         bank_account_holder=row.bank_account_holder if row else None,
-        qr_image_url=row.qr_image_url if row else None,
+        qr_image_url=qr_url,
         payment_instructions=row.payment_instructions if row else None,
         is_configured=_is_configured(row),
         updated_at=row.updated_at if row else None,

@@ -40,7 +40,7 @@ export default function ScreenshotPreview({ url, onClose }: Props) {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between p-4 border-b">
-              <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+              <p className="text-xs font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
                 Transaction proof
               </p>
               <div className="flex items-center gap-2">

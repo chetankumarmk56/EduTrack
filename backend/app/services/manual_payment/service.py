@@ -561,6 +561,20 @@ class ManualPaymentService:
                 student_id=req.student_id,
                 amount=applied_amount,
             )
+            # Reserve the receipt number now so the FinanceLedger row and the
+            # PDF receipt the route layer renders both reference the same id.
+            if not req.receipt_number:
+                req.receipt_number = await self.generate_receipt_number(
+                    db, institution_id=institution_id,
+                )
+            # Mirror into FinanceLedger so this payment shows up on the
+            # admin finance page (idempotent — re-approval no-ops).
+            await self._mirror_to_finance_ledger(
+                db,
+                institution_id=institution_id,
+                request=req,
+                actor_user_id=actor_user_id,
+            )
 
         # Audit event
         event_map = {
@@ -587,6 +601,42 @@ class ManualPaymentService:
         await db.commit()
         return await self.get_request(
             db, institution_id=institution_id, request_id=request_id,
+        )
+
+    async def _mirror_to_finance_ledger(
+        self,
+        db: AsyncSession,
+        *,
+        institution_id: int,
+        request: ManualPaymentRequest,
+        actor_user_id: Optional[int],
+    ) -> None:
+        """
+        Write an idempotent FinanceLedger row mirroring this approved manual
+        payment so the admin finance ledger page stays in sync with the
+        manual-payment queue. Imports are local to keep the manual-payment
+        service free of a hard circular dependency on finance internals.
+        """
+        from app.services.finance.ledger_helpers import (
+            write_manual_payment_ledger_entry,
+        )
+        student_res = await db.execute(
+            select(Student).where(Student.id == request.student_id)
+        )
+        student = student_res.scalars().first()
+        if not student:
+            logger.warning(
+                "MANUAL_PAY: cannot mirror to ledger — student %s missing for "
+                "manual payment request %s.",
+                request.student_id, request.id,
+            )
+            return
+        await write_manual_payment_ledger_entry(
+            db,
+            institution_id=institution_id,
+            request=request,
+            student=student,
+            recorded_by_id=actor_user_id,
         )
 
     async def _reduce_student_dues(
