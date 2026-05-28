@@ -51,7 +51,7 @@ async def login_for_access_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    token_data = auth_service.create_token(user)
+    token_data = await auth_service.create_token(user)
     refresh_token = token_data.pop("refresh_token")
 
     # Stamp BOTH the access and refresh cookies as HttpOnly. The web SPA

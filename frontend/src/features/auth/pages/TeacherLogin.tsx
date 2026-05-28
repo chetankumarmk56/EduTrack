@@ -12,7 +12,7 @@ export default function TeacherLogin() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState(false);
   const { login } = useAuth();
-  const { setInstitutionName } = useApp();
+  const { setInstitutionName, setInstitutionLogoUrl } = useApp();
 
   const navigate = useNavigate();
 
@@ -37,6 +37,7 @@ export default function TeacherLogin() {
       } else if (data.institution_id) {
         setInstitutionName(`Institution ${data.institution_id}`);
       }
+      setInstitutionLogoUrl(data.institution_logo_url ?? null);
       login(data.access_token, {
         ...data.user,
         role: data.role,

@@ -1,3 +1,7 @@
+import os
+from typing import Optional
+
+from fastapi import HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text
 from datetime import datetime, timedelta, timezone
@@ -5,6 +9,19 @@ from app.models.core import Institution, User
 from app.core.security import get_password_hash_async
 from app.core.logger import logger
 from app.schemas import admin as schemas
+from app.services.storage_service import storage_service
+
+# School-logo upload constraints. Tighter than the generic shared-uploads
+# allowlist (storage_service.ALLOWED_EXTENSIONS) so a super-admin can't
+# accidentally store a 25 MB PDF in this slot.
+LOGO_ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
+LOGO_ALLOWED_CONTENT_TYPES = {
+    "image/png",
+    "image/jpeg",
+    "image/jpg",
+    "image/webp",
+}
+LOGO_MAX_SIZE = 5 * 1024 * 1024  # 5 MB
 
 # Soft-deleted institutions are permanently purged after this many days.
 TRASH_RETENTION_DAYS = 90
@@ -55,8 +72,77 @@ class AdminService:
     # --- Institution Management ---
 
     @staticmethod
-    async def create_institution(db: AsyncSession, inst_data: schemas.InstitutionCreate) -> Institution:
-        from fastapi import HTTPException
+    async def upload_institution_logo(logo: UploadFile) -> str:
+        """
+        Validate an image upload (type + size) and push it to the shared
+        storage backend. Returns the storage identifier (S3 key or
+        /static/uploads path) to persist on the Institution row.
+
+        Reads the full file into memory once so we can size-check before
+        handing it off; storage_service.upload_file also reads, but seeking
+        back to 0 first keeps the second read consistent across SpooledFile
+        and disk-backed buffers.
+        """
+        if not logo or not logo.filename:
+            raise HTTPException(status_code=400, detail="No logo file uploaded.")
+
+        ext = os.path.splitext(logo.filename or "")[1].lower()
+        if ext not in LOGO_ALLOWED_EXTENSIONS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Unsupported logo type. Allowed: PNG, JPG, JPEG, WEBP.",
+            )
+
+        # Content-Type is client-supplied so it's advisory, but blocking a
+        # mismatch catches obvious abuse (e.g. .png renamed onto a binary).
+        if logo.content_type and logo.content_type.lower() not in LOGO_ALLOWED_CONTENT_TYPES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Unsupported logo type. Allowed: PNG, JPG, JPEG, WEBP.",
+            )
+
+        # Size check before storage_service so we surface our friendlier
+        # 5 MB limit instead of the generic 25 MB one.
+        head = await logo.read(LOGO_MAX_SIZE + 1)
+        if len(head) > LOGO_MAX_SIZE:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Logo too large. Maximum size is 5 MB.",
+            )
+        await logo.seek(0)
+
+        try:
+            return await storage_service.upload_file(logo)
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.exception("Logo upload failed: %s", e)
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Could not save the school logo. Please retry.",
+            )
+
+    @staticmethod
+    async def serialize_institution(inst: Institution) -> dict:
+        """
+        Shape an Institution row for API responses, replacing the stored
+        logo identifier with a resolved (presigned / passthrough) URL.
+        """
+        return {
+            "id": inst.id,
+            "name": inst.name,
+            "slug": inst.slug,
+            "is_active": inst.is_active,
+            "created_at": inst.created_at,
+            "logo_url": await storage_service.resolve_url(inst.logo_url),
+        }
+
+    @staticmethod
+    async def create_institution(
+        db: AsyncSession,
+        inst_data: schemas.InstitutionCreate,
+        logo: Optional[UploadFile] = None,
+    ) -> Institution:
         # Block reuse of a slug that's currently in the trash.
         existing = await db.execute(
             select(Institution).where(Institution.slug == inst_data.slug)
@@ -70,7 +156,14 @@ class AdminService:
                 )
             raise HTTPException(status_code=409, detail=f"Institution ID '{inst_data.slug}' is already in use.")
 
-        db_inst = Institution(**inst_data.model_dump())
+        # Upload the logo BEFORE the DB insert so a storage failure aborts
+        # the whole operation cleanly — no orphan school row pointing at a
+        # missing file.
+        logo_identifier: Optional[str] = None
+        if logo is not None and logo.filename:
+            logo_identifier = await AdminService.upload_institution_logo(logo)
+
+        db_inst = Institution(**inst_data.model_dump(), logo_url=logo_identifier)
         db.add(db_inst)
         await db.commit()
         await db.refresh(db_inst)
@@ -99,14 +192,41 @@ class AdminService:
         return result.scalars().first()
 
     @staticmethod
-    async def update_institution(db: AsyncSession, inst_id: int, update_data: schemas.InstitutionUpdate):
+    async def update_institution(
+        db: AsyncSession,
+        inst_id: int,
+        update_data: schemas.InstitutionUpdate,
+        logo: Optional[UploadFile] = None,
+        remove_logo: bool = False,
+    ):
+        """
+        Patch an institution. The logo can be:
+        * replaced — pass a new ``logo`` UploadFile (validated + pushed to
+          storage); the new identifier overwrites the old one.
+        * removed — pass ``remove_logo=True`` (and no file) to clear the
+          column back to NULL.
+        * left alone — omit both; existing ``logo_url`` is untouched.
+
+        We intentionally don't delete the previous file from S3 here: the
+        shared-uploads bucket has lifecycle rules for orphan cleanup, and
+        an in-line delete would couple every rename/typo-fix to an S3
+        round-trip that can fail and leave the row half-updated.
+        """
         db_inst = await AdminService.get_institution(db, inst_id)
         if not db_inst:
             return None
-        
+
+        # Scalar field patches first so a logo-upload failure can't leave
+        # the row half-updated — we apply them in-memory and commit once
+        # at the end.
         for key, value in update_data.model_dump(exclude_unset=True).items():
             setattr(db_inst, key, value)
-            
+
+        if logo is not None and logo.filename:
+            db_inst.logo_url = await AdminService.upload_institution_logo(logo)
+        elif remove_logo:
+            db_inst.logo_url = None
+
         await db.commit()
         await db.refresh(db_inst)
         return db_inst

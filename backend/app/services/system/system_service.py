@@ -7,8 +7,10 @@ from app.services.academic import academic_service
 from app.services.statistics import StatisticsService
 from app.services.teacher import teacher_service
 from app.services.student import student_service
+from app.services.storage_service import storage_service
 from app.core.dependencies import UserContext
 from app.core.database import AsyncSessionLocal
+from app.core.logger import logger
 from app.models.core import Institution
 
 class SystemService:
@@ -36,21 +38,58 @@ class SystemService:
             async with AsyncSessionLocal() as session:
                 return await academic_service.get_school_classes(session, user.institution_id)
 
-        async def fetch_institution_name():
+        async def fetch_institution_meta():
+            # One query for both fields so callers get the school's display
+            # name AND logo identifier in a single round-trip. The logo
+            # column was added in migration n2c3d4e5f6a7; nullable, so most
+            # of today's institutions will return (name, None).
+            #
+            # Defensive: if the deployment hasn't run that migration yet,
+            # the `logo_url` column doesn't exist on Postgres and the SELECT
+            # raises ProgrammingError. We fall back to a name-only query so
+            # `/system/initialize` keeps working and the dashboard renders
+            # — the missing logo just degrades to the generic Building2
+            # fallback until the migration is applied.
             async with AsyncSessionLocal() as session:
-                result = await session.execute(
-                    select(Institution.name).where(Institution.id == user.institution_id)
-                )
-                return result.scalar()
+                try:
+                    result = await session.execute(
+                        select(Institution.name, Institution.logo_url).where(
+                            Institution.id == user.institution_id
+                        )
+                    )
+                    row = result.first()
+                    return row if row else (None, None)
+                except Exception as e:
+                    logger.warning(
+                        "fetch_institution_meta: logo_url unavailable (%s) — falling back to name-only. "
+                        "Run `alembic upgrade head` to enable school logos.",
+                        e.__class__.__name__,
+                    )
+                async with AsyncSessionLocal() as session2:
+                    result = await session2.execute(
+                        select(Institution.name).where(Institution.id == user.institution_id)
+                    )
+                    name = result.scalar()
+                    return (name, None)
 
         # Execute academic metadata queries in parallel
-        grades, sections, subjects, school_classes, institution_name = await asyncio.gather(
+        grades, sections, subjects, school_classes, inst_meta = await asyncio.gather(
             fetch_grades(),
             fetch_sections(),
             fetch_subjects(),
             fetch_classes(),
-            fetch_institution_name(),
+            fetch_institution_meta(),
         )
+
+        institution_name, institution_logo_identifier = inst_meta
+        institution_logo_url = None
+        if institution_logo_identifier:
+            try:
+                institution_logo_url = await storage_service.resolve_url(institution_logo_identifier)
+            except Exception:
+                # Never let a logo resolver failure break the dashboard
+                # bootstrap — the UI's fallback glyph handles a missing URL.
+                institution_logo_url = None
 
         context = {
             "academic": {
@@ -66,6 +105,7 @@ class SystemService:
             },
             "institution_id": user.institution_id,
             "institution_name": institution_name,
+            "institution_logo_url": institution_logo_url,
         }
 
         # Handle Role-Specific Data in parallel

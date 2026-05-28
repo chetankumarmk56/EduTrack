@@ -19,7 +19,7 @@ const PARTICLES = Array.from({ length: 15 }, () => ({
 
 export default function AdminLogin() {
   const { login } = useAuth();
-  const { setInstitutionName } = useApp();
+  const { setInstitutionName, setInstitutionLogoUrl } = useApp();
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -42,6 +42,7 @@ export default function AdminLogin() {
       setError(null);
       // Prefer the real school name when the backend ships it back.
       setInstitutionName(data.institution_name || `Institution ${instId}`);
+      setInstitutionLogoUrl(data.institution_logo_url ?? null);
       login(data.access_token, {
         ...data.user,
         role: data.role,

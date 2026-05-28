@@ -8,6 +8,7 @@ import { cn } from '@/shared/lib/utils';
 import { useAuth } from '@/shared/contexts/AuthContext';
 import { useApp } from '@/shared/contexts/AppContext';
 import { getNavItemsForPath } from '@/shared/lib/navigation';
+import SchoolLogo from '@/shared/components/ui/SchoolLogo';
 
 interface SidebarProps {
   mobileOpen?: boolean;
@@ -21,7 +22,10 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
   const isSuperAdmin = location.pathname.startsWith('/superadmin');
 
   const { logout, user } = useAuth();
-  const { institutionName } = useApp();
+  const { institutionName, institutionLogoUrl } = useApp();
+  // Super-admin sidebar is for the global platform — keep the existing
+  // generic Globe glyph there even if a logo happens to be cached.
+  const showSchoolLogo = Boolean(institutionLogoUrl) && !isSuperAdmin;
 
   const navItems = getNavItemsForPath(location.pathname);
   const portalName =
@@ -61,18 +65,34 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
       <div className="relative flex h-16 items-center px-6 shrink-0 border-b border-glass-border">
         <div className="flex items-center gap-3 w-full">
           <motion.div
-            whileHover={{ rotate: 15, scale: 1.1 }}
+            whileHover={{ rotate: showSchoolLogo ? 0 : 15, scale: 1.1 }}
             transition={{ type: 'spring', stiffness: 300 }}
             className={cn(
-              'flex h-10 w-10 items-center justify-center rounded-2xl font-black text-xl shadow-lg shrink-0',
-              (isTeacher || isAdmin)
-                ? 'aurora-gradient text-white shadow-primary/20'
-                : isSuperAdmin
-                  ? 'bg-cyan-600 text-white shadow-cyan-500/20'
-                  : 'bg-primary text-primary-foreground shadow-black/5',
+              'flex h-10 w-10 items-center justify-center rounded-2xl font-black text-xl shadow-lg shrink-0 overflow-hidden',
+              showSchoolLogo
+                ? 'bg-white border border-black/5 shadow-black/10'
+                : (isTeacher || isAdmin)
+                  ? 'aurora-gradient text-white shadow-primary/20'
+                  : isSuperAdmin
+                    ? 'bg-cyan-600 text-white shadow-cyan-500/20'
+                    : 'bg-primary text-primary-foreground shadow-black/5',
             )}
           >
-            {isSuperAdmin ? <Globe className="h-6 w-6" /> : isAdmin ? <Shield className="h-6 w-6" /> : <Building2 className="h-5 w-5" />}
+            {showSchoolLogo ? (
+              <SchoolLogo
+                src={institutionLogoUrl}
+                name={institutionName}
+                size={40}
+                rounded="rounded-2xl"
+                variant="ghost"
+              />
+            ) : isSuperAdmin ? (
+              <Globe className="h-6 w-6" />
+            ) : isAdmin ? (
+              <Shield className="h-6 w-6" />
+            ) : (
+              <Building2 className="h-5 w-5" />
+            )}
           </motion.div>
           <div className="flex flex-col justify-center -space-y-0.5 overflow-hidden flex-1 min-w-0">
             <span className="text-lg font-black tracking-tighter glow-text leading-tight truncate" title={institutionName}>{institutionName}</span>

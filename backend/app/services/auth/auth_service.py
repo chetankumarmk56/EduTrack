@@ -14,7 +14,23 @@ from app.core.security import (
 )
 from app.core.config import settings as _settings
 from app.core.logger import logger
+from app.services.storage_service import storage_service
 from typing import Optional
+
+
+async def _resolve_logo_url(identifier: Optional[str]) -> Optional[str]:
+    """
+    Turn a stored institution logo identifier (S3 key or /static path)
+    into a URL the client can fetch. Returns None for unset values and
+    silently swallows resolver errors — a missing logo must never block
+    a login response.
+    """
+    if not identifier:
+        return None
+    try:
+        return await storage_service.resolve_url(identifier)
+    except Exception:
+        return None
 
 # Centralised constants for access/refresh cookie naming so a single
 # helper writes them and the auth dependency reads them in sync.
@@ -238,7 +254,7 @@ class AuthService:
         return user
 
     @staticmethod
-    def create_token(user: User):
+    async def create_token(user: User):
         token_payload = {
             "sub": str(user.id),
             "role": user.role,
@@ -252,14 +268,24 @@ class AuthService:
         # institution.name is joinedloaded by authenticate_user, so this read
         # is free. Falls back to None for super-admins (no institution) and
         # for any future caller that doesn't preload the relation.
-        inst_name = None
+        #
+        # logo_url is read inside a second try/except so a deployment with
+        # the model field but no DB column (migration n2c3d4e5f6a7 not yet
+        # applied) still returns a working token — just with no logo URL.
+        inst_name: Optional[str] = None
+        inst_logo_identifier: Optional[str] = None
         try:
             if user.institution is not None:
                 inst_name = user.institution.name
         except Exception:
-            # Lazy-load attempt on a closed session would raise — swallow
-            # silently so login never breaks because of a UI nicety.
             inst_name = None
+        try:
+            if user.institution is not None:
+                inst_logo_identifier = user.institution.logo_url
+        except Exception:
+            inst_logo_identifier = None
+
+        inst_logo_url = await _resolve_logo_url(inst_logo_identifier)
 
         return {
             "access_token": access_token,
@@ -268,6 +294,7 @@ class AuthService:
             "role": user.role,
             "institution_id": user.institution_id,
             "institution_name": inst_name,
+            "institution_logo_url": inst_logo_url,
             "user": {
                 "id": user.id,
                 "name": user.name,
@@ -339,7 +366,7 @@ class AuthService:
                 )
                 return None
 
-            return self.create_token(user)
+            return await self.create_token(user)
 
         elif role in ["student", "parent"]:
             if not institution_id:
@@ -380,6 +407,9 @@ class AuthService:
             institution_name = (
                 student.institution.name if student.institution is not None else None
             )
+            institution_logo_url = await _resolve_logo_url(
+                student.institution.logo_url if student.institution is not None else None
+            )
 
             return {
                 "access_token": create_access_token(data=token_payload),
@@ -388,6 +418,7 @@ class AuthService:
                 "role": role,
                 "institution_id": institution_id,
                 "institution_name": institution_name,
+                "institution_logo_url": institution_logo_url,
                 "user": {
                     "id": student.id,
                     "student_id": student.id,
@@ -511,6 +542,9 @@ class AuthService:
         institution_name = (
             student.institution.name if student.institution is not None else None
         )
+        institution_logo_url = await _resolve_logo_url(
+            student.institution.logo_url if student.institution is not None else None
+        )
 
         return {
             "access_token": create_access_token(data=token_payload),
@@ -519,6 +553,7 @@ class AuthService:
             "role": "parent",
             "institution_id": student.institution_id,
             "institution_name": institution_name,
+            "institution_logo_url": institution_logo_url,
             "user": {
                 "id": student.user_id or student.id,
                 "student_id": student.id,

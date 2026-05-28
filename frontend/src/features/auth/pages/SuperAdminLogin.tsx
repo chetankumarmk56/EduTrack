@@ -19,7 +19,7 @@ const PARTICLES = Array.from({ length: 20 }, () => ({
 
 export default function SuperAdminLogin() {
   const { login } = useAuth();
-  const { setInstitutionName } = useApp();
+  const { setInstitutionName, setInstitutionLogoUrl } = useApp();
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -42,6 +42,10 @@ export default function SuperAdminLogin() {
       
       setError(null);
       setInstitutionName("Global Platform");
+      // Super-admin is not tied to a single school — clear any cached
+      // tenant logo so the sidebar doesn't show stale school branding
+      // from a previous admin session on this device.
+      setInstitutionLogoUrl(null);
       login(data.access_token, {
         ...data.user,
         role: data.role,

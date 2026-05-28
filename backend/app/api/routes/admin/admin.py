@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List
+from typing import List, Optional
 
 from app.core.database import get_db
 from app.core.dependencies import require_super_admin, UserContext
@@ -10,24 +10,39 @@ from app.services.admin import admin_service
 router = APIRouter(
     prefix="/api/admin",
     tags=["super-admin"],
-    dependencies=[Depends(require_super_admin)] 
+    dependencies=[Depends(require_super_admin)]
 )
 
 # --- Institution Routes ---
 
 @router.post("/institutions", response_model=schemas.InstitutionResponse)
 async def create_institution(
-    inst_data: schemas.InstitutionCreate, 
-    db: AsyncSession = Depends(get_db)
+    name: str = Form(..., min_length=1),
+    slug: str = Form(..., min_length=1),
+    is_active: bool = Form(True),
+    logo: Optional[UploadFile] = File(None),
+    db: AsyncSession = Depends(get_db),
 ):
-    return await admin_service.create_institution(db, inst_data)
+    """
+    Create a school. Accepts multipart/form-data so an optional logo image
+    (PNG/JPG/JPEG/WEBP, ≤ 5 MB) can ride along with the basic fields.
+    When no file is attached, the school is created normally and logo_url
+    stays NULL.
+    """
+    inst_data = schemas.InstitutionCreate(name=name, slug=slug, is_active=is_active)
+    # Treat an UploadFile with no filename (browsers sometimes send an empty
+    # field) the same as "no file": the service-layer guard would 400 on it.
+    logo_file = logo if (logo and logo.filename) else None
+    inst = await admin_service.create_institution(db, inst_data, logo=logo_file)
+    return await admin_service.serialize_institution(inst)
 
 @router.get("/institutions", response_model=List[schemas.InstitutionResponse])
 async def get_institutions(
     skip: int = 0, limit: int = 100,
     db: AsyncSession = Depends(get_db)
 ):
-    return await admin_service.get_institutions(db, skip=skip, limit=limit)
+    insts = await admin_service.get_institutions(db, skip=skip, limit=limit)
+    return [await admin_service.serialize_institution(i) for i in insts]
 
 # IMPORTANT: must be registered BEFORE /institutions/{inst_id} so FastAPI
 # doesn't match "trash" as an int path param.
@@ -44,53 +59,75 @@ async def list_trashed_institutions(
     for i in insts:
         purge_at = i.deleted_at + timedelta(days=TRASH_RETENTION_DAYS)
         days_left = max(0, (purge_at - now).days)
-        out.append({
-            "id": i.id, "name": i.name, "slug": i.slug,
-            "is_active": i.is_active, "created_at": i.created_at,
-            "deleted_at": i.deleted_at, "days_until_purge": days_left,
-        })
+        base = await admin_service.serialize_institution(i)
+        base["deleted_at"] = i.deleted_at
+        base["days_until_purge"] = days_left
+        out.append(base)
     return out
 
 @router.get("/institutions/{inst_id}", response_model=schemas.InstitutionResponse)
 async def get_institution(
-    inst_id: int, 
+    inst_id: int,
     db: AsyncSession = Depends(get_db)
 ):
     inst = await admin_service.get_institution(db, inst_id)
     if not inst:
         raise HTTPException(status_code=404, detail="Institution not found")
-    return inst
+    return await admin_service.serialize_institution(inst)
 
 @router.put("/institutions/{inst_id}", response_model=schemas.InstitutionResponse)
 async def update_institution(
-    inst_id: int, 
-    update_data: schemas.InstitutionUpdate,
-    db: AsyncSession = Depends(get_db)
+    inst_id: int,
+    name: Optional[str] = Form(None),
+    slug: Optional[str] = Form(None),
+    is_active: Optional[bool] = Form(None),
+    logo: Optional[UploadFile] = File(None),
+    remove_logo: bool = Form(False),
+    db: AsyncSession = Depends(get_db),
 ):
-    inst = await admin_service.update_institution(db, inst_id, update_data)
+    """
+    Patch a school. Accepts multipart/form-data so the super-admin can
+    change name / slug / active flag and optionally replace or remove
+    the logo in the same request:
+      * Attach a `logo` file → uploaded to storage, replaces logo_url.
+      * Send `remove_logo=true` (no file) → logo_url cleared to NULL.
+      * Send neither → existing logo is untouched.
+    """
+    # Build the patch only from fields the client actually sent so
+    # absent fields don't overwrite stored values with None.
+    patch: dict = {}
+    if name is not None: patch["name"] = name
+    if slug is not None: patch["slug"] = slug
+    if is_active is not None: patch["is_active"] = is_active
+    update_data = schemas.InstitutionUpdate(**patch)
+
+    logo_file = logo if (logo and logo.filename) else None
+    inst = await admin_service.update_institution(
+        db, inst_id, update_data, logo=logo_file, remove_logo=remove_logo,
+    )
     if not inst:
         raise HTTPException(status_code=404, detail="Institution not found")
-    return inst
+    return await admin_service.serialize_institution(inst)
 
 @router.post("/institutions/{inst_id}/activate", response_model=schemas.InstitutionResponse)
 async def activate_institution(
-    inst_id: int, 
+    inst_id: int,
     db: AsyncSession = Depends(get_db)
 ):
     inst = await admin_service.toggle_institution_status(db, inst_id, True)
     if not inst:
         raise HTTPException(status_code=404, detail="Institution not found")
-    return inst
+    return await admin_service.serialize_institution(inst)
 
 @router.post("/institutions/{inst_id}/deactivate", response_model=schemas.InstitutionResponse)
 async def deactivate_institution(
-    inst_id: int, 
+    inst_id: int,
     db: AsyncSession = Depends(get_db)
 ):
     inst = await admin_service.toggle_institution_status(db, inst_id, False)
     if not inst:
         raise HTTPException(status_code=404, detail="Institution not found")
-    return inst
+    return await admin_service.serialize_institution(inst)
 
 @router.delete("/institutions/{inst_id}")
 async def delete_institution(
@@ -112,7 +149,7 @@ async def restore_institution(
     inst = await admin_service.restore_institution(db, inst_id)
     if not inst:
         raise HTTPException(status_code=404, detail="Institution not found in trash")
-    return inst
+    return await admin_service.serialize_institution(inst)
 
 # --- Admin User Routes ---
 

@@ -4,7 +4,30 @@ import type { Institution } from '@/shared/types';
 export interface InstitutionCreate {
   name: string;
   slug: string;
+  /** Optional school logo. PNG/JPG/JPEG/WEBP, max 5 MB. */
+  logo?: File | null;
 }
+
+/**
+ * Shape for PATCH-ing a school.
+ * - Omit `logo` and `removeLogo` to leave the current logo alone.
+ * - Set `logo` to a File to replace it.
+ * - Set `removeLogo: true` (without `logo`) to clear it back to null.
+ */
+export interface InstitutionUpdate {
+  name?: string;
+  slug?: string;
+  is_active?: boolean;
+  logo?: File | null;
+  removeLogo?: boolean;
+}
+
+/** Image MIME types accepted by the backend for the school logo. */
+export const LOGO_ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'] as const;
+/** File-extension allowlist mirrored from the backend. */
+export const LOGO_ACCEPTED_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp'] as const;
+/** Max logo size in bytes (5 MB) — kept in sync with admin_service.LOGO_MAX_SIZE. */
+export const LOGO_MAX_SIZE_BYTES = 5 * 1024 * 1024;
 
 /** Row shape returned by GET /admin/admins. */
 export interface AdminUser {
@@ -40,7 +63,16 @@ export const superAdminApi = {
   },
 
   createInstitution: async (data: InstitutionCreate) => {
-    const response = await client.post<Institution>('admin/institutions', data);
+    // The endpoint is multipart so an optional logo file can be sent in
+    // the same request as the name/slug. Server-side, the field name
+    // "logo" is what FastAPI binds the UploadFile to.
+    const form = new FormData();
+    form.append('name', data.name);
+    form.append('slug', data.slug);
+    if (data.logo) form.append('logo', data.logo);
+    const response = await client.post<Institution>('admin/institutions', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
     return response.data;
   },
 
@@ -50,8 +82,19 @@ export const superAdminApi = {
     return response.data;
   },
 
-  updateInstitution: async (id: number, data: Partial<InstitutionCreate>) => {
-    const response = await client.put<Institution>(`admin/institutions/${id}`, data);
+  updateInstitution: async (id: number, data: InstitutionUpdate) => {
+    // Multipart so the same call can carry a logo replacement / removal
+    // alongside scalar field edits — keeps the UI's single "Save" button
+    // semantically atomic.
+    const form = new FormData();
+    if (data.name !== undefined) form.append('name', data.name);
+    if (data.slug !== undefined) form.append('slug', data.slug);
+    if (data.is_active !== undefined) form.append('is_active', String(data.is_active));
+    if (data.logo) form.append('logo', data.logo);
+    if (data.removeLogo) form.append('remove_logo', 'true');
+    const response = await client.put<Institution>(`admin/institutions/${id}`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
     return response.data;
   },
 

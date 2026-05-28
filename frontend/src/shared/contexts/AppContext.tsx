@@ -68,6 +68,11 @@ interface AppContextType {
   setInstitutionId: (id: number) => void;
   institutionName: string;
   setInstitutionName: (name: string) => void;
+  // Resolved URL to the school's logo, or null when no logo has been
+  // uploaded. Persisted to localStorage so returning users see their
+  // school's brand immediately on the login page.
+  institutionLogoUrl: string | null;
+  setInstitutionLogoUrl: (url: string | null) => void;
   activeAssignmentId: number | null;
   setActiveAssignmentId: (id: number | null) => void;
 
@@ -151,6 +156,9 @@ const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
   const [institutionName, setInstitutionName] = useState<string>(() => {
     return localStorage.getItem('edu_institution_name') || 'EduTrack Academy';
   });
+  const [institutionLogoUrl, setInstitutionLogoUrl] = useState<string | null>(() => {
+    return localStorage.getItem('edu_institution_logo_url') || null;
+  });
 
   const [activeAssignmentId, setActiveAssignmentId] = useState<number | null>(() => {
     const saved = localStorage.getItem('edu_active_assignment_id');
@@ -176,6 +184,17 @@ const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
       localStorage.setItem('edu_institution_name', institutionName);
     }
   }, [institutionName]);
+
+  // Same idea for the logo: persist whatever the latest login/initialize
+  // returned so the sidebar (and the returning-user login page) can show
+  // the school's brand without a flash of the generic fallback.
+  useEffect(() => {
+    if (institutionLogoUrl) {
+      localStorage.setItem('edu_institution_logo_url', institutionLogoUrl);
+    } else {
+      localStorage.removeItem('edu_institution_logo_url');
+    }
+  }, [institutionLogoUrl]);
 
   const refreshEvents = useCallback(async () => {
     setIsEventsLoading(true);
@@ -222,6 +241,12 @@ const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
         localStorage.setItem('edu_institution_name', data.institution_name);
         setInstitutionName(data.institution_name);
       }
+
+      // institution_logo_url is null when no logo has been uploaded — we
+      // explicitly clear in that case so an old school's cached URL never
+      // leaks into a different account after a logout/login on the same
+      // browser.
+      setInstitutionLogoUrl(data.institution_logo_url ?? null);
 
       if (data.academic) {
         setGrades(data.academic.grades || []);
@@ -457,6 +482,8 @@ const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
       setInstitutionId,
       institutionName,
       setInstitutionName,
+      institutionLogoUrl,
+      setInstitutionLogoUrl,
       activeAssignmentId,
       setActiveAssignmentId,
       fetchSubjectSummary,

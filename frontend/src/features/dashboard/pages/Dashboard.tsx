@@ -9,6 +9,7 @@ import {
    BookOpen, GraduationCap, Megaphone
 } from 'lucide-react';
 import { StaggerItem } from '@/shared/components/ui/PageWrapper';
+import SchoolLogo from '@/shared/components/ui/SchoolLogo';
 import { cn } from '@/shared/lib/utils';
 import { announcementApi } from '@/features/announcements/api';
 
@@ -49,6 +50,7 @@ export default function Dashboard() {
       fetchStudentData,
       parentFees,
       institutionName,
+      institutionLogoUrl,
    } = useApp();
 
    const [unreadCount, setUnreadCount] = useState(0);
@@ -133,6 +135,15 @@ export default function Dashboard() {
                            <ShieldCheck className="w-4 h-4" /> Parent Dashboard
                         </div>
                         <div>
+                           {institutionLogoUrl && (
+                              <SchoolLogo
+                                 src={institutionLogoUrl}
+                                 name={institutionName}
+                                 size={56}
+                                 rounded="rounded-2xl"
+                                 className="mb-3 sm:mb-4 border border-white/70 shadow-lg shadow-primary/10"
+                              />
+                           )}
                            <h1
                               title={institutionName}
                               className="text-2xl sm:text-3xl md:text-4xl lg:text-[2.5rem] xl:text-5xl font-black tracking-tight text-gradient-crystal leading-[1.05] mb-4 sm:mb-6 [text-wrap:balance] [overflow-wrap:anywhere] line-clamp-3"

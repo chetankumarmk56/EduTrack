@@ -5,6 +5,7 @@ import { useApp } from '@/shared/contexts/AppContext';
 import { authApi } from '@/features/auth/api';
 import { motion } from 'framer-motion';
 import { GraduationCap, Phone, AlertCircle, ChevronDown } from 'lucide-react';
+import SchoolLogo from '@/shared/components/ui/SchoolLogo';
 
 const days = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0'));
 const months = [
@@ -18,7 +19,7 @@ const years = Array.from({ length: currentYear - 2000 + 1 }, (_, i) => String(cu
 
 export default function Login() {
   const { login } = useAuth();
-  const { setInstitutionName } = useApp();
+  const { setInstitutionName, setInstitutionLogoUrl, institutionLogoUrl, institutionName } = useApp();
   // New parent-portal login: guardian phone + student DOB. The school admin
   // recorded the guardian phone against the student at enrollment time, and
   // the (phone, DOB) pair is unique in practice — siblings share the phone
@@ -64,6 +65,9 @@ export default function Login() {
       } else if (data.institution_id) {
         setInstitutionName(`Institution ${data.institution_id}`);
       }
+      // Explicit null clears any stale logo cached from a previous account
+      // on this device — important on shared family devices.
+      setInstitutionLogoUrl(data.institution_logo_url ?? null);
       login(data.access_token, {
         ...data.user,
         role: data.role,
@@ -123,9 +127,28 @@ export default function Login() {
           className="w-full max-w-md"
         >
           <div className="text-center mb-10">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 mb-4 lg:hidden">
-              <GraduationCap className="h-6 w-6 text-primary" />
-            </div>
+            {/* Returning-user touch: if the browser already knows this
+                family's school (cached from a prior login), show the
+                school's logo above the form so they land on a branded
+                page instead of the generic platform mark. */}
+            {institutionLogoUrl ? (
+              <div className="mx-auto mb-4 flex flex-col items-center gap-2">
+                <SchoolLogo
+                  src={institutionLogoUrl}
+                  name={institutionName}
+                  size={56}
+                  rounded="rounded-2xl"
+                  className="border border-border shadow-sm"
+                />
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                  {institutionName}
+                </p>
+              </div>
+            ) : (
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 mb-4 lg:hidden">
+                <GraduationCap className="h-6 w-6 text-primary" />
+              </div>
+            )}
             <h2 className="text-3xl font-bold tracking-tight text-foreground">Welcome Back</h2>
             {window.location.search.includes('reason=expired') && (
               <motion.p 

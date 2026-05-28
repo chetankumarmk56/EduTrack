@@ -33,53 +33,34 @@ export default function SuperAdminLayout() {
         'min-h-screen transition-colors duration-500 font-sans overflow-x-hidden',
         isDark
           ? 'bg-slate-950 text-slate-50 selection:bg-cyan-500/30 selection:text-cyan-400'
-          : 'bg-[#f0f9ff] text-[#0c4a6e] selection:bg-cyan-200/60 selection:text-cyan-800',
+          : 'bg-[#f5fbff] text-slate-900 selection:bg-cyan-200/60 selection:text-cyan-900',
       )}
     >
-      {/* Background ambience */}
+      {/* Background ambience.
+          Dark mode: same two-orb wash as before.
+          Light mode: a single calm sky gradient with two soft cyan halos at
+          the corners. The previous rotating orbs + dot-grid looked busy
+          against the now-translucent white cards and competed with the
+          content; this version reads as a clean studio backdrop. */}
       {isDark ? (
         <div className="fixed inset-0 pointer-events-none overflow-hidden">
           <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-cyan-900/10 blur-[120px] rounded-full" />
           <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] bg-blue-900/10 blur-[120px] rounded-full" />
         </div>
       ) : (
-        <div className="fixed inset-0 pointer-events-none overflow-hidden" style={{ background: '#f0f9ff' }}>
-          {/* Soft center glow */}
+        <div className="fixed inset-0 pointer-events-none overflow-hidden">
           <div
             className="absolute inset-0"
-            style={{ background: 'radial-gradient(circle at 50% 40%, rgba(8,145,178,0.05) 0%, transparent 65%)' }}
+            style={{ background: 'linear-gradient(180deg, #f5fbff 0%, #eef7ff 60%, #f5fbff 100%)' }}
           />
-          {/* Rotating pastel orbs */}
           <motion.div
-            animate={{ rotate: 360, scale: [1, 1.04, 1] }}
-            transition={{ duration: 70, repeat: Infinity, ease: 'linear' }}
-            className="absolute top-[-10%] left-[-10%] w-[120%] h-[120%]"
-          >
-            <div className="absolute top-[20%] left-[20%] w-[40%] h-[40%] rounded-full blur-[130px]" style={{ background: 'rgba(34,211,238,0.07)' }} />
-            <div className="absolute bottom-[20%] right-[20%] w-[40%] h-[40%] rounded-full blur-[130px]" style={{ background: 'rgba(96,165,250,0.06)' }} />
-          </motion.div>
-          {/* Primary cyan pulse */}
-          <motion.div
-            animate={{ scale: [1, 1.18, 1], opacity: [0.06, 0.13, 0.06], x: [0, 40, 0], y: [0, -20, 0] }}
-            transition={{ duration: 20, repeat: Infinity, ease: 'easeInOut' }}
-            className="absolute top-[-20%] left-[-10%] w-[70%] h-[70%] rounded-full blur-[150px]"
-            style={{ background: 'rgba(8,145,178,0.12)' }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 1.2 }}
+            className="absolute -top-32 -right-32 w-[640px] h-[640px] rounded-full"
+            style={{ background: 'radial-gradient(circle, rgba(8,145,178,0.10) 0%, transparent 70%)' }}
           />
-          {/* Secondary blue pulse */}
-          <motion.div
-            animate={{ scale: [1.1, 1, 1.1], opacity: [0.04, 0.10, 0.04], x: [0, -38, 0], y: [0, 20, 0] }}
-            transition={{ duration: 24, repeat: Infinity, ease: 'easeInOut' }}
-            className="absolute bottom-[-10%] right-[-10%] w-[70%] h-[70%] rounded-full blur-[160px]"
-            style={{ background: 'rgba(59,130,246,0.08)' }}
-          />
-          {/* Dot-grid texture */}
           <div
-            className="absolute inset-0"
-            style={{
-              backgroundImage: 'radial-gradient(circle, rgba(12,74,110,0.07) 1px, transparent 1px)',
-              backgroundSize: '28px 28px',
-              opacity: 0.5,
-            }}
+            className="absolute -bottom-40 -left-32 w-[560px] h-[560px] rounded-full"
+            style={{ background: 'radial-gradient(circle, rgba(56,189,248,0.08) 0%, transparent 70%)' }}
           />
         </div>
       )}

@@ -25,6 +25,9 @@ class Institution(Base, TimestampMixin):
     slug = Column(String, unique=True, index=True)
     is_active = Column(Boolean, default=True)
     deleted_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    # Storage identifier for the school logo (S3 key or /static/uploads path).
+    # Resolve via storage_service.resolve_url before returning to clients.
+    logo_url = Column(String, nullable=True)
 
     # Relationships
     users = relationship("User", back_populates="institution")

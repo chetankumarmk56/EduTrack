@@ -37,10 +37,13 @@ class InstitutionUpdate(BaseModel):
     name: Optional[str] = None
     slug: Optional[str] = None
     is_active: Optional[bool] = None
+    logo_url: Optional[str] = None
 
 class InstitutionResponse(InstitutionBase):
     id: int
     created_at: datetime
+    # Resolved (presigned / passthrough) URL — null when no logo uploaded.
+    logo_url: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 class TrashedInstitutionResponse(InstitutionResponse):

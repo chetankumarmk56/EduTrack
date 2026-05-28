@@ -12,6 +12,10 @@ class Token(BaseModel):
     # falling back to "Institution 1" (which is what the UI displayed when
     # only institution_id was available).
     institution_name: Optional[str] = None
+    # Resolved (presigned / passthrough) URL to the school logo when
+    # uploaded by super-admin. Null when unset — the UI falls back to a
+    # generic building glyph.
+    institution_logo_url: Optional[str] = None
     user: Optional[dict] = None
 
 class TokenPayload(BaseModel):

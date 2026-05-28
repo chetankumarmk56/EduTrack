@@ -15,6 +15,8 @@ export interface Institution {
   slug: string;
   is_active: boolean;
   created_at: string;
+  // Resolved URL to the school's logo. Null when no logo has been uploaded.
+  logo_url?: string | null;
 }
 
 export interface Grade {
@@ -223,6 +225,9 @@ export interface AuthResponse {
   // sidebar shows the school name instead of falling back to
   // "Institution <id>".
   institution_name?: string;
+  // Resolved URL to the school logo when the super-admin uploaded one.
+  // Null/undefined when unset; the UI falls back to a generic glyph.
+  institution_logo_url?: string | null;
   user: {
     id: number;
     name: string;
