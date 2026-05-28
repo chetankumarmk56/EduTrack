@@ -12,13 +12,18 @@ from app.models.communication import (
 )
 from app.models.directory import Teacher, TeacherAssignment, Student, Parent
 from app.schemas.communication import AnnouncementCreate, AnnouncementUpdate, AnnouncementType
+from app.services.storage_service import storage_service
 
 
-def _serialize_announcement(a: Announcement, **extra) -> dict:
+async def _serialize_announcement(a: Announcement, **extra) -> dict:
     """
     Single source of truth for converting an Announcement ORM row into the
     JSON payload the API returns. Centralising this here means any new
     field (category, due_date, …) is exposed everywhere at once.
+
+    Async because ``attachment_url`` may be an S3 key — we presign it
+    here so clients get a ready-to-fetch URL. Legacy Cloudinary URLs
+    and dev ``/static/`` paths pass through unchanged.
     """
     base = {
         "id": a.id,
@@ -32,7 +37,7 @@ def _serialize_announcement(a: Announcement, **extra) -> dict:
         "instructions": getattr(a, "instructions", None),
         "class_id": a.class_id,
         "student_id": a.student_id,
-        "attachment_url": a.attachment_url,
+        "attachment_url": await storage_service.resolve_url(a.attachment_url),
         "teacher_id": a.teacher_id,
         "institution_id": a.institution_id,
         "created_at": a.created_at,
@@ -196,7 +201,7 @@ class AnnouncementService:
                 extra["homework_confirmed_count"] = confirmed_counts.get(a.id, 0)
                 extra["homework_target_count"] = await _hw_target_count(a)
                 extra["homework_my_children"] = per_viewer_status.get(a.id, [])
-            enriched.append(_serialize_announcement(a, **extra))
+            enriched.append(await _serialize_announcement(a, **extra))
 
         return enriched
 
@@ -318,7 +323,7 @@ class AnnouncementService:
         for row in rows:
             a, read_count = row
             target_count = 1 if a.type == AnnouncementType.STUDENT else class_targets.get(a.class_id, 0)
-            enriched.append(_serialize_announcement(
+            enriched.append(await _serialize_announcement(
                 a,
                 read_count=read_count,
                 target_count=target_count,
@@ -432,11 +437,11 @@ class AnnouncementService:
 
     @staticmethod
     async def create_announcement(
-        db: AsyncSession, 
-        institution_id: int, 
-        user_id: int, 
+        db: AsyncSession,
+        institution_id: int,
+        user_id: int,
         announcement: AnnouncementCreate
-    ) -> Announcement:
+    ) -> dict:
         """
         Create announcement with strict ownership validation for teachers.
         """
@@ -478,8 +483,10 @@ class AnnouncementService:
             if not assign_result.scalars().first():
                 raise HTTPException(status_code=403, detail="This student is not in your assigned classes.")
 
-        # 3. Attachment URL is trusted — already validated during upload
-        # (Cloudinary guarantees URL validity post-upload)
+        # 3. Attachment URL is trusted — already validated during upload.
+        # Storage now stores an S3 key (or a legacy Cloudinary URL for
+        # rows written before the S3 migration); the serializer presigns
+        # at response time.
 
         # 4. Create
         db_announcement = Announcement(
@@ -490,7 +497,9 @@ class AnnouncementService:
         db.add(db_announcement)
         await db.commit()
         await db.refresh(db_announcement)
-        return db_announcement
+        # Hand back a fully-resolved dict so the route's response_model
+        # sees a presigned URL instead of the raw S3 key.
+        return await _serialize_announcement(db_announcement)
 
     @staticmethod
     async def mark_as_read(db: AsyncSession, announcement_id: UUID, parent_id: int) -> bool:

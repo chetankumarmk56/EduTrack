@@ -1,35 +1,45 @@
 """
-Announcement / teacher-shared file storage.
+Shared upload service for announcement attachments, payment QR images,
+parent payment screenshots, and generated receipt PDFs.
 
-Production path: Cloudinary (signed URLs returned to the client).
-Dev fallback: ``static/uploads/`` on the local disk — only allowed when
-``ENVIRONMENT != "prod"``. In production the absence of Cloudinary
-credentials would already have been caught by ``app.core.config``'s
-startup check, but we double-guard here so a config drift can't sneak a
-local write past us.
+Production path: AWS S3 (private bucket). ``upload_file`` returns the
+**S3 key** — callers persist that key in the DB and call
+``resolve_url`` at read time to mint a short-lived presigned URL.
 
-Why two guards: the config check is one-shot at process start. If
-someone clears Cloudinary creds at runtime (e.g. a secret rotation
-that doesn't restart the process), the second guard kicks in.
+Dev fallback: ``static/uploads/<filename>`` on the local disk, returned
+as the path string ``/static/uploads/<filename>``. Only allowed when
+``ENVIRONMENT != "prod"`` — config.py blocks startup in prod without S3,
+and we double-guard here so a runtime config drift can't sneak a local
+write past us.
+
+Legacy compatibility: rows written before this refactor still contain
+full Cloudinary URLs (``https://res.cloudinary.com/...``). ``resolve_url``
+passes any ``http(s)://`` value through unchanged so those keep working
+until the rows age out / are deleted.
 """
-import os
-import asyncio
 import datetime
-from fastapi import UploadFile, HTTPException, status
+import os
+import uuid
+from typing import Optional
+
+from fastapi import HTTPException, UploadFile, status
+
 from app.core.config import settings
 from app.core.logger import logger
+from app.services.storage.s3_backend import S3StorageBackend
 
-# ─── Cloudinary ───────────────────────────────────────────────────────────────
-try:
-    import cloudinary
-    import cloudinary.uploader
-    CLOUDINARY_AVAILABLE = True
-except ImportError:
-    CLOUDINARY_AVAILABLE = False
+
+def _s3_configured() -> bool:
+    return bool(
+        settings.AWS_S3_BUCKET
+        and settings.AWS_S3_REGION
+        and settings.AWS_ACCESS_KEY_ID
+        and settings.AWS_SECRET_ACCESS_KEY
+    )
 
 
 class StorageService:
-    # All common file types teachers might share
+    # All common file types teachers / parents / admins might share
     ALLOWED_EXTENSIONS = {
         # Images
         ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg",
@@ -39,45 +49,50 @@ class StorageService:
         # Video / Audio (short clips)
         ".mp4", ".mov", ".avi", ".mp3", ".m4a",
     }
-    MAX_SIZE = 25 * 1024 * 1024  # 25 MB (Cloudinary free tier limit)
+    MAX_SIZE = 25 * 1024 * 1024  # 25 MB
+    # Prefix every key with this so S3 lifecycle rules / IAM policies can
+    # scope cleanly to shared uploads vs the teacher file library.
+    KEY_PREFIX = "shared-uploads"
 
     def __init__(self):
-        # Local-disk dir only used in dev. Creating the directory is cheap
-        # and avoids a race when multiple tests start up in parallel.
         self.upload_dir = os.path.join(os.getcwd(), "static", "uploads")
         if settings.ENVIRONMENT != "prod":
             os.makedirs(self.upload_dir, exist_ok=True)
 
-        # ── Cloudinary init ────────────────────────────────────────────────
-        self._cloudinary_ready = False
-        if (
-            CLOUDINARY_AVAILABLE
-            and settings.CLOUDINARY_CLOUD_NAME
-            and settings.CLOUDINARY_API_KEY
-            and settings.CLOUDINARY_API_SECRET
-        ):
+        self._s3: Optional[S3StorageBackend] = None
+        if _s3_configured():
             try:
-                cloudinary.config(
-                    cloud_name=settings.CLOUDINARY_CLOUD_NAME,
-                    api_key=settings.CLOUDINARY_API_KEY,
-                    api_secret=settings.CLOUDINARY_API_SECRET,
-                    secure=True,
+                self._s3 = S3StorageBackend()
+                logger.info(
+                    "Shared upload storage: AWS S3 (bucket=%s, prefix=%s/).",
+                    settings.AWS_S3_BUCKET, self.KEY_PREFIX,
                 )
-                self._cloudinary_ready = True
-                logger.info("Cloudinary storage initialized.")
             except Exception as e:
-                logger.error(f"Cloudinary init error: {e}")
+                logger.error(f"S3 init error for shared uploads: {e}")
+                self._s3 = None
 
-    # ──────────────────────────────────────────────────────────────────────────
+    # ──────────────────────────────────────────────────────────────────────
+    def _safe_unique_name(self, filename: Optional[str]) -> str:
+        """
+        Build a server-controlled, collision-free object name.
+
+        Prepending a random UUID prevents a parent from guessing another
+        parent's payment-screenshot URL by knowing the upload time —
+        important now that all four flows are private+presigned.
+        """
+        base = os.path.basename(filename or "upload")
+        return f"{int(datetime.datetime.now().timestamp())}_{uuid.uuid4().hex[:12]}_{base}"
+
     async def upload_file(self, file: UploadFile) -> str:
         """
-        Upload a file and return a permanent URL.
+        Upload a file and return a persistable identifier.
 
-        Behaviour by environment:
-          * prod:  Cloudinary required. Failure surfaces as 5xx so the
-                   client retries rather than ending up with a 404'd
-                   ``/static/uploads/...`` URL after the next redeploy.
-          * dev:   Try Cloudinary first if configured, else write locally.
+        Returns:
+          * prod / S3 configured: the S3 key (e.g. ``shared-uploads/...``)
+          * dev fallback: the local path ``/static/uploads/<filename>``
+
+        Callers store the returned string in the DB. Use ``resolve_url``
+        when rendering responses to the client.
         """
         # 1. Validate extension
         ext = os.path.splitext(file.filename or "")[1].lower()
@@ -100,14 +115,14 @@ class StorageService:
                 detail="File too large. Maximum size is 25 MB.",
             )
 
-        unique_name = f"{int(datetime.datetime.now().timestamp())}_{file.filename}"
+        unique_name = self._safe_unique_name(file.filename)
 
-        # 3. Production path: Cloudinary required.
+        # 3. Production path: S3 required.
         if settings.ENVIRONMENT == "prod":
-            if not self._cloudinary_ready:
+            if self._s3 is None:
                 # Defense-in-depth: config startup check should have caught this.
                 logger.error(
-                    "Cloudinary not initialised in production. "
+                    "S3 not initialised in production. "
                     "Refusing to write upload to ephemeral local disk."
                 )
                 raise HTTPException(
@@ -117,44 +132,35 @@ class StorageService:
                         "Please try again or contact support."
                     ),
                 )
+            key = f"{self.KEY_PREFIX}/{unique_name}"
             try:
-                result = await asyncio.to_thread(
-                    cloudinary.uploader.upload,
-                    contents,
-                    public_id=f"edutrack/announcements/{unique_name}",
-                    resource_type="auto",
-                    overwrite=True,
+                await self._s3.upload(
+                    key=key,
+                    data=contents,
+                    content_type=file.content_type or "application/octet-stream",
                 )
-                url = result.get("secure_url", "")
-                if not url:
-                    raise RuntimeError("Cloudinary returned no secure_url")
-                logger.info(f"Cloudinary upload success: {url}")
-                return url
+                logger.info("S3 upload success: key=%s size=%d", key, len(contents))
+                return key
             except Exception as e:
-                logger.exception("Cloudinary upload failed in production: %s", e)
+                logger.exception("S3 upload failed in production: %s", e)
                 raise HTTPException(
                     status_code=status.HTTP_502_BAD_GATEWAY,
                     detail="The file storage provider rejected the upload. Please try again.",
                 )
 
-        # 4. Dev / test path. Use Cloudinary if it happens to be configured;
-        #    otherwise fall back to local disk. Loud log so nobody mistakes
-        #    a working dev flow for a working prod flow.
-        if self._cloudinary_ready:
+        # 4. Dev / test path. Prefer S3 if configured, else local disk.
+        if self._s3 is not None:
+            key = f"{self.KEY_PREFIX}/{unique_name}"
             try:
-                result = await asyncio.to_thread(
-                    cloudinary.uploader.upload,
-                    contents,
-                    public_id=f"edutrack/announcements/{unique_name}",
-                    resource_type="auto",
-                    overwrite=True,
+                await self._s3.upload(
+                    key=key,
+                    data=contents,
+                    content_type=file.content_type or "application/octet-stream",
                 )
-                url = result.get("secure_url", "")
-                if url:
-                    logger.info(f"Cloudinary upload success (dev): {url}")
-                    return url
+                logger.info("S3 upload success (dev): key=%s", key)
+                return key
             except Exception as e:
-                logger.warning(f"Cloudinary upload failed in dev, falling back to disk: {e}")
+                logger.warning(f"S3 upload failed in dev, falling back to disk: {e}")
 
         file_path = os.path.join(self.upload_dir, unique_name)
         try:
@@ -162,23 +168,62 @@ class StorageService:
                 f.write(contents)
             logger.warning(
                 "[dev] File saved to ./static/uploads — ephemeral. "
-                "Set Cloudinary credentials to use the real storage path."
+                "Set AWS_S3_* credentials to use the real storage path."
             )
             return f"/static/uploads/{unique_name}"
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Storage error: {e}")
 
-    # ──────────────────────────────────────────────────────────────────────────
+    # ──────────────────────────────────────────────────────────────────────
+    async def resolve_url(
+        self,
+        stored: Optional[str],
+        *,
+        filename: Optional[str] = None,
+        expires_in: Optional[int] = None,
+    ) -> Optional[str]:
+        """
+        Turn a DB-stored upload identifier into a URL the client can fetch.
+
+        * ``None`` / empty → ``None``
+        * Anything starting with ``http://`` or ``https://`` → passthrough
+          (legacy Cloudinary URLs, or any other absolute URL).
+        * Anything starting with ``/static/`` → passthrough (dev disk).
+        * Otherwise treat as an S3 key and mint a presigned URL with
+          ``AWS_S3_PRESIGN_TTL`` (default 1 hour) unless overridden.
+
+        ``filename`` forces a ``Content-Disposition`` so downloads keep
+        the original name; useful for receipt PDFs.
+        """
+        if not stored:
+            return None
+        if stored.startswith("http://") or stored.startswith("https://"):
+            return stored
+        if stored.startswith("/static/"):
+            return stored
+        # S3 key path. If S3 isn't configured (dev without creds), return
+        # the raw key — better than a broken URL, and the dev path
+        # already logged a loud warning at upload time.
+        if self._s3 is None:
+            logger.warning(
+                "resolve_url called with S3 key but S3 backend is not configured: %s",
+                stored,
+            )
+            return stored
+        ttl = expires_in if expires_in is not None else settings.AWS_S3_PRESIGN_TTL
+        try:
+            return await self._s3.signed_url(stored, filename=filename, expires_in=ttl)
+        except Exception as e:
+            logger.warning("Presign failed for key=%s: %s", stored, e)
+            return None
+
+    # ──────────────────────────────────────────────────────────────────────
     async def verify_file_exists(self, file_url: str) -> bool:
-        """Verify a file URL is reachable."""
+        """Best-effort reachability check, used by tests and admin tooling."""
         if not file_url:
             return False
 
-        # Cloudinary URLs — trust them implicitly (already verified on upload)
-        if "cloudinary.com" in file_url:
-            return True
-
-        # Any other HTTPS URL — do a HEAD check
+        # Absolute URL — HEAD it.
         if file_url.startswith("https://") or file_url.startswith("http://"):
             try:
                 import httpx
@@ -189,10 +234,19 @@ class StorageService:
                 logger.warning(f"File verify failed: {file_url} — {e}")
                 return False
 
-        # Local path (dev only — see upload_file).
+        # Local dev path.
         if file_url.startswith("/static/uploads/"):
             file_path = os.path.join(os.getcwd(), file_url.lstrip("/"))
             return os.path.exists(file_path)
+
+        # Treat as S3 key — check via the backend's signed_url (cheap HEAD
+        # is not exposed; existence is implied if presign succeeds).
+        if self._s3 is not None:
+            try:
+                url = await self._s3.signed_url(file_url, expires_in=60)
+                return bool(url)
+            except Exception:
+                return False
 
         return False
 

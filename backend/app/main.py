@@ -332,21 +332,20 @@ async def version_info():
         "environment": settings.ENVIRONMENT
     }
 
-# Only create the static dir in dev. In prod, new uploads go to S3 /
-# Cloudinary (enforced by config.py startup check + storage_service guard);
+# Only create the static dir in dev. In prod, all uploads go to S3
+# (enforced by config.py startup check + storage_service guard);
 # the directory existing would only invite accidental writes.
 if settings.ENVIRONMENT != "prod":
     os.makedirs("static/uploads", exist_ok=True)
 
 
-# Static file route — DEV / TEST ONLY. Production uploads live in S3 /
-# Cloudinary and are fetched directly from the provider (signed URL or
-# public CDN URL), bypassing the API replicas entirely. Serving files
-# through this handler in prod would (a) tie up ASGI workers on file I/O,
-# and (b) 404 silently because the file lives on a different replica's
-# ephemeral disk. We refuse early with a 410 Gone so misconfigured
-# deployments are visible in monitoring, not just experienced as broken
-# downloads by users.
+# Static file route — DEV / TEST ONLY. Production uploads live in S3
+# and are fetched via short-lived presigned URLs, bypassing the API
+# replicas entirely. Serving files through this handler in prod would
+# (a) tie up ASGI workers on file I/O, and (b) 404 silently because the
+# file lives on a different replica's ephemeral disk. We refuse early
+# with a 410 Gone so misconfigured deployments are visible in
+# monitoring, not just experienced as broken downloads by users.
 @app.get("/static/{file_path:path}", include_in_schema=False)
 async def serve_static(file_path: str):
     if settings.ENVIRONMENT == "prod":

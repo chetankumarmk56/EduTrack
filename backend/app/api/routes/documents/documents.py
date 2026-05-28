@@ -11,7 +11,12 @@ async def upload_attachment(
 ):
     """
     Authorized endpoint for uploading academic attachments.
-    Returns the public URL of the uploaded file.
+
+    Returns the persistable identifier of the uploaded file. In prod
+    that's a private S3 key; in dev without S3 it's a ``/static/uploads/``
+    path. The client stores this string in ``attachment_url`` when
+    creating an announcement; the announcement read endpoints presign
+    S3 keys at response time so clients get a working URL.
     """
     url = await storage_service.upload_file(file)
     return {

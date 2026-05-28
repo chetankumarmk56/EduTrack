@@ -55,17 +55,20 @@ class Settings(BaseSettings):
     QUESTION_BANK_AI_SERVICE_URL: Optional[str] = None
     QUESTION_BANK_AI_SERVICE_TIMEOUT: float = 300.0
 
-    # Cloudinary (File Storage)
+    # Cloudinary (legacy — kept only so old DB rows with cloudinary.com URLs
+    # still resolve via resolve_url passthrough; no new uploads go here.
+    # Safe to remove the env vars once no legacy URLs remain in the DB.)
     CLOUDINARY_CLOUD_NAME: Optional[str] = None
     CLOUDINARY_API_KEY: Optional[str] = None
     CLOUDINARY_API_SECRET: Optional[str] = None
 
-    # AWS S3 (private teacher uploads — falls back to local disk if unset)
+    # AWS S3 (all uploads — teacher file library AND announcement / payment
+    # shared uploads. Falls back to local disk in dev when unset.)
     AWS_ACCESS_KEY_ID: Optional[str] = None
     AWS_SECRET_ACCESS_KEY: Optional[str] = None
     AWS_S3_REGION: Optional[str] = None
     AWS_S3_BUCKET: Optional[str] = None
-    AWS_S3_PRESIGN_TTL: int = 900  # seconds (15 min)
+    AWS_S3_PRESIGN_TTL: int = 3600  # seconds (1 hour)
     
     # Razorpay
     RAZORPAY_KEY_ID: Optional[str] = "rzp_test_placeholder"
@@ -193,34 +196,22 @@ class Settings(BaseSettings):
                     "Set them via environment variables before starting in production."
                 )
 
-            # ── Production storage: at least one remote backend MUST be set ──
-            # Two upload surfaces:
-            #   1. Teacher file library  → AWS S3        (storage/factory.py)
-            #   2. Announcement attachments → Cloudinary (storage_service.py)
-            # If neither is configured, every upload silently writes to the
-            # container's local disk — which is ephemeral on Render/Fly/Heroku
-            # and unreachable across replicas. We hard-fail on startup so the
-            # operator sees the problem at deploy time instead of when a parent
-            # opens a broken attachment two days later.
+            # ── Production storage: S3 MUST be set ──
+            # All four upload surfaces — teacher file library, announcement
+            # attachments, payment QR images, parent payment screenshots,
+            # generated receipt PDFs — go through AWS S3. Without it,
+            # uploads would write to the container's local disk, which is
+            # ephemeral on Fargate/Render/Fly/Heroku and unreachable across
+            # replicas. Hard-fail at startup so the operator sees the
+            # problem at deploy time instead of when a parent opens a
+            # broken attachment two days later.
             s3_configured = bool(self.AWS_S3_BUCKET and self.AWS_S3_REGION)
-            cloudinary_configured = bool(
-                self.CLOUDINARY_CLOUD_NAME
-                and self.CLOUDINARY_API_KEY
-                and self.CLOUDINARY_API_SECRET
-            )
             if not s3_configured:
                 raise ValueError(
                     "Production startup blocked: AWS S3 is not configured "
                     "(AWS_S3_BUCKET + AWS_S3_REGION + AWS_ACCESS_KEY_ID + "
-                    "AWS_SECRET_ACCESS_KEY required). The teacher file library "
-                    "would otherwise write to ephemeral container disk."
-                )
-            if not cloudinary_configured:
-                raise ValueError(
-                    "Production startup blocked: Cloudinary is not configured "
-                    "(CLOUDINARY_CLOUD_NAME + CLOUDINARY_API_KEY + "
-                    "CLOUDINARY_API_SECRET required). Announcement attachments "
-                    "would otherwise write to ephemeral container disk."
+                    "AWS_SECRET_ACCESS_KEY required). Every upload would "
+                    "otherwise write to ephemeral container disk."
                 )
 
             # Warn (non-fatal) when FRONTEND_URL still looks like dev.

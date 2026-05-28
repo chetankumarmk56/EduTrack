@@ -1,18 +1,18 @@
 """
 Verifies the three prod-hardening guards on file storage.
 
-Before this fix, a prod deploy without Cloudinary / S3 would silently
-write uploads to the container's local disk — files would disappear on
-the next redeploy and never reach the other replicas. The fix layers
-three guards:
+Before this fix, a prod deploy without S3 would silently write uploads
+to the container's local disk — files would disappear on the next
+redeploy and never reach the other replicas. The fix layers three
+guards:
 
 1. ``app.core.config.Settings.__init__`` refuses to construct in prod
-   when neither S3 nor Cloudinary is set.
+   when S3 is not set.
 2. ``app.services.storage.factory.get_default_backend()`` refuses to
    hand back ``LocalStorageBackend`` in prod.
 3. ``app.services.storage_service.storage_service.StorageService.upload_file``
-   raises 503 in prod when Cloudinary isn't ready, instead of writing
-   to local disk.
+   raises 503 in prod when the S3 backend isn't initialised, instead
+   of writing to local disk.
 
 These tests assert all three guards trip independently.
 """
@@ -57,33 +57,31 @@ def test_config_blocks_prod_without_s3():
     from app.core.config import Settings
 
     kwargs = dict(_BASE_PROD_KWARGS)
-    # Cloudinary present, S3 absent.
-    kwargs.update(
-        CLOUDINARY_CLOUD_NAME="cn",
-        CLOUDINARY_API_KEY="ak",
-        CLOUDINARY_API_SECRET="as",
-    )
     with pytest.raises(ValueError, match="AWS S3 is not configured"):
         Settings(**kwargs)
 
 
-def test_config_blocks_prod_without_cloudinary():
-    """Settings() in prod with S3 but no Cloudinary must also raise."""
+def test_config_allows_prod_without_cloudinary():
+    """
+    Cloudinary is no longer required in prod — all uploads go to S3.
+    The env vars stay declared (legacy URLs in the DB still resolve via
+    passthrough in resolve_url) but the absence of creds must not block
+    startup.
+    """
     from app.core.config import Settings
 
     kwargs = dict(_BASE_PROD_KWARGS)
-    # S3 present, Cloudinary absent.
+    # S3 present, Cloudinary deliberately absent.
     kwargs.update(
         AWS_S3_BUCKET="some-bucket",
         AWS_S3_REGION="us-east-1",
         AWS_ACCESS_KEY_ID="AKIA...",
         AWS_SECRET_ACCESS_KEY="secret",
     )
-    with pytest.raises(ValueError, match="Cloudinary is not configured"):
-        Settings(**kwargs)
+    Settings(**kwargs)  # Must not raise.
 
 
-def test_config_allows_prod_with_both_backends_present():
+def test_config_allows_prod_with_s3_present():
     """Sanity: a complete prod config still constructs."""
     from app.core.config import Settings
 
@@ -93,9 +91,6 @@ def test_config_allows_prod_with_both_backends_present():
         AWS_S3_REGION="us-east-1",
         AWS_ACCESS_KEY_ID="AKIA...",
         AWS_SECRET_ACCESS_KEY="secret",
-        CLOUDINARY_CLOUD_NAME="cn",
-        CLOUDINARY_API_KEY="ak",
-        CLOUDINARY_API_SECRET="as",
     )
     Settings(**kwargs)
 
@@ -160,8 +155,8 @@ class _StubUploadFile:
 
 async def test_storage_service_refuses_local_in_prod(monkeypatch):
     """
-    Calls upload_file in prod with Cloudinary deliberately not-ready —
-    must raise 503, never write to ./static/uploads.
+    Calls upload_file in prod with the S3 backend deliberately
+    uninitialised — must raise 503, never write to ./static/uploads.
     """
     # The package's __init__ re-exports the singleton, so this import
     # already gives us the instance, not a module.
@@ -170,8 +165,8 @@ async def test_storage_service_refuses_local_in_prod(monkeypatch):
     from fastapi import HTTPException
 
     monkeypatch.setattr(cfg_mod.settings, "ENVIRONMENT", "prod")
-    # Force Cloudinary "not ready" — simulates a secret-rotation gap.
-    monkeypatch.setattr(svc, "_cloudinary_ready", False)
+    # Force S3 backend "not ready" — simulates a secret-rotation gap.
+    monkeypatch.setattr(svc, "_s3", None)
 
     upload = _StubUploadFile("attachment.pdf", b"x" * 1024)
 
