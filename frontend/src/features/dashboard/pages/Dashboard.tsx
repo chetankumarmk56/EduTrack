@@ -124,16 +124,19 @@ export default function Dashboard() {
             {/* ── Hero Card ── */}
             <div className="relative group">
                <div className="absolute -inset-2 sm:-inset-4 bg-gradient-to-r from-primary/20 via-indigo-500/10 to-violet-500/10 blur-3xl opacity-50" />
-               <div className="relative crystal-glass p-5 sm:p-8 md:p-12 lg:p-16 rounded-3xl sm:rounded-[3rem] md:rounded-[4.5rem] overflow-hidden border-white shadow-2xl">
+               <div className="relative crystal-glass p-5 sm:p-8 md:p-10 lg:p-12 rounded-3xl sm:rounded-[2.5rem] md:rounded-[3rem] overflow-hidden border-white shadow-2xl">
                   <div className="absolute top-0 right-0 w-[300px] sm:w-[600px] h-[300px] sm:h-[600px] bg-primary/10 rounded-full blur-[100px] -mr-40 sm:-mr-80 -mt-40 sm:-mt-80 animate-pulse" />
 
-                  <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 md:gap-12 relative z-10">
-                     <div className="space-y-4 sm:space-y-6 flex-1 min-w-0">
+                  <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 md:gap-10 relative z-10">
+                     <div className="space-y-4 sm:space-y-6 flex-1 min-w-0 w-full lg:max-w-[55%]">
                         <div className="flex items-center gap-2 sm:gap-3 text-primary text-[10px] font-black uppercase tracking-[0.3em] sm:tracking-[0.5em] bg-white/40 px-4 sm:px-6 py-2 sm:py-3 rounded-full border border-white/60 w-fit crystal-glow">
                            <ShieldCheck className="w-4 h-4" /> Parent Dashboard
                         </div>
                         <div>
-                           <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-black tracking-tighter text-gradient-crystal leading-[0.9] mb-4 sm:mb-6 break-words">
+                           <h1
+                              title={institutionName}
+                              className="text-2xl sm:text-3xl md:text-4xl lg:text-[2.5rem] xl:text-5xl font-black tracking-tight text-gradient-crystal leading-[1.05] mb-4 sm:mb-6 [text-wrap:balance] [overflow-wrap:anywhere] line-clamp-3"
+                           >
                               {institutionName}
                            </h1>
                            <div className="flex items-center gap-3 sm:gap-4">
@@ -156,7 +159,7 @@ export default function Dashboard() {
                      </div>
 
                      {/* Stat Cards */}
-                     <div className="flex flex-col sm:flex-row lg:flex-col xl:flex-row gap-3 sm:gap-4 md:gap-5 w-full lg:w-auto">
+                     <div className="flex flex-col sm:flex-row lg:flex-col gap-3 sm:gap-4 md:gap-5 w-full lg:w-auto lg:max-w-[420px] lg:shrink-0">
                         <motion.div
                            whileHover={{ y: -4, scale: 1.01 }}
                            onClick={() => navigate('/parent/academics')}
