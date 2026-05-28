@@ -1,268 +1,28 @@
-import { useState, useEffect, useRef } from 'react';
-import 'leaflet/dist/leaflet.css';
-import { MapContainer, TileLayer, Marker, Polyline, Tooltip } from 'react-leaflet';
-import L from 'leaflet';
-import {
-   Bus, MapPin,
-   Info, Phone, ShieldCheck
-} from 'lucide-react';
-import { transportApi } from '@/features/transport/api';
-import { Skeleton, SkeletonHeader, SkeletonList } from '@/shared/components/ui/Skeleton';
-import { getCurrentPortalRole } from '@/shared/lib/portalRole';
-
-
-// --- Custom Leaflet Icons ---
-const busIcon = new L.DivIcon({
-   className: 'custom-bus-icon bg-transparent border-none',
-   html: `<div style="width: 32px; height: 32px; background-color: #6366f1; border: 3px solid white; border-radius: 50%; box-shadow: 0 0 15px rgba(99, 102, 241, 1); display: flex; align-items: center; justify-content: center; transform: translate(-4px, -4px);"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line></svg></div>`,
-   iconSize: [32, 32],
-   iconAnchor: [16, 16]
-});
-
-const homeIcon = new L.DivIcon({
-   className: 'custom-home-icon bg-transparent border-none',
-   html: `<div style="width: 20px; height: 20px; background-color: #f43f5e; border: 3px solid white; border-radius: 50%; box-shadow: 0 0 12px rgba(244, 63, 94, 0.8); transform: translate(-2px, -2px);"></div>`,
-   iconSize: [20, 20],
-   iconAnchor: [10, 10]
-});
-
-// --- Types ---
-interface LatLng {
-   lat: number;
-   lng: number;
-}
+import { Bus, Wrench } from 'lucide-react';
 
 export default function BusTracking() {
-   const [assignment, setAssignment] = useState<any>(null);
-   const [busLocation, setBusLocation] = useState<LatLng | null>(null);
-   const [isLoading, setIsLoading] = useState(true);
-   const [error, setError] = useState<string | null>(null);
-
-   const wsRef = useRef<WebSocket | null>(null);
-
-   // --- Fetch Assignment ---
-   useEffect(() => {
-      const fetchAssignment = async () => {
-         try {
-            const data = await transportApi.getMyAssignment();
-            setAssignment(data);
-         } catch (err: any) {
-            console.error(err);
-            setError(err.response?.data?.detail || "Transport assignment matrix unavailable.");
-         } finally {
-            setIsLoading(false);
-         }
-      };
-      fetchAssignment();
-   }, []);
-
-   // --- WebSocket Connection ---
-   useEffect(() => {
-      if (!assignment?.bus?.id) return;
-
-      // The browser WebSocket API can't set Authorization headers, so we
-      // pass the access token as a query string. Server authorizes once
-      // at connect and closes (1008) on bad/missing token. We reconnect
-      // with the current token on every attempt, so a refresh in another
-      // tab fixes the connection on the next retry.
-      let cancelled = false;
-
-      const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)
-         || 'http://localhost:8000/api/';
-      // Build a ws(s) URL from the configured API base so prod traffic
-      // hits the deployed host, not window.location.
-      const baseUrl = new URL(apiBase, window.location.origin);
-      const wsProtocol = baseUrl.protocol === 'https:' ? 'wss:' : 'ws:';
-
-      const connectWS = () => {
-         if (cancelled) return;
-         const role = getCurrentPortalRole();
-         const token = localStorage.getItem(`edu_auth_token_${role}`);
-         if (!token) {
-            // No token yet (e.g. interceptor mid-refresh) — try again shortly.
-            setTimeout(connectWS, 1500);
-            return;
-         }
-         const wsUrl = `${wsProtocol}//${baseUrl.host}/api/transport/ws/transport/${assignment.bus.id}?token=${encodeURIComponent(token)}`;
-         const ws = new WebSocket(wsUrl);
-         wsRef.current = ws;
-
-         ws.onmessage = (event) => {
-            try {
-               const data = JSON.parse(event.data);
-               if (data.latitude && data.longitude) {
-                  setBusLocation({ lat: data.latitude, lng: data.longitude });
-               }
-            } catch {
-               // ignore malformed payload
-            }
-         };
-
-         ws.onclose = (evt) => {
-            // 1008 = policy violation (bad/missing token). Stop hammering
-            // — the user needs to re-login. All other closes are
-            // network/server hiccups; reconnect with exponential backoff
-            // capped at 30s.
-            if (cancelled || evt.code === 1008) return;
-            setTimeout(connectWS, 3000);
-         };
-      };
-
-      connectWS();
-      return () => {
-         cancelled = true;
-         wsRef.current?.close();
-      };
-   }, [assignment]);
-
-   if (isLoading) {
-      return (
-         <div className="space-y-8 p-6">
-            <SkeletonHeader />
-            <Skeleton rounded="3xl" className="h-72 w-full" />
-            <SkeletonList rows={3} />
-         </div>
-      );
-   }
-
-   if (error || !assignment) {
-      return (
-         <div className="h-full flex flex-col items-center justify-center p-8 text-center gap-6">
-            <div className="w-20 h-20 rounded-3xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-500">
-               <MapPin className="w-10 h-10" />
-            </div>
-            <div className="space-y-2">
-               <h3 className="text-xl font-black uppercase text-white">Registry Offset</h3>
-               <p className="text-xs text-text-secondary max-w-xs">{error || "Your student is not currently assigned to an active transport route."}</p>
-            </div>
-         </div>
-      );
-   }
-
-   // Convert polyline to leaflet format [lat, lng][]
-   const routePositions: [number, number][] = assignment.route.polyline
-      ? assignment.route.polyline.map((p: any) => [p.lat, p.lng])
-      : [];
-
-   const mapCenter: [number, number] = busLocation
-      ? [busLocation.lat, busLocation.lng]
-      : [assignment.stop.latitude, assignment.stop.longitude];
-
    return (
-      <div className="premium-page-container animate-fade-in flex flex-col gap-6 h-[calc(100vh-120px)] relative">
-         {/* WIP Overlay */}
-         <div className="absolute inset-0 z-[100] backdrop-blur-md bg-slate-950/40 rounded-2xl sm:rounded-[3rem] flex flex-col items-center justify-center p-6 sm:p-12 text-center border border-white/10 overflow-hidden">
+      <div className="premium-page-container animate-fade-in flex items-center justify-center min-h-[calc(100vh-120px)]">
+         <div className="relative max-w-xl w-full text-center space-y-8 p-8 sm:p-12 rounded-2xl sm:rounded-[3rem] border border-glass-border bg-white/[0.02] overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-transparent to-transparent pointer-events-none" />
-            <div className="relative space-y-6 sm:space-y-8 max-w-2xl">
-               <div className="w-16 h-16 sm:w-24 sm:h-24 rounded-3xl sm:rounded-[2.5rem] bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mx-auto animate-pulse">
-                  <Bus className="w-8 h-8 sm:w-12 sm:h-12" />
+
+            <div className="relative space-y-6">
+               <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mx-auto">
+                  <Bus className="w-10 h-10 sm:w-12 sm:h-12" />
                </div>
-               <div className="space-y-3 sm:space-y-4">
-                  <h2 className="text-2xl sm:text-3xl md:text-5xl font-black tracking-tighter text-white uppercase italic">Module <span className="text-indigo-500">Optimizing</span></h2>
-                  <p className="text-sm font-medium text-text-secondary leading-relaxed uppercase tracking-widest">
-                     Live telemetry and route mapping protocols are currently being fine-tuned to ensure high-fidelity logistics tracking.
+
+               <div className="space-y-3">
+                  <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-white uppercase italic">
+                     Bus Tracking
+                  </h1>
+                  <p className="text-sm sm:text-base font-medium text-text-secondary leading-relaxed">
+                     Live bus tracking is still being implemented. You'll be able to follow your child's bus on a real-time map here once the feature is ready.
                   </p>
                </div>
-               <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-[10px] font-black text-indigo-400 uppercase tracking-[0.3em]">
-                  High-Priority Development Cycle
-               </div>
-            </div>
-         </div>
 
-         {/* HUD Header */}
-         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shrink-0">
-            <div className="space-y-1">
-               <h1 className="text-4xl font-black tracking-tight text-white uppercase italic">Live <span className="text-indigo-500">Tracking</span></h1>
-               <div className="flex items-center gap-3">
-                  <div className="px-2 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-1.5">
-                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                     <span className="text-[8px] font-black uppercase text-emerald-400 tracking-widest">Connected</span>
-                  </div>
-                  <span className="text-[10px] font-bold text-text-secondary uppercase tracking-widest">Route: {assignment.route.name}</span>
-               </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-               <div className="obsidian-card px-4 py-2 border-glass-border bg-white/[0.01] flex items-center gap-3">
-                  <Bus className="w-4 h-4 text-indigo-400" />
-                  <div className="flex flex-col">
-                     <span className="text-[8px] font-black text-text-secondary uppercase">Vehicle ID</span>
-                     <span className="text-xs font-black text-white">{assignment.bus.bus_number}</span>
-                  </div>
-               </div>
-            </div>
-         </div>
-
-         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 min-h-0">
-            {/* Map Viewport */}
-            <div className="lg:col-span-8 rounded-2xl sm:rounded-[2.5rem] border border-glass-border overflow-hidden shadow-2xl relative bg-slate-900/40 z-0">
-               <MapContainer
-                  center={mapCenter}
-                  zoom={15}
-                  style={{ height: '100%', width: '100%', backgroundColor: '#0f172a' }}
-                  zoomControl={false}
-               >
-                  <TileLayer
-                     url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>, &copy; <a href="https://carto.com/attributions">CARTO</a>'
-                  />
-
-                  {/* Route Trajectory */}
-                  {routePositions.length > 0 && (
-                     <Polyline positions={routePositions} pathOptions={{ color: '#6366f1', weight: 4, opacity: 0.8 }} />
-                  )}
-
-                  {/* Home Stop */}
-                  <Marker position={[assignment.stop.latitude, assignment.stop.longitude]} icon={homeIcon}>
-                     <Tooltip direction="top" offset={[0, -10]} opacity={1} permanent>
-                        <span className="font-black text-xs">HOME</span>
-                     </Tooltip>
-                  </Marker>
-
-                  {/* Live Bus Marker */}
-                  {busLocation && (
-                     <Marker position={[busLocation.lat, busLocation.lng]} icon={busIcon} />
-                  )}
-               </MapContainer>
-            </div>
-
-            {/* Logistic Meta Sidebar */}
-            <div className="lg:col-span-4 flex flex-col gap-6 overflow-hidden">
-               <div className="obsidian-card p-6 border-glass-border bg-white/[0.01] space-y-6">
-                  <h3 className="text-[10px] font-black uppercase tracking-widest text-indigo-400 italic flex items-center gap-2">
-                     <Info className="w-3.5 h-3.5" /> Logistic Intelligence
-                  </h3>
-
-                  <div className="space-y-4">
-                     <div className="flex items-center gap-4 p-4 rounded-2xl bg-white/[0.02] border border-glass-border">
-                        <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-400">
-                           <Phone className="w-5 h-5" />
-                        </div>
-                        <div>
-                           <p className="text-[8px] font-black text-text-secondary uppercase">Driver Contact</p>
-                           <p className="text-sm font-black text-white">{assignment.bus.driver_name}</p>
-                           <p className="text-[10px] font-bold text-indigo-400">{assignment.bus.driver_phone}</p>
-                        </div>
-                     </div>
-
-                     <div className="flex items-center gap-4 p-4 rounded-2xl bg-white/[0.02] border border-glass-border">
-                        <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-400">
-                           <ShieldCheck className="w-5 h-5" />
-                        </div>
-                        <div>
-                           <p className="text-[8px] font-black text-text-secondary uppercase">Safety Protocol</p>
-                           <p className="text-xs font-black text-white italic">VEHICLE AUTHORIZED</p>
-                           <p className="text-[8px] font-bold text-text-secondary">GPS Pulse: Active</p>
-                        </div>
-                     </div>
-                  </div>
-
-                  <div className="pt-6 border-t border-glass-border">
-                     <div className="p-4 rounded-2xl bg-indigo-500/5 border border-indigo-500/10">
-                        <p className="text-[10px] font-black text-white uppercase mb-2 italic">Proximity Awareness</p>
-                        <p className="text-[9px] font-medium text-text-secondary leading-relaxed">System will automatically trigger an alert when the vehicle approaches within 1km of the stop matrix.</p>
-                     </div>
-                  </div>
+               <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-black text-indigo-400 uppercase tracking-[0.3em]">
+                  <Wrench className="w-3 h-3" />
+                  Coming Soon
                </div>
             </div>
          </div>

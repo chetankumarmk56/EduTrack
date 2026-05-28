@@ -27,18 +27,70 @@ export default function EnrollStudentModal({ isOpen, onClose, selectedSchoolClas
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
-    if (!form.name.trim()) newErrors.name = "Student name is required.";
-    if (!form.dob) newErrors.dob = "Date of birth is required.";
-    if (form.parent_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.parent_email)) {
+    const nameRegex = /^[A-Za-z][A-Za-z\s.'-]{1,}$/;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    const name = form.name.trim();
+    if (!name) {
+      newErrors.name = "Student name is required.";
+    } else if (name.length < 2) {
+      newErrors.name = "Name must be at least 2 characters.";
+    } else if (!nameRegex.test(name)) {
+      newErrors.name = "Name can only contain letters, spaces, and . ' -";
+    }
+
+    if (!form.dob) {
+      newErrors.dob = "Date of birth is required.";
+    } else {
+      const dobDate = new Date(form.dob);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (Number.isNaN(dobDate.getTime())) {
+        newErrors.dob = "Invalid date.";
+      } else if (dobDate >= today) {
+        newErrors.dob = "Must be in the past.";
+      } else {
+        const ageMs = today.getTime() - dobDate.getTime();
+        const ageYears = ageMs / (365.25 * 24 * 60 * 60 * 1000);
+        if (ageYears < 3) newErrors.dob = "Student must be at least 3 years old.";
+        else if (ageYears > 25) newErrors.dob = "Date of birth seems too old.";
+      }
+    }
+
+    const whatsappDigits = (form.whatsapp.match(/\d/g) || []).length;
+    if (!form.whatsapp.trim()) {
+      newErrors.whatsapp = "WhatsApp number is required.";
+    } else if (whatsappDigits < 10) {
+      newErrors.whatsapp = "Enter a complete number (min 10 digits).";
+    } else if (whatsappDigits > 15) {
+      newErrors.whatsapp = "Number is too long (max 15 digits).";
+    }
+
+    const parentName = form.parent_name.trim();
+    if (!parentName) {
+      newErrors.parent_name = "Guardian name is required.";
+    } else if (parentName.length < 2) {
+      newErrors.parent_name = "Name must be at least 2 characters.";
+    } else if (!nameRegex.test(parentName)) {
+      newErrors.parent_name = "Name can only contain letters, spaces, and . ' -";
+    }
+
+    if (!form.parent_email.trim()) {
+      newErrors.parent_email = "Email is required.";
+    } else if (!emailRegex.test(form.parent_email.trim())) {
       newErrors.parent_email = "Invalid email format.";
     }
+
     // Parent phone is compulsory — the parent portal login uses (guardian_phone, student_dob).
     const phoneDigits = (form.parent_phone.match(/\d/g) || []).length;
     if (!form.parent_phone.trim()) {
       newErrors.parent_phone = "Parent phone is required for portal login.";
     } else if (phoneDigits < 10) {
       newErrors.parent_phone = "Enter a complete phone number (min 10 digits).";
+    } else if (phoneDigits > 15) {
+      newErrors.parent_phone = "Number is too long (max 15 digits).";
     }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -55,7 +107,12 @@ export default function EnrollStudentModal({ isOpen, onClose, selectedSchoolClas
     setErrors({});
     try {
       await directoryApi.createStudent({
-        ...form,
+        name: form.name.trim(),
+        dob: form.dob,
+        whatsapp: form.whatsapp.trim(),
+        parent_name: form.parent_name.trim(),
+        parent_email: form.parent_email.trim(),
+        parent_phone: form.parent_phone.trim(),
         password: form.dob,
         school_class_id: selectedSchoolClassId
       } as any);
@@ -111,12 +168,13 @@ export default function EnrollStudentModal({ isOpen, onClose, selectedSchoolClas
                   <div className="space-y-4">
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1 flex justify-between items-center">
-                        <span>Full Name</span>
+                        <span>Full Name <span className="text-rose-400">*</span></span>
                         {errors.name && <span className="text-rose-400 normal-case tracking-normal font-medium italic">{errors.name}</span>}
                       </label>
                       <input
                         autoFocus
                         placeholder="e.g. Arjun Mehta"
+                        maxLength={80}
                         className={cn("input-obsidian", errors.name && "border-rose-500/50 bg-rose-500/[0.02]")}
                         value={form.name}
                         onChange={e => { setForm({ ...form, name: e.target.value }); if (errors.name) setErrors({ ...errors, name: '' }); }}
@@ -125,19 +183,37 @@ export default function EnrollStudentModal({ isOpen, onClose, selectedSchoolClas
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1.5">
                         <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1 flex justify-between">
-                          <span>Date of Birth</span>
-                          {errors.dob && <span className="text-rose-400 normal-case tracking-normal font-medium italic">Required</span>}
+                          <span>Date of Birth <span className="text-rose-400">*</span></span>
+                          {errors.dob && <span className="text-rose-400 normal-case tracking-normal font-medium italic">{errors.dob}</span>}
                         </label>
                         <input
                           type="date"
+                          max={(() => {
+                            const t = new Date();
+                            const y = t.getFullYear();
+                            const m = String(t.getMonth() + 1).padStart(2, '0');
+                            const d = String(t.getDate()).padStart(2, '0');
+                            return `${y}-${m}-${d}`;
+                          })()}
                           className={cn("input-obsidian", errors.dob && "border-rose-500/50 bg-rose-500/[0.02]")}
                           value={form.dob}
                           onChange={e => { setForm({ ...form, dob: e.target.value }); if (errors.dob) setErrors({ ...errors, dob: '' }); }}
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">WhatsApp</label>
-                        <input placeholder="+91..." className="input-obsidian" value={form.whatsapp} onChange={e => setForm({ ...form, whatsapp: e.target.value })} />
+                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1 flex justify-between">
+                          <span>WhatsApp <span className="text-rose-400">*</span></span>
+                          {errors.whatsapp && <span className="text-rose-400 normal-case tracking-normal font-medium italic">{errors.whatsapp}</span>}
+                        </label>
+                        <input
+                          type="tel"
+                          inputMode="tel"
+                          placeholder="+91 98765 43210"
+                          maxLength={20}
+                          className={cn("input-obsidian", errors.whatsapp && "border-rose-500/50 bg-rose-500/[0.02]")}
+                          value={form.whatsapp}
+                          onChange={e => { setForm({ ...form, whatsapp: e.target.value }); if (errors.whatsapp) setErrors({ ...errors, whatsapp: '' }); }}
+                        />
                       </div>
                     </div>
                   </div>
@@ -151,17 +227,27 @@ export default function EnrollStudentModal({ isOpen, onClose, selectedSchoolClas
                   </div>
                   <div className="space-y-4">
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Guardian Name</label>
-                      <input placeholder="e.g. Suresh Mehta" className="input-obsidian" value={form.parent_name} onChange={e => setForm({ ...form, parent_name: e.target.value })} />
+                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1 flex justify-between">
+                        <span>Guardian Name <span className="text-rose-400">*</span></span>
+                        {errors.parent_name && <span className="text-rose-400 normal-case tracking-normal font-medium italic">{errors.parent_name}</span>}
+                      </label>
+                      <input
+                        placeholder="e.g. Suresh Mehta"
+                        maxLength={80}
+                        className={cn("input-obsidian", errors.parent_name && "border-rose-500/50 bg-rose-500/[0.02]")}
+                        value={form.parent_name}
+                        onChange={e => { setForm({ ...form, parent_name: e.target.value }); if (errors.parent_name) setErrors({ ...errors, parent_name: '' }); }}
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1 flex justify-between">
-                        <span>Email Address</span>
+                        <span>Email Address <span className="text-rose-400">*</span></span>
                         {errors.parent_email && <span className="text-rose-400 normal-case tracking-normal font-medium italic">{errors.parent_email}</span>}
                       </label>
                       <input
                         type="email"
                         placeholder="suresh@gmail.com"
+                        maxLength={120}
                         className={cn("input-obsidian", errors.parent_email && "border-rose-500/50 bg-rose-500/[0.02]")}
                         value={form.parent_email}
                         onChange={e => { setForm({ ...form, parent_email: e.target.value }); if (errors.parent_email) setErrors({ ...errors, parent_email: '' }); }}

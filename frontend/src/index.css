@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+/* Use class-based dark mode so `dark:` utilities follow the in-app theme
+   toggle (`.dark` on <html>) instead of the OS `prefers-color-scheme`.
+   Without this, dark-mode utilities fire whenever the device is in dark
+   mode — even after the user switches the app to light theme. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   /* Site Defaults */
   --bg-obsidian: #050505;
