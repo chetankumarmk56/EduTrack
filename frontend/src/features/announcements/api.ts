@@ -86,7 +86,11 @@ export const announcementApi = {
     client.get(`/announcements/parent/${parentId}`).then(res => res.data),
 
   createAnnouncement: (data: AnnouncementCreate): Promise<Announcement> =>
-    client.post('/announcements', data).then(res => res.data),
+    // Trailing slash matches the backend route exactly. Without it FastAPI
+    // 307s to the slashed URL, and browsers null out Origin on cross-site
+    // POST redirects — that drops CORS headers and surfaces as a 500/CORS
+    // error in the console.
+    client.post('/announcements/', data).then(res => res.data),
 
   markAsRead: (announcementId: string, parentId?: number) =>
     client.post('/announcements/read', {
