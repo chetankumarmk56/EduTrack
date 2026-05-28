@@ -1,0 +1,30 @@
+# gitleaks scanner configuration — used by the deploy-prod workflow's
+# pre-deploy security scan (see .github/workflows/deploy-prod.yml).
+#
+# We inherit the upstream default ruleset and add a single allowlist
+# that exempts known placeholder SECRET_KEY values used by the test
+# suite and the backend-ci workflow fallback. These strings are
+# deliberately committed because the real key lives only in (a) the
+# runtime env on Render / AWS for prod, and (b) a CI_SECRET_KEY GitHub
+# Actions secret for CI. Without the allowlist, gitleaks's
+# generic-api-key heuristic fires on their 32-char high-entropy form.
+
+[extend]
+# Start from the upstream default ruleset rather than re-declaring every
+# detector; we only need to layer on an allowlist.
+useDefault = true
+
+[allowlist]
+description = "Exempt known non-secret placeholder SECRET_KEY values."
+
+# `regexes` in v8 matches the captured secret literally. The strings
+# below are unique enough (full phrase + dashes/underscores) that any
+# match is by definition the placeholder, not an accidental real key.
+# Listing the *value* rather than the *path* keeps the allowlist tight
+# — a future real secret committed by mistake into the same file will
+# still be flagged.
+regexes = [
+  '''test-secret-key-must-be-at-least-32-chars-long''',
+  '''ci_test_secret_key_must_be_at_least_32_chars_long''',
+  '''change-me-to-32-or-more-random-chars-please''',
+]
