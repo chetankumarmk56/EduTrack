@@ -47,6 +47,12 @@ export default function TeacherAttendance() {
   // Local state to track dynamic attendance status per student ID for the selected date
   const [localAttendance, setLocalAttendance] = useState<Record<number, 'present' | 'absent' | 'late'>>({});
 
+  // Snapshot of the last server state for the current date / class / subject.
+  // `null` means no record has ever been saved for this combo — in that case
+  // Save is enabled so the teacher can commit the baseline. Otherwise we
+  // compare against this snapshot to decide whether anything has changed.
+  const [serverSnapshot, setServerSnapshot] = useState<Record<number, 'present' | 'absent' | 'late'> | null>(null);
+
   const isWeekend = useMemo(() => {
     const d = new Date(selectedDate);
     const day = d.getDay();
@@ -56,32 +62,40 @@ export default function TeacherAttendance() {
   // Sync from backend natively!
   const fetchAttendanceForDate = async (filteredStudents: Student[]) => {
     if (!activeAssignment) return;
-    
+
     setIsFetching(true);
+    // Reset the snapshot up-front; the fetch result will set the next one.
+    setServerSnapshot(null);
+
     const newLocalStatus: Record<number, 'present' | 'absent' | 'late'> = {};
-    
+
     // Initialize all students to 'present' first
     filteredStudents.forEach(s => {
         newLocalStatus[s.id] = 'present';
     });
 
+    let hasServerRecords = false;
     try {
         const data = await attendanceApi.getClassAttendance(
-            activeAssignment.school_class.id, 
-            selectedDate, 
+            activeAssignment.school_class.id,
+            selectedDate,
             activeAssignment.subject_ref.name
         );
-        
+
         data.forEach((record) => {
             newLocalStatus[record.student_id] = record.status.toLowerCase() as 'present' | 'absent' | 'late';
         });
+        hasServerRecords = data.length > 0;
     } catch(err) {
         console.error("Error fetching class attendance:", err);
     } finally {
         setIsFetching(false);
     }
-    
+
     setLocalAttendance(newLocalStatus);
+    // Only snapshot when we actually got server records — otherwise the
+    // teacher still needs to write the baseline, so Save stays enabled.
+    setServerSnapshot(hasServerRecords ? { ...newLocalStatus } : null);
     setSaveStatus('idle');
   };
 
@@ -117,6 +131,20 @@ export default function TeacherAttendance() {
   const [showCommitConfirm, setShowCommitConfirm] = useState(false);
   const toast = useToast();
 
+  // Whether the current local state differs from the last server snapshot
+  // for this date / class / subject. When no snapshot exists yet (no record
+  // has ever been saved for this combo) we treat the page as dirty so the
+  // teacher can commit the baseline.
+  const isDirty = useMemo(() => {
+    if (filteredDB.length === 0) return false;
+    if (!serverSnapshot) return true;
+    return filteredDB.some(s => {
+      const current = localAttendance[s.id] || 'present';
+      const saved = serverSnapshot[s.id] || 'present';
+      return current !== saved;
+    });
+  }, [filteredDB, localAttendance, serverSnapshot]);
+
   const requestSaveAttendance = () => {
     if (!activeAssignment || filteredDB.length === 0) return;
     setShowCommitConfirm(true);
@@ -144,6 +172,9 @@ export default function TeacherAttendance() {
       });
       setSaveStatus('success');
       fetchTeacherStats();
+      // Snapshot the committed state so the Save button re-disables until
+      // the teacher makes another change.
+      setServerSnapshot({ ...localAttendance });
       toast.success('Attendance saved', `${records.length} student${records.length === 1 ? '' : 's'} on ${selectedDate}.`);
       setTimeout(() => setSaveStatus('idle'), 3000);
     } catch (err) {
@@ -234,19 +265,32 @@ export default function TeacherAttendance() {
             />
           </div>
 
-          <motion.button 
-            whileHover={{ scale: 1.02, translateY: -2 }}
-            whileTap={{ scale: 0.98 }}
+          <motion.button
+            whileHover={!isDirty || isSaving ? undefined : { scale: 1.02, translateY: -2 }}
+            whileTap={!isDirty || isSaving ? undefined : { scale: 0.98 }}
             onClick={requestSaveAttendance}
-            disabled={isSaving || filteredDB.length === 0}
+            disabled={isSaving || filteredDB.length === 0 || !isDirty}
+            title={
+              filteredDB.length === 0
+                ? 'No students to record'
+                : !isDirty
+                  ? 'No changes to save'
+                  : undefined
+            }
             className={cn(
-               "relative group overflow-hidden px-10 py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-2xl transition-all flex items-center gap-3",
-                saveStatus === 'success' ? "bg-emerald-500 text-white shadow-emerald-500/20 aurora-pulse" : 
-                saveStatus === 'error' ? "bg-red-500 text-white shadow-red-500/20 aurora-pulse" : 
-                "aurora-gradient text-white shadow-primary/20 aurora-glow aurora-pulse aurora-border-trace"
+               "relative group overflow-hidden px-10 py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-2xl transition-all flex items-center gap-3 disabled:cursor-not-allowed",
+                isSaving || saveStatus === 'success'
+                  ? "bg-emerald-500 text-white shadow-emerald-500/20"
+                  : saveStatus === 'error'
+                    ? "bg-red-500 text-white shadow-red-500/20"
+                    : !isDirty
+                      ? "bg-muted/40 text-muted-foreground border border-glass-border shadow-none opacity-70"
+                      : "aurora-gradient text-white shadow-primary/20 aurora-glow aurora-pulse aurora-border-trace"
             )}
           >
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+            {isDirty && !isSaving && saveStatus === 'idle' && (
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+            )}
             {isSaving ? (
               <motion.div
                 animate={{ rotate: 360 }}
@@ -254,12 +298,18 @@ export default function TeacherAttendance() {
               >
                 <Clock className="w-5 h-5" />
               </motion.div>
-            ) : saveStatus === 'success' ? (
+            ) : saveStatus === 'success' || !isDirty ? (
               <Check className="w-5 h-5" />
             ) : (
               <Save className="w-5 h-5" />
             )}
-            {isSaving ? 'Saving...' : saveStatus === 'success' ? 'Saved!' : 'Save'}
+            {isSaving
+              ? 'Saving…'
+              : saveStatus === 'success'
+                ? 'Saved!'
+                : !isDirty
+                  ? 'Saved'
+                  : 'Save'}
           </motion.button>
         </div>
       </div>
