@@ -1,11 +1,24 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, func
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
+from fastapi import HTTPException, status
 from app.models.academic import Grade, Section, SchoolClass, Subject
+from app.models.directory import Student, Teacher, TeacherAssignment
 from app.models.finance import StudentFee
 from app.schemas import academic as schemas
 from app.core.logger import logger
+
+
+def _norm(name: Optional[str]) -> str:
+    """Trim + casefold for duplicate comparison."""
+    return (name or "").strip().casefold()
+
+
+class DuplicateAcademicEntity(HTTPException):
+    """409 with a friendly message — the UI surfaces `detail` verbatim."""
+    def __init__(self, message: str):
+        super().__init__(status_code=status.HTTP_409_CONFLICT, detail=message)
 
 
 class AcademicService:
@@ -18,7 +31,50 @@ class AcademicService:
         return result.scalars().all()
 
     @staticmethod
+    async def _ensure_unique_grade(
+        db: AsyncSession,
+        institution_id: int,
+        *,
+        name: Optional[str],
+        level: Optional[int],
+        exclude_id: Optional[int] = None,
+    ) -> None:
+        """Reject duplicate class name OR class level within the institution.
+
+        Names are compared case-insensitively after trimming so "Class 10"
+        and "class 10 " are treated as the same class. Level is compared
+        as-is — two classes can't share the same numeric grade level.
+        """
+        if name:
+            stmt = select(Grade.id).where(
+                Grade.institution_id == institution_id,
+                func.lower(func.trim(Grade.name)) == _norm(name),
+            )
+            if exclude_id is not None:
+                stmt = stmt.where(Grade.id != exclude_id)
+            existing = (await db.execute(stmt)).scalar()
+            if existing:
+                raise DuplicateAcademicEntity(
+                    f"A class named '{name.strip()}' already exists."
+                )
+        if level is not None:
+            stmt = select(Grade.id).where(
+                Grade.institution_id == institution_id,
+                Grade.level == level,
+            )
+            if exclude_id is not None:
+                stmt = stmt.where(Grade.id != exclude_id)
+            existing = (await db.execute(stmt)).scalar()
+            if existing:
+                raise DuplicateAcademicEntity(
+                    f"Class level {level} is already in use."
+                )
+
+    @staticmethod
     async def create_grade(db: AsyncSession, institution_id: int, grade_in: schemas.GradeCreate):
+        await AcademicService._ensure_unique_grade(
+            db, institution_id, name=grade_in.name, level=grade_in.level,
+        )
         db_grade = Grade(**grade_in.model_dump(), institution_id=institution_id)
         db.add(db_grade)
         await db.commit()
@@ -33,8 +89,18 @@ class AcademicService:
         db_grade = result.scalars().first()
         if not db_grade:
             return None
-        
+
         update_data = grade_in.model_dump(exclude_unset=True)
+        # Duplicate check only when name or level actually changes.
+        new_name = update_data.get('name')
+        new_level = update_data.get('level')
+        if new_name is not None or new_level is not None:
+            await AcademicService._ensure_unique_grade(
+                db, institution_id,
+                name=new_name if new_name != db_grade.name else None,
+                level=new_level if new_level != db_grade.level else None,
+                exclude_id=grade_id,
+            )
         fee_changed = False
         if 'tuition_fee' in update_data and update_data['tuition_fee'] != db_grade.tuition_fee:
             fee_changed = True
@@ -133,6 +199,54 @@ class AcademicService:
             return True
         return False
 
+    @staticmethod
+    async def get_grade_dependents(db: AsyncSession, institution_id: int, grade_id: int):
+        """Return counts of items that will cascade-delete with this class.
+
+        The UI uses this to power the confirmation dialog so admins know
+        upfront how many students / sections / teacher assignments they're
+        about to wipe out.
+        """
+        # Confirm the grade belongs to this institution before counting
+        grade = (await db.execute(
+            select(Grade.id).where(Grade.id == grade_id, Grade.institution_id == institution_id)
+        )).scalar()
+        if not grade:
+            return None
+
+        # Sections under this grade
+        sections_count = (await db.execute(
+            select(func.count(Section.id)).where(Section.grade_id == grade_id)
+        )).scalar() or 0
+
+        # SchoolClass mappings (grade × section) — students enroll into these
+        sc_ids_result = await db.execute(
+            select(SchoolClass.id).where(SchoolClass.grade_id == grade_id)
+        )
+        sc_ids = [row[0] for row in sc_ids_result.all()]
+
+        students_count = 0
+        assignments_count = 0
+        if sc_ids:
+            students_count = (await db.execute(
+                select(func.count(Student.id)).where(
+                    Student.school_class_id.in_(sc_ids),
+                    Student.is_active == True,  # noqa: E712 — SQL boolean comparison
+                )
+            )).scalar() or 0
+            assignments_count = (await db.execute(
+                select(func.count(TeacherAssignment.id)).where(
+                    TeacherAssignment.school_class_id.in_(sc_ids)
+                )
+            )).scalar() or 0
+
+        return {
+            "sections": int(sections_count),
+            "classrooms": len(sc_ids),
+            "students": int(students_count),
+            "teacher_assignments": int(assignments_count),
+        }
+
     # --- Section Methods ---
     @staticmethod
     async def get_sections(db: AsyncSession, institution_id: int, grade_id: Optional[int] = None):
@@ -143,12 +257,34 @@ class AcademicService:
         return result.scalars().all()
 
     @staticmethod
+    async def _section_name_taken(
+        db: AsyncSession, institution_id: int, grade_id: int, name: str,
+        exclude_id: Optional[int] = None,
+    ) -> bool:
+        """Sections must be unique *within a class*, not across the whole school."""
+        stmt = select(Section.id).where(
+            Section.institution_id == institution_id,
+            Section.grade_id == grade_id,
+            func.lower(func.trim(Section.name)) == _norm(name),
+        )
+        if exclude_id is not None:
+            stmt = stmt.where(Section.id != exclude_id)
+        return (await db.execute(stmt)).scalar() is not None
+
+    @staticmethod
     async def create_section(db: AsyncSession, institution_id: int, section_in: schemas.SectionCreate):
         grade_result = await db.execute(
             select(Grade).where(Grade.id == section_in.grade_id, Grade.institution_id == institution_id)
         )
         if not grade_result.scalars().first():
             return None
+
+        if await AcademicService._section_name_taken(
+            db, institution_id, section_in.grade_id, section_in.name,
+        ):
+            raise DuplicateAcademicEntity(
+                f"Section '{section_in.name.strip()}' already exists in this class."
+            )
 
         db_section = Section(**section_in.model_dump(), institution_id=institution_id)
         db.add(db_section)
@@ -169,10 +305,17 @@ class AcademicService:
         if not db_grade:
             return None
 
+        if await AcademicService._section_name_taken(
+            db, institution_id, section_in.grade_id, section_in.name,
+        ):
+            raise DuplicateAcademicEntity(
+                f"Section '{section_in.name.strip()}' already exists in {db_grade.name}."
+            )
+
         # 1. Create Section
         db_section = Section(
-            name=section_in.name, 
-            grade_id=section_in.grade_id, 
+            name=section_in.name,
+            grade_id=section_in.grade_id,
             institution_id=institution_id
         )
         db.add(db_section)
@@ -191,10 +334,97 @@ class AcademicService:
             fee_due_date=db_grade.fee_due_date
         )
         db.add(db_school_class)
-        
+
         await db.commit()
         await db.refresh(db_section)
         return db_section
+
+    @staticmethod
+    async def deploy_segments_bulk(
+        db: AsyncSession,
+        institution_id: int,
+        grade_id: int,
+        names: List[str],
+    ) -> dict:
+        """Create many sections + SchoolClass mappings in one shot.
+
+        - Trims whitespace and uppercases names ("a, b, C" → A, B, C).
+        - Dedupes within the request so "A, A, B" becomes A, B.
+        - Skips names that already exist in the class (returns them as
+          'skipped' so the UI can show a partial-success message).
+        - Returns the freshly created sections plus a `skipped` list.
+        - All inserts run in a single transaction.
+        """
+        grade_result = await db.execute(
+            select(Grade).where(Grade.id == grade_id, Grade.institution_id == institution_id)
+        )
+        db_grade = grade_result.scalars().first()
+        if not db_grade:
+            return None
+
+        # Normalize + dedupe input order
+        seen: set[str] = set()
+        cleaned: list[str] = []
+        for raw in names:
+            n = (raw or "").strip().upper()
+            if not n:
+                continue
+            if n in seen:
+                continue
+            seen.add(n)
+            cleaned.append(n)
+
+        if not cleaned:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="At least one section name is required.",
+            )
+
+        # Pre-fetch existing names so we can skip duplicates without
+        # rolling back the whole batch.
+        existing_rows = await db.execute(
+            select(Section.name).where(
+                Section.institution_id == institution_id,
+                Section.grade_id == grade_id,
+            )
+        )
+        existing_norm = {_norm(r[0]) for r in existing_rows.all()}
+
+        created: list[Section] = []
+        skipped: list[str] = []
+        for name in cleaned:
+            if _norm(name) in existing_norm:
+                skipped.append(name)
+                continue
+            db_section = Section(
+                name=name,
+                grade_id=grade_id,
+                institution_id=institution_id,
+            )
+            db.add(db_section)
+            await db.flush()
+            db.add(SchoolClass(
+                grade_id=db_grade.id,
+                section_id=db_section.id,
+                institution_id=institution_id,
+                display_name=f"{db_grade.level}-{name}",
+                tuition_fee=db_grade.tuition_fee,
+                transport_fee=0.0,
+                other_fee=0.0,
+                total_fee=db_grade.tuition_fee,
+                fee_due_date=db_grade.fee_due_date,
+            ))
+            existing_norm.add(_norm(name))
+            created.append(db_section)
+
+        await db.commit()
+        for sec in created:
+            await db.refresh(sec)
+
+        return {
+            "created": created,
+            "skipped": skipped,
+        }
 
     @staticmethod
     async def update_section(db: AsyncSession, institution_id: int, section_id: int, section_in: schemas.SectionUpdate):
@@ -202,8 +432,20 @@ class AcademicService:
         db_section = result.scalars().first()
         if not db_section:
             return None
-        
+
         update_data = section_in.model_dump(exclude_unset=True)
+        new_name = update_data.get('name')
+        new_grade_id = update_data.get('grade_id', db_section.grade_id)
+        if new_name is not None and (
+            _norm(new_name) != _norm(db_section.name) or new_grade_id != db_section.grade_id
+        ):
+            if await AcademicService._section_name_taken(
+                db, institution_id, new_grade_id, new_name, exclude_id=section_id,
+            ):
+                raise DuplicateAcademicEntity(
+                    f"Section '{new_name.strip()}' already exists in this class."
+                )
+
         for k, v in update_data.items():
             setattr(db_section, k, v)
         
@@ -230,7 +472,26 @@ class AcademicService:
         return result.scalars().all()
 
     @staticmethod
+    async def _subject_name_taken(
+        db: AsyncSession, institution_id: int, name: str,
+        exclude_id: Optional[int] = None,
+    ) -> bool:
+        stmt = select(Subject.id).where(
+            Subject.institution_id == institution_id,
+            func.lower(func.trim(Subject.name)) == _norm(name),
+        )
+        if exclude_id is not None:
+            stmt = stmt.where(Subject.id != exclude_id)
+        return (await db.execute(stmt)).scalar() is not None
+
+    @staticmethod
     async def create_subject(db: AsyncSession, institution_id: int, subject_in: schemas.SubjectCreate):
+        if await AcademicService._subject_name_taken(
+            db, institution_id, subject_in.name,
+        ):
+            raise DuplicateAcademicEntity(
+                f"Subject '{subject_in.name.strip()}' already exists."
+            )
         db_subject = Subject(**subject_in.model_dump(), institution_id=institution_id)
         db.add(db_subject)
         await db.commit()
@@ -243,8 +504,17 @@ class AcademicService:
         db_subject = result.scalars().first()
         if not db_subject:
             return None
-        
+
         update_data = subject_in.model_dump(exclude_unset=True)
+        new_name = update_data.get('name')
+        if new_name is not None and _norm(new_name) != _norm(db_subject.name):
+            if await AcademicService._subject_name_taken(
+                db, institution_id, new_name, exclude_id=subject_id,
+            ):
+                raise DuplicateAcademicEntity(
+                    f"Subject '{new_name.strip()}' already exists."
+                )
+
         for k, v in update_data.items():
             setattr(db_subject, k, v)
         

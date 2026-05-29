@@ -82,6 +82,30 @@ export const academicApi = {
     return response.data;
   },
 
+  /**
+   * Create many sections at once (A, B, C, D…). The backend skips any
+   * names that already exist in the class and reports them in `skipped`
+   * so the UI can show a partial-success message.
+   */
+  deploySegmentsBulk: async (grade_id: number, names: string[]) => {
+    const response = await client.post<{ created: Section[]; skipped: string[] }>(
+      'academic/sections/deploy-bulk',
+      { grade_id, names },
+    );
+    return response.data;
+  },
+
+  /** Counts of dependent records that will cascade when a class is deleted. */
+  getClassDependents: async (grade_id: number) => {
+    const response = await client.get<{
+      sections: number;
+      classrooms: number;
+      students: number;
+      teacher_assignments: number;
+    }>(`academic/classes/${grade_id}/dependents`);
+    return response.data;
+  },
+
   deleteSection: async (id: number) => {
     await client.delete(`academic/sections/${id}`);
   },

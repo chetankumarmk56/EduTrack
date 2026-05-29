@@ -22,6 +22,14 @@ export default function EditStudentModal({ student, onClose, onUpdated }: EditSt
     else { setLocalStudent(null); setErrors({}); }
   }, [student]);
 
+  // Lock body scroll while open so the page can't be scrolled past the modal.
+  useEffect(() => {
+    if (!student) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [student]);
+
   const update = (field: keyof Student, value: string) => {
     setLocalStudent((prev) => (prev ? { ...prev, [field]: value } : prev));
     if (errors.submit) setErrors({});
@@ -56,14 +64,24 @@ export default function EditStudentModal({ student, onClose, onUpdated }: EditSt
   return (
     <AnimatePresence>
       {student && localStudent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="absolute inset-0 bg-black/95 backdrop-blur-2xl" />
-          <motion.div
-            initial={{ scale: 0.95, opacity: 0, y: 16 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.95, opacity: 0, y: 16 }}
-            className="relative w-full max-w-2xl obsidian-card border-brand-indigo/30 p-8 shadow-2xl"
-          >
+        <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain">
+          <motion.button
+            type="button"
+            aria-label="Close"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+            className="fixed inset-0 bg-slate-950/65 backdrop-blur-md cursor-default"
+          />
+          <div className="relative min-h-full flex items-start sm:items-center justify-center p-4 sm:p-6 pointer-events-none">
+            <motion.div
+              initial={{ scale: 0.96, opacity: 0, y: 12 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.96, opacity: 0, y: 12 }}
+              transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+              className="relative w-full max-w-2xl obsidian-card border-brand-indigo/30 p-6 sm:p-8 shadow-2xl my-4 sm:my-6 pointer-events-auto"
+            >
             <div className="flex items-center justify-between mb-8">
               <div>
                 <h2 className="text-2xl font-black tracking-tight uppercase">Edit Student</h2>
@@ -81,8 +99,8 @@ export default function EditStudentModal({ student, onClose, onUpdated }: EditSt
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-8">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-6">
 
                 {/* Student details */}
                 <div className="space-y-5">
@@ -140,7 +158,8 @@ export default function EditStudentModal({ student, onClose, onUpdated }: EditSt
                 </button>
               </div>
             </form>
-          </motion.div>
+            </motion.div>
+          </div>
         </div>
       )}
     </AnimatePresence>

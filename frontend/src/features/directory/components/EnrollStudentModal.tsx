@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, UserPlus, User, ShieldCheck, ArrowRight, AlertCircle, Loader } from 'lucide-react';
 import { directoryApi } from '@/features/directory/api';
@@ -18,6 +18,16 @@ export default function EnrollStudentModal({ isOpen, onClose, selectedSchoolClas
   const [form, setForm] = useState(EMPTY_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Lock body scroll while the modal is open so the page underneath
+  // doesn't keep growing as the user scrolls. Previously the user could
+  // scroll past the bottom of the page into blank space.
+  useEffect(() => {
+    if (!isOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [isOpen]);
 
   const handleClose = () => {
     setForm(EMPTY_FORM);
@@ -129,19 +139,29 @@ export default function EnrollStudentModal({ isOpen, onClose, selectedSchoolClas
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={handleClose} className="absolute inset-0 bg-black/95 backdrop-blur-2xl" />
-          <motion.div
-            initial={{ scale: 0.95, opacity: 0, y: 16 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.95, opacity: 0, y: 16 }}
-            className="relative w-full max-w-2xl obsidian-card border-brand-indigo/30 p-8 shadow-[0_0_80px_rgba(99,102,241,0.12)] overflow-hidden"
-          >
+        <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain">
+          <motion.button
+            type="button"
+            aria-label="Close"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={handleClose}
+            className="fixed inset-0 bg-slate-950/65 backdrop-blur-md cursor-default"
+          />
+          <div className="relative min-h-full flex items-start sm:items-center justify-center p-4 sm:p-6 pointer-events-none">
+            <motion.div
+              initial={{ scale: 0.96, opacity: 0, y: 12 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.96, opacity: 0, y: 12 }}
+              transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+              className="relative w-full max-w-2xl obsidian-card border-brand-indigo/30 p-6 sm:p-8 shadow-[0_0_80px_rgba(99,102,241,0.12)] my-4 sm:my-6 pointer-events-auto"
+            >
             <div className="absolute -top-16 -right-16 w-48 h-48 bg-brand-indigo/8 blur-[80px] rounded-full pointer-events-none" />
 
-            <div className="flex items-center justify-between mb-8 relative z-10">
+            <div className="flex items-center justify-between mb-6 sm:mb-8 relative z-10">
               <div>
-                <h2 className="text-2xl font-black tracking-tight uppercase">Enroll Student</h2>
+                <h2 className="text-xl sm:text-2xl font-black tracking-tight uppercase">Enroll Student</h2>
                 <p className="text-text-secondary text-sm mt-0.5">Add a new student to the selected class.</p>
               </div>
               <button onClick={handleClose} className="p-2.5 hover:bg-white/5 rounded-xl transition-all border border-glass-border">
@@ -156,8 +176,8 @@ export default function EnrollStudentModal({ isOpen, onClose, selectedSchoolClas
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-8 relative z-10">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <form onSubmit={handleSubmit} className="space-y-6 relative z-10">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-6">
 
                 {/* Student details */}
                 <div className="space-y-5">
@@ -272,7 +292,7 @@ export default function EnrollStudentModal({ isOpen, onClose, selectedSchoolClas
                 </div>
               </div>
 
-              <div className="pt-5 border-t border-glass-border flex items-center justify-between">
+              <div className="pt-5 border-t border-glass-border flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-0">
                 <div className="flex items-center gap-2 text-[10px] text-text-secondary opacity-40">
                   <ShieldCheck className="w-3.5 h-3.5" /> Login password auto-set to date of birth
                 </div>
@@ -288,7 +308,8 @@ export default function EnrollStudentModal({ isOpen, onClose, selectedSchoolClas
                 </button>
               </div>
             </form>
-          </motion.div>
+            </motion.div>
+          </div>
         </div>
       )}
     </AnimatePresence>

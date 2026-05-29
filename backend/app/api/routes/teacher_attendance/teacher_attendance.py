@@ -180,6 +180,14 @@ async def admin_list_attendance(
     status: Optional[str] = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
+    include_absent: bool = Query(
+        True,
+        description=(
+            "Synthesize ABSENT rows for teachers without a stored record on "
+            "working days in the requested range. Excludes Sundays and days "
+            "covered by approved leave. Capped to a 366-day window."
+        ),
+    ),
     db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(get_current_user),
 ):
@@ -192,6 +200,7 @@ async def admin_list_attendance(
         status=status,
         skip=skip,
         limit=limit,
+        include_absent=include_absent,
     )
     return {"total": total, "items": items}
 

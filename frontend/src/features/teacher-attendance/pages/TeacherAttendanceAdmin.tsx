@@ -228,6 +228,12 @@ export default function TeacherAttendanceAdmin() {
   const [attendance, setAttendance] = useState<TeacherAttendanceRecord[]>([]);
   const [attTotal, setAttTotal] = useState(0);
   const [attLoading, setAttLoading] = useState(false);
+  /**
+   * When ON, the backend synthesizes ABSENT rows for working days that
+   * have no stored record. Default ON so admins see absentees by
+   * default — toggle OFF to view only check-in events.
+   */
+  const [attIncludeAbsent, setAttIncludeAbsent] = useState(true);
 
   // Edit modal
   const [editModal, setEditModal] = useState<EditModal | null>(null);
@@ -308,13 +314,14 @@ export default function TeacherAttendanceAdmin() {
         status: attStatus || undefined,
         skip: attPage * PAGE_SIZE,
         limit: PAGE_SIZE,
+        include_absent: attIncludeAbsent,
       });
       setAttendance(res.items);
       setAttTotal(res.total);
     } finally {
       setAttLoading(false);
     }
-  }, [attTeacherId, attDateFrom, attDateTo, attStatus, attPage]);
+  }, [attTeacherId, attDateFrom, attDateTo, attStatus, attPage, attIncludeAbsent]);
 
   const loadLeaves = useCallback(async () => {
     setLeaveLoading(true);
@@ -593,6 +600,24 @@ export default function TeacherAttendanceAdmin() {
                 to={attDateTo}
                 onChange={(f, t) => { setAttDateFrom(f); setAttDateTo(t); setAttPage(0); }}
               />
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                  Auto-fill absent
+                </label>
+                <button
+                  type="button"
+                  onClick={() => { setAttIncludeAbsent(v => !v); setAttPage(0); }}
+                  className={cn(
+                    'h-[42px] px-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors border min-w-[140px]',
+                    attIncludeAbsent
+                      ? 'bg-primary/15 border-primary/40 text-primary'
+                      : 'bg-slate-800 border-white/10 text-slate-400 hover:text-white hover:border-white/30',
+                  )}
+                  title="Synthesize ABSENT rows for working days with no record (excludes Sundays and approved leave)"
+                >
+                  {attIncludeAbsent ? 'Including absentees' : 'Stored records only'}
+                </button>
+              </div>
             </FilterShell>
 
             {attLoading ? (
@@ -615,32 +640,57 @@ export default function TeacherAttendanceAdmin() {
                       </tr>
                     </thead>
                     <tbody>
-                      {attendance.map((row) => (
-                        <tr key={row.id} className="border-b border-white/5 hover:bg-white/[0.03] transition-colors">
-                          <td className="px-4 py-3 font-black text-slate-200">
-                            <TeacherCell name={row.teacher_name} />
-                          </td>
-                          <td className="px-4 py-3 font-mono text-slate-300 whitespace-nowrap">{row.date}</td>
-                          <td className="px-4 py-3"><StatusPill status={row.status} meta={STATUS_META[row.status]} /></td>
-                          <td className="px-4 py-3 font-mono text-slate-300">{row.check_in_time || '—'}</td>
-                          <td className="px-4 py-3 font-mono text-slate-300">{row.check_out_time || '—'}</td>
-                          <td className="px-4 py-3 text-slate-400 max-w-xs truncate">{row.remarks || '—'}</td>
-                          <td className="px-4 py-3">
-                            {row.is_edited
-                              ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-amber-500/20 bg-amber-500/10 text-amber-400 text-[10px] font-black uppercase tracking-widest"><Sparkles className="w-3 h-3" /> Yes</span>
-                              : <span className="text-slate-500">—</span>}
-                          </td>
-                          <td className="px-4 py-3">
-                            <button
-                              onClick={() => openEditModal(row)}
-                              className="p-1.5 rounded-lg border border-white/10 text-slate-400 hover:text-white hover:border-primary/50 hover:bg-primary/10 transition-colors"
-                              title="Edit attendance"
-                            >
-                              <Edit3 className="w-3.5 h-3.5" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                      {attendance.map((row) => {
+                        // id=0 marks rows synthesized server-side from the
+                        // "auto-fill absent" pass — they don't yet exist in
+                        // the DB. The edit action still works: the admin
+                        // edit endpoint will create the underlying record.
+                        const synthetic = row.id === 0;
+                        return (
+                          <tr
+                            key={`${row.teacher_id}_${row.date}_${row.id || 'syn'}`}
+                            className={cn(
+                              'border-b border-white/5 transition-colors',
+                              synthetic ? 'bg-rose-500/[0.025] hover:bg-rose-500/[0.05]' : 'hover:bg-white/[0.03]',
+                            )}
+                          >
+                            <td className="px-4 py-3 font-black text-slate-200">
+                              <TeacherCell name={row.teacher_name} />
+                            </td>
+                            <td className="px-4 py-3 font-mono text-slate-300 whitespace-nowrap">{row.date}</td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-1.5">
+                                <StatusPill status={row.status} meta={STATUS_META[row.status]} />
+                                {synthetic && (
+                                  <span
+                                    className="text-[9px] font-black uppercase tracking-widest text-slate-500"
+                                    title="No record on file — admins can edit to confirm or override."
+                                  >
+                                    auto
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 font-mono text-slate-300">{row.check_in_time || '—'}</td>
+                            <td className="px-4 py-3 font-mono text-slate-300">{row.check_out_time || '—'}</td>
+                            <td className="px-4 py-3 text-slate-400 max-w-xs truncate">{row.remarks || '—'}</td>
+                            <td className="px-4 py-3">
+                              {row.is_edited
+                                ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-amber-500/20 bg-amber-500/10 text-amber-400 text-[10px] font-black uppercase tracking-widest"><Sparkles className="w-3 h-3" /> Yes</span>
+                                : <span className="text-slate-500">—</span>}
+                            </td>
+                            <td className="px-4 py-3">
+                              <button
+                                onClick={() => openEditModal(row)}
+                                className="p-1.5 rounded-lg border border-white/10 text-slate-400 hover:text-white hover:border-primary/50 hover:bg-primary/10 transition-colors"
+                                title="Edit attendance"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

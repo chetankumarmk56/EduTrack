@@ -125,6 +125,13 @@ export const teacherAttendanceApi = {
     status?: string;
     skip?: number;
     limit?: number;
+    /**
+     * When true (default), the backend fills in synthetic ABSENT rows
+     * for any working day in the requested range that has no stored
+     * record. This is what makes "Absent" filtering actually surface
+     * teachers who never check in.
+     */
+    include_absent?: boolean;
   }): Promise<PaginatedAttendanceResponse> => {
     const res = await client.get('teacher-attendance/admin/attendance', { params });
     return res.data;

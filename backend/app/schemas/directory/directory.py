@@ -127,6 +127,10 @@ class TeacherCreate(TeacherBase):
 class TeacherUpdate(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
+    # Email + active flag are admin-editable from the Teacher Directory.
+    # Both are optional so the same payload can patch any subset of fields.
+    email: Optional[EmailStr] = None
+    is_active: Optional[bool] = None
 
 class TeacherAssignmentCreate(BaseModel):
     teacher_id: int

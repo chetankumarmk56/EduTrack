@@ -421,7 +421,20 @@ async def admin_list_attendance(
     status: Optional[str] = None,
     skip: int = 0,
     limit: int = 100,
+    include_absent: bool = False,
 ) -> Tuple[int, List[dict]]:
+    """List attendance rows for the admin grid.
+
+    With ``include_absent=True`` and a bounded date range, the service
+    also synthesizes ABSENT placeholder rows for any (teacher, working
+    day) pair that does NOT have a stored ``TeacherAttendance`` record
+    and is not already covered by an APPROVED leave. Without this,
+    teachers who never check in simply don't appear in the history,
+    which makes "absent" filtering useless on a fresh deploy.
+
+    Synthetic rows have id=0 and is_edited=False so the client can
+    distinguish them if needed.
+    """
     conditions = [TeacherAttendance.institution_id == institution_id]
     if teacher_id:
         conditions.append(TeacherAttendance.teacher_id == teacher_id)
@@ -435,19 +448,114 @@ async def admin_list_attendance(
     count_result = await db.execute(
         select(func.count()).select_from(TeacherAttendance).where(and_(*conditions))
     )
-    total = count_result.scalar() or 0
+    real_total = count_result.scalar() or 0
 
     rows_result = await db.execute(
         select(TeacherAttendance)
         .where(and_(*conditions))
         .order_by(TeacherAttendance.date.desc(), TeacherAttendance.teacher_id)
-        .offset(skip)
-        .limit(limit)
     )
-    rows = rows_result.scalars().all()
+    real_rows = rows_result.scalars().all()
 
-    # Batch-load teacher names
-    teacher_ids = list({r.teacher_id for r in rows})
+    # Batch-load teacher names for everything we'll display
+    teacher_ids: set[int] = {r.teacher_id for r in real_rows}
+
+    synthetic_rows: List[dict] = []
+    if include_absent and date_from and date_to:
+        from datetime import date as _date, timedelta
+
+        try:
+            d_from = _date.fromisoformat(date_from)
+            d_to = _date.fromisoformat(date_to)
+        except ValueError:
+            d_from = d_to = None
+
+        if d_from and d_to and d_from <= d_to:
+            # Cap synthesis to a reasonable window so a stray
+            # `from=1970-01-01` doesn't blow up memory.
+            span_days = (d_to - d_from).days + 1
+            if span_days <= 366:
+                today_str = _today()
+                upper_bound = min(d_to.isoformat(), today_str)
+                try:
+                    upper_date = _date.fromisoformat(upper_bound)
+                except ValueError:
+                    upper_date = d_to
+                if upper_date < d_from:
+                    upper_date = d_from - timedelta(days=1)
+
+                # 1. Teachers in scope
+                tch_stmt = select(Teacher.id, Teacher.name).where(
+                    Teacher.institution_id == institution_id,
+                    Teacher.is_active == True,  # noqa: E712
+                )
+                if teacher_id:
+                    tch_stmt = tch_stmt.where(Teacher.id == teacher_id)
+                tch_rows = (await db.execute(tch_stmt)).all()
+                scoped_teachers = {tid: tname for tid, tname in tch_rows}
+
+                # 2. Dates that already have a stored record per teacher
+                stored_pairs = {(r.teacher_id, r.date) for r in real_rows}
+
+                # If a status filter is active and it's NOT 'ABSENT', skip
+                # synthesizing — caller is looking for a different bucket.
+                wants_absent = (not status) or status.upper() == 'ABSENT'
+
+                if wants_absent and scoped_teachers and upper_date >= d_from:
+                    # 3. Pre-load APPROVED leaves overlapping the range so
+                    #    we can suppress synthesis on those days.
+                    leave_rows = (await db.execute(
+                        select(TeacherLeaveRequest.teacher_id,
+                               TeacherLeaveRequest.start_date,
+                               TeacherLeaveRequest.end_date)
+                        .where(
+                            TeacherLeaveRequest.institution_id == institution_id,
+                            TeacherLeaveRequest.status == "APPROVED",
+                            TeacherLeaveRequest.start_date <= upper_date.isoformat(),
+                            TeacherLeaveRequest.end_date >= d_from.isoformat(),
+                            *([TeacherLeaveRequest.teacher_id == teacher_id]
+                              if teacher_id else []),
+                        )
+                    )).all()
+                    leave_by_teacher: dict[int, list[Tuple[str, str]]] = {}
+                    for tid, ls, le in leave_rows:
+                        leave_by_teacher.setdefault(tid, []).append((ls, le))
+
+                    def _on_leave(tid: int, day: str) -> bool:
+                        for ls, le in leave_by_teacher.get(tid, []):
+                            if ls <= day <= le:
+                                return True
+                        return False
+
+                    # 4. Walk every working day (Mon-Sat). Sundays are
+                    #    treated as non-working — schools rarely log
+                    #    attendance for them; admins can still mark a
+                    #    Sunday absent manually via the edit modal.
+                    cursor = d_from
+                    while cursor <= upper_date:
+                        if cursor.weekday() != 6:  # not Sunday
+                            day_str = cursor.isoformat()
+                            for tid, tname in scoped_teachers.items():
+                                if (tid, day_str) in stored_pairs:
+                                    continue
+                                if _on_leave(tid, day_str):
+                                    continue
+                                teacher_ids.add(tid)
+                                synthetic_rows.append({
+                                    "id": 0,
+                                    "teacher_id": tid,
+                                    "teacher_name": tname,
+                                    "date": day_str,
+                                    "check_in_time": None,
+                                    "check_out_time": None,
+                                    "status": "ABSENT",
+                                    "remarks": None,
+                                    "is_edited": False,
+                                    "created_at": None,
+                                    "updated_at": None,
+                                })
+                        cursor += timedelta(days=1)
+
     name_map: dict[int, str] = {}
     if teacher_ids:
         t_result = await db.execute(
@@ -456,7 +564,14 @@ async def admin_list_attendance(
         for tid, tname in t_result.all():
             name_map[tid] = tname
 
-    return total, [_enrich_attendance(r, name_map.get(r.teacher_id, "")) for r in rows]
+    enriched_real = [_enrich_attendance(r, name_map.get(r.teacher_id, "")) for r in real_rows]
+    combined = enriched_real + synthetic_rows
+    # Sort newest-first by date, then teacher_id, mirroring the original order
+    combined.sort(key=lambda r: (r["date"], r["teacher_id"]), reverse=False)
+    combined.reverse()
+
+    total = real_total + len(synthetic_rows)
+    return total, combined[skip:skip + limit]
 
 
 async def admin_edit_attendance(
@@ -712,6 +827,13 @@ async def get_attendance_summary(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
 ) -> List[dict]:
+    """Per-teacher status counts in a date range.
+
+    When the caller supplies a bounded range, missing working days for
+    each active teacher are counted as ABSENT (Sundays + approved-leave
+    days excluded). This mirrors ``admin_list_attendance(include_absent=True)``
+    so the Summary tab matches the Attendance tab on counts.
+    """
     conditions = [TeacherAttendance.institution_id == institution_id]
     if teacher_id:
         conditions.append(TeacherAttendance.teacher_id == teacher_id)
@@ -736,6 +858,77 @@ async def get_attendance_summary(
     for tid, status, cnt in raw:
         key = status.lower() if status in ("PRESENT", "ABSENT", "HALF_DAY", "ON_LEAVE") else "present"
         summary[tid][key] += cnt
+
+    # Synthesize ABSENT counts for working-day gaps so absentees don't
+    # disappear from the summary when they never check in.
+    if date_from and date_to:
+        from datetime import date as _date, timedelta
+        try:
+            d_from = _date.fromisoformat(date_from)
+            d_to = _date.fromisoformat(date_to)
+        except ValueError:
+            d_from = d_to = None
+
+        if d_from and d_to and d_from <= d_to and (d_to - d_from).days <= 366:
+            today_str = _today()
+            try:
+                upper = min(d_to, _date.fromisoformat(today_str))
+            except ValueError:
+                upper = d_to
+
+            tch_stmt = select(Teacher.id, Teacher.name).where(
+                Teacher.institution_id == institution_id,
+                Teacher.is_active == True,  # noqa: E712
+            )
+            if teacher_id:
+                tch_stmt = tch_stmt.where(Teacher.id == teacher_id)
+            scoped_teachers = {tid: tname for tid, tname in (await db.execute(tch_stmt)).all()}
+
+            # Existing day stamps per teacher to subtract from the range.
+            day_rows = (await db.execute(
+                select(TeacherAttendance.teacher_id, TeacherAttendance.date)
+                .where(and_(*conditions))
+            )).all()
+            stored_pairs = {(tid, day) for tid, day in day_rows}
+
+            leave_rows = (await db.execute(
+                select(TeacherLeaveRequest.teacher_id,
+                       TeacherLeaveRequest.start_date,
+                       TeacherLeaveRequest.end_date)
+                .where(
+                    TeacherLeaveRequest.institution_id == institution_id,
+                    TeacherLeaveRequest.status == "APPROVED",
+                    TeacherLeaveRequest.start_date <= upper.isoformat(),
+                    TeacherLeaveRequest.end_date >= d_from.isoformat(),
+                    *([TeacherLeaveRequest.teacher_id == teacher_id] if teacher_id else []),
+                )
+            )).all()
+            leave_by_teacher: dict[int, list[Tuple[str, str]]] = {}
+            for tid, ls, le in leave_rows:
+                leave_by_teacher.setdefault(tid, []).append((ls, le))
+
+            def _on_leave(tid: int, day: str) -> bool:
+                for ls, le in leave_by_teacher.get(tid, []):
+                    if ls <= day <= le:
+                        return True
+                return False
+
+            cursor = d_from
+            while cursor <= upper:
+                if cursor.weekday() != 6:
+                    day_str = cursor.isoformat()
+                    for tid in scoped_teachers.keys():
+                        if (tid, day_str) in stored_pairs:
+                            continue
+                        if _on_leave(tid, day_str):
+                            continue
+                        summary[tid]["absent"] += 1
+                cursor += timedelta(days=1)
+
+            # Make sure every scoped teacher appears in the summary even if
+            # they had zero events.
+            for tid in scoped_teachers:
+                summary.setdefault(tid, {"present": 0, "absent": 0, "half_day": 0, "on_leave": 0})
 
     # Load teacher names
     teacher_ids = list(summary.keys())

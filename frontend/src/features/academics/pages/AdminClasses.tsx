@@ -1,94 +1,162 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Plus, Trash2, Hash, 
+import {
+  Plus, Trash2, Hash,
   PlusCircle, X, Pencil,
   BookOpen, GraduationCap, ChevronRight,
-  Layers, School, Library
+  Layers, School, Library, AlertCircle, CheckCircle2,
 } from 'lucide-react';
 import { academicApi } from '@/features/academics/api';
 import { useApp } from '@/shared/contexts/AppContext';
 import { cn } from '@/shared/lib/utils';
 import { getErrorMessage } from '@/shared/lib/errorHandler';
+import ConfirmModal from '@/shared/components/ui/ConfirmModal';
 import type { Grade, Subject } from '@/shared/types';
+
+type FormBanner = { kind: 'error' | 'success'; text: string } | null;
+
+interface ClassDeleteTarget {
+  grade: Grade;
+  dependents?: {
+    sections: number;
+    classrooms: number;
+    students: number;
+    teacher_assignments: number;
+  };
+  loadingCounts: boolean;
+}
 
 export default function AdminClasses() {
   const { grades: classes, sections, subjects, refreshDirectory } = useApp();
-  
+
   const [selectedGradeId, setSelectedGradeId] = useState<number | null>(null);
   const [isAddingClass, setIsAddingClass] = useState(false);
   const [isAddingSection, setIsAddingSection] = useState(false);
   const [isAddingSubject, setIsAddingSubject] = useState(false);
-  
+
   const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
   const [editingClass, setEditingClass] = useState<Grade | null>(null);
-  
+
   const [classForm, setClassForm] = useState({ name: '', level: 0, tuition_fee: 0, fee_due_date: '' });
-  const [sectionName, setSectionName] = useState('');
+  const [sectionInput, setSectionInput] = useState('');
   const [subjectForm, setSubjectForm] = useState({ name: '', code: '' });
+
+  // Inline form banners (validation / success messages)
+  const [classBanner, setClassBanner] = useState<FormBanner>(null);
+  const [sectionBanner, setSectionBanner] = useState<FormBanner>(null);
+  const [subjectBanner, setSubjectBanner] = useState<FormBanner>(null);
+  const [classSubmitting, setClassSubmitting] = useState(false);
+  const [sectionSubmitting, setSectionSubmitting] = useState(false);
+  const [subjectSubmitting, setSubjectSubmitting] = useState(false);
+
+  // Confirmation modal state
+  const [classDeleteTarget, setClassDeleteTarget] = useState<ClassDeleteTarget | null>(null);
+  const [sectionDeleteId, setSectionDeleteId] = useState<number | null>(null);
+  const [subjectDeleteId, setSubjectDeleteId] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     refreshDirectory();
   }, [refreshDirectory]);
 
+  /** Parse the bulk section input ("A, B, C" or "A B C") into clean names. */
+  const parseSectionNames = (raw: string): string[] =>
+    raw
+      .split(/[\s,;\n]+/)
+      .map(n => n.trim().toUpperCase())
+      .filter(Boolean);
+
   const handleCreateClass = async (e: React.FormEvent) => {
     e.preventDefault();
+    setClassBanner(null);
+    if (!classForm.level || classForm.level < 1) {
+      setClassBanner({ kind: 'error', text: 'Please enter a numeric class level (e.g. 10).' });
+      return;
+    }
+    setClassSubmitting(true);
     try {
-      let result;
       const payload = {
         ...classForm,
-        fee_due_date: classForm.fee_due_date === '' ? undefined : classForm.fee_due_date
+        fee_due_date: classForm.fee_due_date === '' ? undefined : classForm.fee_due_date,
       };
 
-      if (editingClass) {
-        result = await academicApi.updateClass(editingClass.id, payload);
-        setEditingClass(null);
-      } else {
-        result = await academicApi.createClass(payload);
-      }
+      const result = editingClass
+        ? await academicApi.updateClass(editingClass.id, payload)
+        : await academicApi.createClass(payload);
+
       setIsAddingClass(false);
+      setEditingClass(null);
       setClassForm({ name: '', level: 0, tuition_fee: 0, fee_due_date: '' });
-      
-      // Wait for directory to refresh so we have latest IDs
       await refreshDirectory(true);
-      
-      // Auto-select the newly created/updated class
-      if (result?.id) {
-        setSelectedGradeId(result.id);
-      }
-    } catch (err) { console.error(err); }
+      if (result?.id) setSelectedGradeId(result.id);
+    } catch (err) {
+      setClassBanner({
+        kind: 'error',
+        text: getErrorMessage(err).message || 'Unable to save class. Please try again.',
+      });
+    } finally {
+      setClassSubmitting(false);
+    }
   };
 
-  const handleAddSection = async (e: React.FormEvent) => {
+  const handleAddSections = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedGradeId || !sectionName) return;
+    setSectionBanner(null);
+    if (!selectedGradeId) return;
+    const names = parseSectionNames(sectionInput);
+    if (names.length === 0) {
+      setSectionBanner({ kind: 'error', text: 'Enter at least one section name.' });
+      return;
+    }
+    setSectionSubmitting(true);
     try {
-      // Senior Fix: Use atomic deployment endpoint to prevent relational drift and sequential 401s
-      await academicApi.deploySegment({ 
-        name: sectionName.toUpperCase(), 
-        grade_id: selectedGradeId 
-      });
-      
-      setIsAddingSection(false);
-      setSectionName('');
+      // Single name → use the original single-section endpoint so the
+      // existing audit / response shape doesn't change. Multiple names →
+      // batch endpoint which skips duplicates and reports them.
+      if (names.length === 1) {
+        await academicApi.deploySegment({ name: names[0], grade_id: selectedGradeId });
+        setSectionBanner({ kind: 'success', text: `Section ${names[0]} added.` });
+      } else {
+        const res = await academicApi.deploySegmentsBulk(selectedGradeId, names);
+        const createdNames = res.created.map(s => s.name).join(', ');
+        const msg = res.skipped.length
+          ? `Added ${res.created.length} section(s): ${createdNames || '—'}. Skipped existing: ${res.skipped.join(', ')}.`
+          : `Added ${res.created.length} section(s): ${createdNames}.`;
+        setSectionBanner({ kind: res.created.length ? 'success' : 'error', text: msg });
+      }
+      setSectionInput('');
       await refreshDirectory(true);
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      setSectionBanner({
+        kind: 'error',
+        text: getErrorMessage(err).message || 'Unable to add sections. Please try again.',
+      });
+    } finally {
+      setSectionSubmitting(false);
+    }
   };
 
   const handleCreateSubject = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubjectBanner(null);
+    if (!subjectForm.name.trim()) {
+      setSubjectBanner({ kind: 'error', text: 'Subject name is required.' });
+      return;
+    }
+    setSubjectSubmitting(true);
     try {
       const uniqueCode = `${subjectForm.name.substring(0, 3).toUpperCase()}-${Math.floor(Date.now() % 10000)}`;
-      await academicApi.createSubject({
-        name: subjectForm.name,
-        code: uniqueCode
-      });
+      await academicApi.createSubject({ name: subjectForm.name.trim(), code: uniqueCode });
       setIsAddingSubject(false);
       setSubjectForm({ name: '', code: '' });
       await refreshDirectory(true);
-    } catch (err) { 
-      console.error(err);
-      alert(getErrorMessage(err).message || "Failed to initialize discipline.");
+    } catch (err) {
+      setSubjectBanner({
+        kind: 'error',
+        text: getErrorMessage(err).message || 'Failed to create subject.',
+      });
+    } finally {
+      setSubjectSubmitting(false);
     }
   };
 
@@ -98,24 +166,70 @@ export default function AdminClasses() {
     try {
       await academicApi.updateSubject(editingSubject.id, {
         name: editingSubject.name,
-        code: editingSubject.code
+        code: editingSubject.code,
       });
       setEditingSubject(null);
       await refreshDirectory(true);
-    } catch (err) { 
-      console.error(err); }
+    } catch (err) {
+      // Surface duplicate-name conflicts back inside the edit modal.
+      setEditingSubject(prev => prev ? { ...prev } : prev);
+      alert(getErrorMessage(err).message || 'Failed to update subject.');
+    }
   };
 
-  const handleDelete = async (id: number, type: 'grade' | 'section' | 'subject') => {
-    if (!confirm(`Permanent removal of this academic unit? This action cannot be reversed.`)) return;
+  const requestDeleteClass = async (grade: Grade) => {
+    setClassDeleteTarget({ grade, loadingCounts: true });
     try {
-      if (type === 'grade') await academicApi.deleteClass(id);
-      if (type === 'section') await academicApi.deleteSection(id);
-      if (type === 'subject') await academicApi.deleteSubject(id);
+      const dependents = await academicApi.getClassDependents(grade.id);
+      setClassDeleteTarget({ grade, dependents, loadingCounts: false });
+    } catch {
+      // If the count call fails, still allow the deletion attempt — the
+      // backend will block with a clear message if needed.
+      setClassDeleteTarget({ grade, loadingCounts: false });
+    }
+  };
+
+  const performClassDelete = async () => {
+    if (!classDeleteTarget) return;
+    setDeleting(true);
+    try {
+      await academicApi.deleteClass(classDeleteTarget.grade.id);
+      if (selectedGradeId === classDeleteTarget.grade.id) setSelectedGradeId(null);
+      setClassDeleteTarget(null);
       await refreshDirectory(true);
-    } catch (err) { 
-      console.error(err);
-      alert(getErrorMessage(err).message || "Action blocked. Ensure no active assignments or students exist.");
+    } catch (err) {
+      setClassDeleteTarget(prev => prev ? prev : null);
+      alert(getErrorMessage(err).message || 'Unable to delete this class.');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const performSectionDelete = async () => {
+    if (sectionDeleteId == null) return;
+    setDeleting(true);
+    try {
+      await academicApi.deleteSection(sectionDeleteId);
+      setSectionDeleteId(null);
+      await refreshDirectory(true);
+    } catch (err) {
+      alert(getErrorMessage(err).message || 'Unable to delete this section.');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const performSubjectDelete = async () => {
+    if (subjectDeleteId == null) return;
+    setDeleting(true);
+    try {
+      await academicApi.deleteSubject(subjectDeleteId);
+      setSubjectDeleteId(null);
+      await refreshDirectory(true);
+    } catch (err) {
+      alert(getErrorMessage(err).message || 'Unable to delete this subject.');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -182,19 +296,20 @@ export default function AdminClasses() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 relative z-10">
-                    <button 
-                      onClick={(e) => { 
-                        e.stopPropagation(); 
-                        setEditingClass(c); 
-                        setClassForm({ name: c.name, level: c.level, tuition_fee: c.tuition_fee || 0, fee_due_date: c.fee_due_date || '' }); 
-                        setIsAddingClass(true); 
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingClass(c);
+                        setClassForm({ name: c.name, level: c.level, tuition_fee: c.tuition_fee || 0, fee_due_date: c.fee_due_date || '' });
+                        setClassBanner(null);
+                        setIsAddingClass(true);
                       }}
                       className="p-2 rounded-lg hover:bg-white/10 text-white/10 hover:text-white transition-all opacity-0 group-hover:opacity-100"
                     >
                       <Pencil className="w-3.5 h-3.5" />
                     </button>
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); handleDelete(c.id, 'grade'); }}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); requestDeleteClass(c); }}
                       className="p-2 rounded-lg hover:bg-rose-500/10 text-white/10 hover:text-rose-500 transition-all opacity-0 group-hover:opacity-100"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -217,41 +332,65 @@ export default function AdminClasses() {
                     <h4 className="text-[10px] font-black uppercase tracking-widest italic">{editingClass ? 'Configure Class' : 'Register Class'}</h4>
                     <p className="text-[7px] font-black uppercase tracking-widest text-brand-indigo opacity-60 italic">Identity Synchronization</p>
                   </hgroup>
-                  <button type="button" onClick={() => setIsAddingClass(false)}><X className="w-4 h-4 opacity-40 hover:opacity-100" /></button>
+                  <button type="button" onClick={() => { setIsAddingClass(false); setClassBanner(null); }}>
+                    <X className="w-4 h-4 opacity-40 hover:opacity-100" />
+                  </button>
                 </div>
+
+                {classBanner && (
+                  <div className={cn(
+                    "flex items-start gap-2 p-3 rounded-xl text-[11px] font-bold border",
+                    classBanner.kind === 'error'
+                      ? "bg-rose-500/10 border-rose-500/20 text-rose-400"
+                      : "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+                  )}>
+                    {classBanner.kind === 'error'
+                      ? <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                      : <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5" />}
+                    <span className="leading-snug">{classBanner.text}</span>
+                  </div>
+                )}
+
                 <div className="space-y-1">
                   <label className="text-[8px] font-black uppercase tracking-widest ml-2 text-text-secondary">Numeric Designation</label>
-                  <input 
-                    type="number" 
-                    placeholder="e.g. 10" 
-                    autoFocus 
-                    className="input-obsidian text-sm italic font-black" 
-                    value={classForm.level || ''} 
-                    onChange={e => setClassForm({ ...classForm, name: `Class ${e.target.value}`, level: Number(e.target.value) })} 
+                  <input
+                    type="number"
+                    placeholder="e.g. 10"
+                    autoFocus
+                    className="input-obsidian text-sm italic font-black"
+                    value={classForm.level || ''}
+                    onChange={e => setClassForm({ ...classForm, name: `Class ${e.target.value}`, level: Number(e.target.value) })}
                     required
                   />
                 </div>
                 <div className="space-y-1">
                   <label className="text-[8px] font-black uppercase tracking-widest ml-2 text-text-secondary">Class Payment Fee</label>
-                  <input 
-                    type="number" 
-                    placeholder="e.g. 5000" 
-                    className="input-obsidian text-sm italic font-black" 
-                    value={classForm.tuition_fee || ''} 
-                    onChange={e => setClassForm({ ...classForm, tuition_fee: Number(e.target.value) })} 
+                  <input
+                    type="number"
+                    placeholder="e.g. 5000"
+                    className="input-obsidian text-sm italic font-black"
+                    value={classForm.tuition_fee || ''}
+                    onChange={e => setClassForm({ ...classForm, tuition_fee: Number(e.target.value) })}
                   />
                 </div>
                 <div className="space-y-1">
                   <label className="text-[8px] font-black uppercase tracking-widest ml-2 text-text-secondary">Fee Payment Deadline</label>
-                  <input 
-                    type="date" 
-                    className="input-obsidian text-sm italic font-black" 
-                    value={classForm.fee_due_date || ''} 
-                    onChange={e => setClassForm({ ...classForm, fee_due_date: e.target.value })} 
+                  <input
+                    type="date"
+                    className="input-obsidian text-sm italic font-black"
+                    value={classForm.fee_due_date || ''}
+                    onChange={e => setClassForm({ ...classForm, fee_due_date: e.target.value })}
                   />
                 </div>
-                <button type="submit" className="indigo-glow-button w-full py-3 text-[10px] font-black uppercase tracking-widest italic">
-                  {editingClass ? 'Update Registry' : 'Authorize Class'}
+                <button
+                  type="submit"
+                  disabled={classSubmitting}
+                  className={cn(
+                    "indigo-glow-button w-full py-3 text-[10px] font-black uppercase tracking-widest italic",
+                    classSubmitting && "opacity-60 cursor-wait",
+                  )}
+                >
+                  {classSubmitting ? 'Saving…' : editingClass ? 'Update Registry' : 'Authorize Class'}
                 </button>
               </form>
             </motion.div>
@@ -290,8 +429,8 @@ export default function AdminClasses() {
                             <p className="font-black text-white uppercase italic text-lg">{activeGrade?.level}-{s.name}</p>
                           </div>
                         </div>
-                        <button 
-                          onClick={() => handleDelete(s.id, 'section')}
+                        <button
+                          onClick={() => setSectionDeleteId(s.id)}
                           className="p-2.5 rounded-xl bg-rose-500/5 text-rose-500/20 hover:text-rose-500 hover:bg-rose-500/10 transition-all opacity-0 group-hover:opacity-100 shadow-lg"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -302,16 +441,53 @@ export default function AdminClasses() {
 
                   {isAddingSection && (
                     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-                      <form onSubmit={handleAddSection} className="obsidian-card p-6 border-brand-indigo/20 bg-brand-indigo/[0.02] flex flex-col gap-4">
+                      <form onSubmit={handleAddSections} className="obsidian-card p-6 border-brand-indigo/20 bg-brand-indigo/[0.02] flex flex-col gap-4">
                         <div className="flex items-center justify-between">
-                          <h4 className="text-[10px] font-black uppercase tracking-widest italic text-brand-indigo">Deploy Segment</h4>
-                          <button type="button" onClick={() => setIsAddingSection(false)}><X className="w-4 h-4" /></button>
+                          <h4 className="text-[10px] font-black uppercase tracking-widest italic text-brand-indigo">Deploy Section(s)</h4>
+                          <button type="button" onClick={() => { setIsAddingSection(false); setSectionBanner(null); }}>
+                            <X className="w-4 h-4" />
+                          </button>
                         </div>
+
+                        {sectionBanner && (
+                          <div className={cn(
+                            "flex items-start gap-2 p-3 rounded-xl text-[11px] font-bold border",
+                            sectionBanner.kind === 'error'
+                              ? "bg-rose-500/10 border-rose-500/20 text-rose-400"
+                              : "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+                          )}>
+                            {sectionBanner.kind === 'error'
+                              ? <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                              : <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5" />}
+                            <span className="leading-snug">{sectionBanner.text}</span>
+                          </div>
+                        )}
+
                         <div className="space-y-1">
-                          <label className="text-[8px] font-black uppercase tracking-widest ml-2 text-text-secondary">Identifier (e.g. A, B, C)</label>
-                          <input autoFocus placeholder="e.g. A" className="input-obsidian text-sm" value={sectionName} onChange={e => setSectionName(e.target.value)} />
+                          <label className="text-[8px] font-black uppercase tracking-widest ml-2 text-text-secondary">
+                            Identifier(s) — comma or space separated
+                          </label>
+                          <input
+                            autoFocus
+                            placeholder="e.g. A, B, C, D"
+                            className="input-obsidian text-sm uppercase"
+                            value={sectionInput}
+                            onChange={e => setSectionInput(e.target.value)}
+                          />
+                          <p className="text-[9px] text-text-secondary opacity-60 ml-2">
+                            Tip: enter several at once. Names already in this class are skipped automatically.
+                          </p>
                         </div>
-                        <button type="submit" className="indigo-glow-button w-full py-3 text-[10px] font-black uppercase italic">Activate Segment</button>
+                        <button
+                          type="submit"
+                          disabled={sectionSubmitting}
+                          className={cn(
+                            "indigo-glow-button w-full py-3 text-[10px] font-black uppercase italic",
+                            sectionSubmitting && "opacity-60 cursor-wait",
+                          )}
+                        >
+                          {sectionSubmitting ? 'Activating…' : 'Activate Section(s)'}
+                        </button>
                       </form>
                     </motion.div>
                   )}
@@ -370,8 +546,8 @@ export default function AdminClasses() {
                     >
                       <Pencil className="w-4 h-4" />
                     </button>
-                    <button 
-                      onClick={() => handleDelete(sub.id, 'subject')}
+                    <button
+                      onClick={() => setSubjectDeleteId(sub.id)}
                       className="p-2.5 rounded-xl bg-rose-500/5 text-rose-500/20 hover:text-rose-500 hover:bg-rose-500/10 transition-all opacity-0 group-hover:opacity-100 shadow-lg"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -387,13 +563,37 @@ export default function AdminClasses() {
                 <form onSubmit={handleCreateSubject} className="space-y-6 relative z-10">
                   <div className="flex items-center justify-between">
                     <h4 className="text-[10px] font-black uppercase tracking-widest italic text-brand-indigo">Initialize Discipline</h4>
-                    <button type="button" onClick={() => setIsAddingSubject(false)}><X className="w-4 h-4" /></button>
+                    <button type="button" onClick={() => { setIsAddingSubject(false); setSubjectBanner(null); }}>
+                      <X className="w-4 h-4" />
+                    </button>
                   </div>
+
+                  {subjectBanner && (
+                    <div className={cn(
+                      "flex items-start gap-2 p-3 rounded-xl text-[11px] font-bold border",
+                      subjectBanner.kind === 'error'
+                        ? "bg-rose-500/10 border-rose-500/20 text-rose-400"
+                        : "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+                    )}>
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                      <span className="leading-snug">{subjectBanner.text}</span>
+                    </div>
+                  )}
+
                   <div className="space-y-1">
                     <label className="text-[8px] font-black uppercase tracking-[0.3em] ml-2 text-text-secondary">Full Nomenclature</label>
                     <input autoFocus placeholder="e.g. Quantum Mechanics" className="input-obsidian text-sm" value={subjectForm.name} onChange={e => setSubjectForm({...subjectForm, name: e.target.value})} required />
                   </div>
-                  <button type="submit" className="indigo-glow-button w-full py-4 text-[10px] font-black uppercase tracking-widest italic">Commit Framework</button>
+                  <button
+                    type="submit"
+                    disabled={subjectSubmitting}
+                    className={cn(
+                      "indigo-glow-button w-full py-4 text-[10px] font-black uppercase tracking-widest italic",
+                      subjectSubmitting && "opacity-60 cursor-wait",
+                    )}
+                  >
+                    {subjectSubmitting ? 'Saving…' : 'Commit Framework'}
+                  </button>
                 </form>
               </motion.div>
             )}
@@ -408,6 +608,81 @@ export default function AdminClasses() {
         </div>
 
       </div>
+
+      {/* ── Confirmation modals ───────────────────────────────────────── */}
+      <ConfirmModal
+        open={!!classDeleteTarget}
+        title={`Delete ${classDeleteTarget?.grade.name ?? 'class'}?`}
+        confirmLabel="Delete class"
+        tone="danger"
+        isLoading={deleting}
+        onConfirm={performClassDelete}
+        onCancel={() => !deleting && setClassDeleteTarget(null)}
+        description={
+          <span>
+            This permanently removes the class and every record linked to it.
+            This action cannot be undone.
+          </span>
+        }
+      >
+        {classDeleteTarget && (
+          <div className="rounded-xl border border-rose-500/20 bg-rose-500/[0.04] p-4 text-xs">
+            <p className="font-black uppercase tracking-widest text-rose-400 mb-3">
+              {classDeleteTarget.loadingCounts ? 'Checking dependent records…' : 'Cascading deletes'}
+            </p>
+            {!classDeleteTarget.loadingCounts && classDeleteTarget.dependents && (
+              <ul className="grid grid-cols-2 gap-x-3 gap-y-2 text-slate-600 dark:text-slate-300">
+                <li className="flex items-center justify-between">
+                  <span>Sections</span>
+                  <span className="font-black tabular-nums">{classDeleteTarget.dependents.sections}</span>
+                </li>
+                <li className="flex items-center justify-between">
+                  <span>Classrooms</span>
+                  <span className="font-black tabular-nums">{classDeleteTarget.dependents.classrooms}</span>
+                </li>
+                <li className="flex items-center justify-between">
+                  <span>Active students</span>
+                  <span className="font-black tabular-nums">{classDeleteTarget.dependents.students}</span>
+                </li>
+                <li className="flex items-center justify-between">
+                  <span>Teacher assignments</span>
+                  <span className="font-black tabular-nums">{classDeleteTarget.dependents.teacher_assignments}</span>
+                </li>
+              </ul>
+            )}
+            {!classDeleteTarget.loadingCounts
+              && classDeleteTarget.dependents
+              && (classDeleteTarget.dependents.students > 0
+                  || classDeleteTarget.dependents.teacher_assignments > 0) && (
+              <p className="mt-3 text-[11px] font-bold text-rose-400">
+                Warning: enrolled students and active teacher assignments will be detached.
+              </p>
+            )}
+          </div>
+        )}
+      </ConfirmModal>
+
+      <ConfirmModal
+        open={sectionDeleteId != null}
+        title="Delete this section?"
+        confirmLabel="Delete section"
+        tone="danger"
+        isLoading={deleting}
+        onConfirm={performSectionDelete}
+        onCancel={() => !deleting && setSectionDeleteId(null)}
+        description="Students currently assigned to this section will be detached. This cannot be undone."
+      />
+
+      <ConfirmModal
+        open={subjectDeleteId != null}
+        title="Delete this subject?"
+        confirmLabel="Delete subject"
+        tone="danger"
+        isLoading={deleting}
+        onConfirm={performSubjectDelete}
+        onCancel={() => !deleting && setSubjectDeleteId(null)}
+        description="Removes the subject from your school catalogue. Existing marks and attendance records that reference it may break."
+      />
 
       {/* Edit Subject Modal */}
       <AnimatePresence>

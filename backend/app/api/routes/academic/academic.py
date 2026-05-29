@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 
@@ -11,6 +12,23 @@ from app.schemas.academic import (
     SubjectCreate, SubjectUpdate, SubjectResponse
 )
 from app.services.academic import academic_service
+
+
+class SectionBulkCreate(BaseModel):
+    grade_id: int
+    names: List[str] = Field(..., min_length=1)
+
+
+class SectionBulkResponse(BaseModel):
+    created: List[SectionResponse]
+    skipped: List[str]
+
+
+class GradeDependents(BaseModel):
+    sections: int
+    classrooms: int
+    students: int
+    teacher_assignments: int
 
 router = APIRouter(prefix="/api/academic", tags=["Academic Organization"])
 
@@ -53,6 +71,19 @@ async def delete_class(
     if not success:
         raise HTTPException(status_code=404, detail="Class not found")
 
+
+@router.get("/classes/{class_id}/dependents", response_model=GradeDependents)
+async def get_class_dependents(
+    class_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin: UserContext = Depends(require_admin),
+):
+    """Counts of cascading deletes — powers the confirmation modal."""
+    data = await academic_service.get_grade_dependents(db, admin.institution_id, class_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Class not found")
+    return data
+
 # --- Section Endpoints ---
 
 @router.get("/sections", response_model=List[SectionResponse])
@@ -85,6 +116,30 @@ async def deploy_section(
     if not db_section:
          raise HTTPException(status_code=404, detail="Associated Class not found")
     return db_section
+
+
+@router.post(
+    "/sections/deploy-bulk",
+    response_model=SectionBulkResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def deploy_sections_bulk(
+    payload: SectionBulkCreate,
+    db: AsyncSession = Depends(get_db),
+    admin: UserContext = Depends(require_admin),
+):
+    """Create multiple sections (e.g. A, B, C, D) in one request.
+
+    Skips names that already exist for the class and returns them so
+    the admin sees a partial-success summary instead of an outright
+    error.
+    """
+    result = await academic_service.deploy_segments_bulk(
+        db, admin.institution_id, payload.grade_id, payload.names,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Associated Class not found")
+    return result
 
 @router.put("/sections/{section_id}", response_model=SectionResponse)
 async def update_section(

@@ -11,6 +11,7 @@ import { getErrorMessage } from '@/shared/lib/errorHandler';
 import StudentCard from '@/features/directory/components/StudentCard';
 import EnrollStudentModal from '@/features/directory/components/EnrollStudentModal';
 import EditStudentModal from '@/features/directory/components/EditStudentModal';
+import ConfirmModal from '@/shared/components/ui/ConfirmModal';
 import type { Student } from '@/shared/types';
 
 export default function StudentDirectory() {
@@ -50,6 +51,9 @@ export default function StudentDirectory() {
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteSuccess, setDeleteSuccess] = useState<string | null>(null);
+  /** Student queued for delete-confirmation. Null when no confirmation is open. */
+  const [pendingDeleteStudent, setPendingDeleteStudent] = useState<Student | null>(null);
 
   useEffect(() => {
     refreshDirectory();
@@ -117,16 +121,32 @@ export default function StudentDirectory() {
     ).length;
   }, [students, selectedSchoolClassId]);
 
-  const handleDelete = async (id: number, name: string) => {
-    if (!confirm(`Remove "${name}" from records? This cannot be undone.`)) return;
-    setDeletingId(id);
+  /**
+   * Open the confirmation modal. The actual API call runs in `confirmDelete`
+   * so admins can review student details before removing them. `StudentCard`
+   * passes both id and name; we look up the full record so the dialog can
+   * show DOB / parent contact alongside the name.
+   */
+  const handleDelete = (id: number, name: string) => {
+    const target = students.find(s => s.id === id) ?? { id, name } as Student;
+    setDeleteError(null);
+    setDeleteSuccess(null);
+    setPendingDeleteStudent(target);
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDeleteStudent) return;
+    setDeletingId(pendingDeleteStudent.id);
     setDeleteError(null);
     try {
-      await directoryApi.deleteStudent(id);
+      await directoryApi.deleteStudent(pendingDeleteStudent.id);
+      setDeleteSuccess(`Removed ${pendingDeleteStudent.name}.`);
+      setPendingDeleteStudent(null);
       refreshStudents();
     } catch (err) {
       const error = getErrorMessage(err);
       setDeleteError(error.message || 'Failed to remove student. Please try again.');
+      setPendingDeleteStudent(null);
     } finally {
       setDeletingId(null);
     }
@@ -143,6 +163,16 @@ export default function StudentDirectory() {
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span className="flex-1">{deleteError}</span>
           <button onClick={() => setDeleteError(null)} className="opacity-50 hover:opacity-100">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {deleteSuccess && (
+        <div className="flex items-center gap-3 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
+          <span className="w-4 h-4 shrink-0 rounded-full bg-emerald-500/30" />
+          <span className="flex-1">{deleteSuccess}</span>
+          <button onClick={() => setDeleteSuccess(null)} className="opacity-50 hover:opacity-100">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -370,6 +400,32 @@ export default function StudentDirectory() {
         onClose={() => setEditingStudent(null)}
         onUpdated={refreshStudents}
       />
+
+      <ConfirmModal
+        open={!!pendingDeleteStudent}
+        title="Remove this student?"
+        confirmLabel="Remove student"
+        tone="danger"
+        isLoading={deletingId === pendingDeleteStudent?.id}
+        onConfirm={confirmDelete}
+        onCancel={() => deletingId == null && setPendingDeleteStudent(null)}
+        description="This deactivates the student record. Linked attendance, marks, and parent-portal access for this student will be revoked."
+      >
+        {pendingDeleteStudent && (
+          <div className="rounded-xl border border-glass-border bg-slate-900/[0.03] dark:bg-white/[0.02] p-4 text-xs space-y-1.5">
+            <p className="font-black text-slate-900 dark:text-white text-sm">{pendingDeleteStudent.name}</p>
+            {pendingDeleteStudent.dob && (
+              <p className="text-slate-600 dark:text-slate-300"><span className="font-bold uppercase tracking-widest opacity-60">DOB</span> · {pendingDeleteStudent.dob}</p>
+            )}
+            {pendingDeleteStudent.parent_name && (
+              <p className="text-slate-600 dark:text-slate-300"><span className="font-bold uppercase tracking-widest opacity-60">Guardian</span> · {pendingDeleteStudent.parent_name}</p>
+            )}
+            {pendingDeleteStudent.parent_phone && (
+              <p className="text-slate-600 dark:text-slate-300 tabular-nums"><span className="font-bold uppercase tracking-widest opacity-60">Phone</span> · {pendingDeleteStudent.parent_phone}</p>
+            )}
+          </div>
+        )}
+      </ConfirmModal>
     </div>
   );
 }

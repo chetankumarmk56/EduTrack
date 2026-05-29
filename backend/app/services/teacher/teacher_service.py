@@ -165,10 +165,40 @@ class TeacherService:
             return None
 
         data = teacher_data.model_dump(exclude_unset=True)
-        teacher_fields = {'name', 'phone', 'is_active'}
+        teacher_fields = {'name', 'phone', 'is_active', 'email'}
         for key, value in data.items():
             if key in teacher_fields:
                 setattr(db_teacher, key, value)
+
+        # The teacher's email is also their login identifier — mirror the
+        # change to the linked User row so they can keep signing in. We
+        # reject collisions before mutating either record so the
+        # transaction stays consistent.
+        if 'email' in data and data['email'] and db_teacher.user_id:
+            new_email = data['email']
+            collide = await db.execute(
+                select(User.id).where(
+                    User.email == new_email,
+                    User.id != db_teacher.user_id,
+                    User.institution_id == institution_id,
+                )
+            )
+            if collide.scalar():
+                from fastapi import HTTPException, status as http_status
+                raise HTTPException(
+                    status_code=http_status.HTTP_409_CONFLICT,
+                    detail=f"Another user already uses {new_email}.",
+                )
+            user_result = await db.execute(select(User).where(User.id == db_teacher.user_id))
+            db_user = user_result.scalars().first()
+            if db_user:
+                db_user.email = new_email
+
+        if 'is_active' in data and db_teacher.user_id and data['is_active'] is not None:
+            user_result = await db.execute(select(User).where(User.id == db_teacher.user_id))
+            db_user = user_result.scalars().first()
+            if db_user:
+                db_user.is_active = bool(data['is_active'])
 
         await db.commit()
         return await TeacherService.get_teacher(db, institution_id, db_teacher.id)

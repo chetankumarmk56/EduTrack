@@ -868,3 +868,74 @@ button, a, [role="button"] {
 .teacher-theme .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #10b981;
 }
+
+/* ============================================================
+   LIGHT THEME — Admin polish for Events & Staff Attendance
+   The pages were authored against the dark surface palette and
+   their pills / borders / placeholder text drew with low alpha
+   on white. These overrides only fire under .teacher-light-theme
+   so they don't affect dark mode.
+   ============================================================ */
+
+/* Table-style cards become readable with a thin separator + slightly
+   higher card brightness instead of the translucent dark `bg-slate-900/60`. */
+.teacher-light-theme .bg-slate-900\/60,
+.teacher-light-theme .bg-slate-900\/40,
+.teacher-light-theme .bg-slate-900\/50 {
+  background-color: rgba(255, 255, 255, 0.94) !important;
+}
+.teacher-light-theme .bg-slate-800\/60,
+.teacher-light-theme .bg-slate-800\/80 {
+  background-color: rgba(248, 250, 252, 0.96) !important;
+}
+
+/* Borders the page uses to outline table rows — bump the alpha so the
+   row dividers are visible on white. */
+.teacher-light-theme .border-white\/5,
+.teacher-light-theme .border-white\/[0.05] {
+  border-color: rgba(15, 23, 42, 0.06) !important;
+}
+
+/* Faint placeholder pills (Inbox / "No teachers" copy etc.) become
+   pale grey ghosts on white — lift their opacity. */
+.teacher-light-theme .text-slate-500 {
+  color: #475569 !important;
+}
+.teacher-light-theme .text-text-secondary.opacity-50,
+.teacher-light-theme .text-text-secondary.opacity-60 {
+  opacity: 0.85 !important;
+}
+
+/* Tab strip background — the dark slate background is invisible on white. */
+.teacher-light-theme .bg-slate-900\/50.backdrop-blur-md {
+  background-color: rgba(241, 245, 249, 0.85) !important;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.05) inset;
+}
+
+/* Events admin: visibility chip on dark surface — give the negative state
+   (greyed `bg-white/5`) a real outline so it's distinguishable from the
+   active emerald state in light mode. */
+.teacher-light-theme .bg-white\/5 {
+  background-color: rgba(15, 23, 42, 0.04) !important;
+}
+
+/* Light-mode inputs (date pickers etc.) need a real white background. */
+.teacher-light-theme input[type='date'],
+.teacher-light-theme input[type='time'],
+.teacher-light-theme input[type='text'],
+.teacher-light-theme input[type='email'],
+.teacher-light-theme input[type='tel'],
+.teacher-light-theme input[type='number'],
+.teacher-light-theme input[type='password'],
+.teacher-light-theme select,
+.teacher-light-theme textarea {
+  color: #0f172a;
+}
+
+/* Make the Staff Attendance KPI tiles' value text dark on white;
+   the page uses `text-slate-200` for the title row which already
+   maps above, but the small "Total Staff" tile uses `text-slate-200`
+   which is fine, and accent-coloured tiles (emerald/rose/blue/amber)
+   keep their own colour. No extra rule needed — keeping comment as
+   anchor for future tweaks. */
+

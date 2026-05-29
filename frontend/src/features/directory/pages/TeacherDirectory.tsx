@@ -9,6 +9,21 @@ import { directoryApi, type TeacherWithPassword } from '@/features/directory/api
 import { useApp } from '@/shared/contexts/AppContext';
 import { cn } from '@/shared/lib/utils';
 import { getErrorMessage } from '@/shared/lib/errorHandler';
+import ConfirmModal from '@/shared/components/ui/ConfirmModal';
+
+/** Password policy mirrors `validate_password_strength` in the backend. */
+const PASSWORD_RULES: Array<{ label: string; test: (v: string) => boolean }> = [
+  { label: 'At least 10 characters', test: v => v.length >= 10 },
+  { label: 'One uppercase letter', test: v => /[A-Z]/.test(v) },
+  { label: 'One lowercase letter', test: v => /[a-z]/.test(v) },
+  { label: 'One digit (0-9)', test: v => /\d/.test(v) },
+  { label: 'One special character (!@#$…)', test: v => /[!@#$%^&*()_+\-=[\]{};:'",.<>?/]/.test(v) },
+];
+
+function validatePassword(v: string): { ok: boolean; failing: string[] } {
+  const failing = PASSWORD_RULES.filter(r => !r.test(v)).map(r => r.label);
+  return { ok: failing.length === 0, failing };
+}
 
 export default function TeacherDirectory() {
   const {
@@ -40,6 +55,29 @@ export default function TeacherDirectory() {
   const [assignError, setAssignError] = useState<string | null>(null);
   const [isSubmittingAssign, setIsSubmittingAssign] = useState(false);
 
+  // Delete confirmation
+  const [pendingDeleteTeacher, setPendingDeleteTeacher] = useState<TeacherWithPassword | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [pageError, setPageError] = useState<string | null>(null);
+  const [pageSuccess, setPageSuccess] = useState<string | null>(null);
+
+  // Lock body scroll while any of our larger modals are open so the
+  // page underneath can't be scrolled into blank space.
+  useEffect(() => {
+    const anyOpen = isAdding || !!editingTeacher || isAssigningId != null;
+    if (!anyOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [isAdding, editingTeacher, isAssigningId]);
+
+  // Auto-dismiss feedback banners
+  useEffect(() => {
+    if (!pageSuccess) return;
+    const t = setTimeout(() => setPageSuccess(null), 3500);
+    return () => clearTimeout(t);
+  }, [pageSuccess]);
+
   const isAssigning = useMemo(() =>
     teachers.find(t => t.id === isAssigningId),
     [teachers, isAssigningId]
@@ -58,6 +96,16 @@ export default function TeacherDirectory() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
+    // Client-side password policy mirrors the backend so admins see
+    // failures immediately instead of being told "Failed to add teacher"
+    // by a 422 with a generic reason.
+    const pw = validatePassword(form.password);
+    if (!pw.ok) {
+      setFormError(
+        'Password is too weak. Missing: ' + pw.failing.join(', ') + '.',
+      );
+      return;
+    }
     setIsSubmittingForm(true);
     try {
       await directoryApi.createTeacher(form);
@@ -92,12 +140,25 @@ export default function TeacherDirectory() {
     }
   };
 
-  const handleDelete = async (id: number, name: string) => {
-    if (!confirm(`Remove "${name}" from the directory? This cannot be undone.`)) return;
+  const handleDelete = (teacher: TeacherWithPassword) => {
+    setPageError(null);
+    setPendingDeleteTeacher(teacher);
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDeleteTeacher) return;
+    setDeleting(true);
     try {
-      await directoryApi.deleteTeacher(id);
+      await directoryApi.deleteTeacher(pendingDeleteTeacher.id);
+      setPageSuccess(`Removed ${pendingDeleteTeacher.name}.`);
+      setPendingDeleteTeacher(null);
       refreshTeachers();
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      setPageError(getErrorMessage(err).message || 'Unable to delete this teacher.');
+      setPendingDeleteTeacher(null);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const handleAddAssignment = async (e: React.FormEvent) => {
@@ -131,8 +192,29 @@ export default function TeacherDirectory() {
     [teachers]
   );
 
+  const pwCheck = validatePassword(form.password);
+
   return (
     <div className="w-full animate-fade-in flex flex-col gap-8 pb-20">
+
+      {pageError && (
+        <div className="flex items-center gap-3 p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span className="flex-1">{pageError}</span>
+          <button onClick={() => setPageError(null)} className="opacity-50 hover:opacity-100">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+      {pageSuccess && (
+        <div className="flex items-center gap-3 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
+          <CheckCircle className="w-4 h-4 shrink-0" />
+          <span className="flex-1">{pageSuccess}</span>
+          <button onClick={() => setPageSuccess(null)} className="opacity-50 hover:opacity-100">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Header */}
       <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-6">
@@ -253,7 +335,7 @@ export default function TeacherDirectory() {
                       <button onClick={() => { setEditingTeacher(t); setEditError(null); }} className="p-2 rounded-lg bg-white/5 border border-glass-border hover:bg-white/10 text-text-secondary hover:text-white transition-all">
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
-                      <button onClick={() => handleDelete(t.id, t.name)} className="p-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-500 hover:bg-rose-500/20 transition-all">
+                      <button onClick={() => handleDelete(t)} className="p-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-500 hover:bg-rose-500/20 transition-all">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -342,52 +424,93 @@ export default function TeacherDirectory() {
       {/* ── Add Teacher Modal ── */}
       <AnimatePresence>
         {isAdding && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsAdding(false)} className="absolute inset-0 bg-black/90 backdrop-blur-2xl" />
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full max-w-md obsidian-card border-brand-indigo/30 p-8 shadow-2xl">
-              <div className="flex items-center justify-between mb-8">
-                <div>
-                  <h2 className="text-2xl font-black tracking-tight uppercase">Add Teacher</h2>
-                  <p className="text-text-secondary text-xs mt-0.5">Create a new teacher account</p>
+          <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain">
+            <motion.button
+              type="button"
+              aria-label="Close"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsAdding(false)}
+              className="fixed inset-0 bg-slate-950/65 backdrop-blur-md cursor-default"
+            />
+            <div className="relative min-h-full flex items-start sm:items-center justify-center p-4 sm:p-6 pointer-events-none">
+              <motion.div
+                initial={{ scale: 0.94, opacity: 0, y: 12 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.94, opacity: 0, y: 12 }}
+                transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
+                className="relative w-full max-w-md obsidian-card border-brand-indigo/30 p-6 sm:p-8 shadow-2xl my-4 sm:my-6 pointer-events-auto"
+              >
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h2 className="text-2xl font-black tracking-tight uppercase">Add Teacher</h2>
+                    <p className="text-text-secondary text-xs mt-0.5">Create a new teacher account</p>
+                  </div>
+                  <button onClick={() => setIsAdding(false)} className="p-2 hover:bg-white/5 rounded-xl border border-glass-border transition-all">
+                    <X className="w-5 h-5 opacity-50" />
+                  </button>
                 </div>
-                <button onClick={() => setIsAdding(false)} className="p-2 hover:bg-white/5 rounded-xl border border-glass-border transition-all">
-                  <X className="w-5 h-5 opacity-50" />
-                </button>
-              </div>
 
-              {formError && (
-                <div className="mb-6 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0" /> {formError}
-                </div>
-              )}
-              {formSuccess && (
-                <div className="mb-6 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold flex items-center gap-2">
-                  <CheckCircle className="w-4 h-4 shrink-0" /> Teacher added successfully!
-                </div>
-              )}
+                {formError && (
+                  <div className="mb-5 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" /> {formError}
+                  </div>
+                )}
+                {formSuccess && (
+                  <div className="mb-5 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 shrink-0" /> Teacher added successfully!
+                  </div>
+                )}
 
-              <form onSubmit={handleCreate} className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Full Name</label>
-                  <input autoFocus placeholder="e.g. Anita Sharma" className="input-obsidian" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Email Address</label>
-                  <input type="email" placeholder="anita@school.edu" className="input-obsidian" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} required />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Phone Number</label>
-                  <input placeholder="+91 98765 43210" className="input-obsidian" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} required />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Password</label>
-                  <input type="password" placeholder="Set login password" className="input-obsidian" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} required />
-                </div>
-                <button type="submit" disabled={isSubmittingForm} className={cn("indigo-glow-button w-full h-12 text-sm font-black uppercase tracking-wider mt-2", isSubmittingForm && "opacity-50 cursor-wait")}>
-                  {isSubmittingForm ? <Loader className="w-4 h-4 animate-spin mx-auto" /> : 'Add Teacher'}
-                </button>
-              </form>
-            </motion.div>
+                <form onSubmit={handleCreate} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Full Name</label>
+                    <input autoFocus placeholder="e.g. Anita Sharma" className="input-obsidian" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Email Address</label>
+                    <input type="email" placeholder="anita@school.edu" className="input-obsidian" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} required />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Phone Number</label>
+                    <input placeholder="+91 98765 43210" className="input-obsidian" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} required />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Password</label>
+                    <input type="password" placeholder="Set login password" className="input-obsidian" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} required />
+                    <ul className="mt-2 grid grid-cols-1 gap-1">
+                      {PASSWORD_RULES.map(r => {
+                        const ok = form.password ? r.test(form.password) : false;
+                        return (
+                          <li key={r.label} className={cn(
+                            'flex items-center gap-1.5 text-[10px] font-bold transition-colors',
+                            ok ? 'text-emerald-400' : 'text-text-secondary opacity-60',
+                          )}>
+                            <span className={cn(
+                              'w-1.5 h-1.5 rounded-full',
+                              ok ? 'bg-emerald-400' : 'bg-text-secondary/30',
+                            )} />
+                            {r.label}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingForm || !pwCheck.ok}
+                    className={cn(
+                      "indigo-glow-button w-full h-12 text-sm font-black uppercase tracking-wider mt-2",
+                      (isSubmittingForm || !pwCheck.ok) && "opacity-50 cursor-not-allowed",
+                    )}
+                    title={!pwCheck.ok ? 'Password does not meet the policy yet' : undefined}
+                  >
+                    {isSubmittingForm ? <Loader className="w-4 h-4 animate-spin mx-auto" /> : 'Add Teacher'}
+                  </button>
+                </form>
+              </motion.div>
+            </div>
           </div>
         )}
       </AnimatePresence>
@@ -395,9 +518,18 @@ export default function TeacherDirectory() {
       {/* ── Manage Assignments Modal ── */}
       <AnimatePresence>
         {isAssigningId && isAssigning && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsAssigningId(null)} className="absolute inset-0 bg-black/90 backdrop-blur-2xl" />
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full max-w-2xl obsidian-card border-brand-indigo/30 p-8 shadow-2xl max-h-[85vh] overflow-y-auto">
+          <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain">
+            <motion.button
+              type="button"
+              aria-label="Close"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsAssigningId(null)}
+              className="fixed inset-0 bg-slate-950/65 backdrop-blur-md cursor-default"
+            />
+            <div className="relative min-h-full flex items-start sm:items-center justify-center p-4 sm:p-6 pointer-events-none">
+              <motion.div initial={{ scale: 0.94, opacity: 0, y: 12 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.94, opacity: 0, y: 12 }} className="relative w-full max-w-2xl obsidian-card border-brand-indigo/30 p-6 sm:p-8 shadow-2xl my-4 sm:my-6 pointer-events-auto">
               <div className="flex items-center justify-between mb-8">
                 <div>
                   <h2 className="text-2xl font-black tracking-tight uppercase">{isAssigning.name}</h2>
@@ -499,6 +631,7 @@ export default function TeacherDirectory() {
                 </div>
               </div>
             </motion.div>
+            </div>
           </div>
         )}
       </AnimatePresence>
@@ -506,46 +639,90 @@ export default function TeacherDirectory() {
       {/* ── Edit Teacher Modal ── */}
       <AnimatePresence>
         {editingTeacher && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setEditingTeacher(null)} className="absolute inset-0 bg-black/90 backdrop-blur-2xl" />
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full max-w-md obsidian-card border-brand-indigo/30 p-8 shadow-2xl">
-              <div className="flex items-center justify-between mb-8">
-                <div>
-                  <h2 className="text-2xl font-black tracking-tight uppercase">Edit Teacher</h2>
-                  <p className="text-text-secondary text-xs mt-0.5">Update profile information</p>
+          <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain">
+            <motion.button
+              type="button"
+              aria-label="Close"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setEditingTeacher(null)}
+              className="fixed inset-0 bg-slate-950/65 backdrop-blur-md cursor-default"
+            />
+            <div className="relative min-h-full flex items-start sm:items-center justify-center p-4 sm:p-6 pointer-events-none">
+              <motion.div
+                initial={{ scale: 0.94, opacity: 0, y: 12 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.94, opacity: 0, y: 12 }}
+                transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
+                className="relative w-full max-w-md obsidian-card border-brand-indigo/30 p-6 sm:p-8 shadow-2xl my-4 sm:my-6 pointer-events-auto"
+              >
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h2 className="text-2xl font-black tracking-tight uppercase">Edit Teacher</h2>
+                    <p className="text-text-secondary text-xs mt-0.5">Update profile information</p>
+                  </div>
+                  <button onClick={() => setEditingTeacher(null)} className="p-2 hover:bg-white/5 rounded-xl border border-glass-border transition-all">
+                    <X className="w-5 h-5 opacity-50" />
+                  </button>
                 </div>
-                <button onClick={() => setEditingTeacher(null)} className="p-2 hover:bg-white/5 rounded-xl border border-glass-border transition-all">
-                  <X className="w-5 h-5 opacity-50" />
-                </button>
-              </div>
 
-              {editError && (
-                <div className="mb-6 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0" /> {editError}
-                </div>
-              )}
+                {editError && (
+                  <div className="mb-5 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" /> {editError}
+                  </div>
+                )}
 
-              <form onSubmit={handleUpdate} className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Full Name</label>
-                  <input autoFocus className="input-obsidian" value={editingTeacher.name} onChange={e => setEditingTeacher({ ...editingTeacher, name: e.target.value })} required />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Email Address</label>
-                  <input type="email" className="input-obsidian" value={editingTeacher.email} onChange={e => setEditingTeacher({ ...editingTeacher, email: e.target.value })} required />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Phone Number</label>
-                  <input className="input-obsidian" value={editingTeacher.phone || ''} onChange={e => setEditingTeacher({ ...editingTeacher, phone: e.target.value })} />
-                </div>
-                <button type="submit" disabled={isSubmittingEdit} className={cn("indigo-glow-button w-full h-12 text-sm font-black uppercase tracking-wider mt-2", isSubmittingEdit && "opacity-50 cursor-wait")}>
-                  {isSubmittingEdit ? <Loader className="w-4 h-4 animate-spin mx-auto" /> : 'Save Changes'}
-                </button>
-              </form>
-            </motion.div>
+                <form onSubmit={handleUpdate} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Full Name</label>
+                    <input autoFocus className="input-obsidian" value={editingTeacher.name} onChange={e => setEditingTeacher({ ...editingTeacher, name: e.target.value })} required />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Email Address</label>
+                    <input type="email" className="input-obsidian" value={editingTeacher.email} onChange={e => setEditingTeacher({ ...editingTeacher, email: e.target.value })} required />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Phone Number</label>
+                    <input className="input-obsidian" value={editingTeacher.phone || ''} onChange={e => setEditingTeacher({ ...editingTeacher, phone: e.target.value })} />
+                  </div>
+                  <button type="submit" disabled={isSubmittingEdit} className={cn("indigo-glow-button w-full h-12 text-sm font-black uppercase tracking-wider mt-2", isSubmittingEdit && "opacity-50 cursor-wait")}>
+                    {isSubmittingEdit ? <Loader className="w-4 h-4 animate-spin mx-auto" /> : 'Save Changes'}
+                  </button>
+                </form>
+              </motion.div>
+            </div>
           </div>
         )}
       </AnimatePresence>
+
+      {/* ── Delete Teacher Confirmation ── */}
+      <ConfirmModal
+        open={!!pendingDeleteTeacher}
+        title={`Remove ${pendingDeleteTeacher?.name ?? 'this teacher'}?`}
+        confirmLabel="Remove teacher"
+        tone="danger"
+        isLoading={deleting}
+        onConfirm={confirmDelete}
+        onCancel={() => !deleting && setPendingDeleteTeacher(null)}
+        description="The account, its class assignments, and login access will be revoked. This action cannot be undone."
+      >
+        {pendingDeleteTeacher && (
+          <div className="rounded-xl border border-glass-border bg-slate-900/[0.03] dark:bg-white/[0.02] p-4 text-xs space-y-1.5">
+            <p className="font-black text-slate-900 dark:text-white text-sm">{pendingDeleteTeacher.name}</p>
+            {pendingDeleteTeacher.email && (
+              <p className="text-slate-600 dark:text-slate-300">
+                <span className="font-bold uppercase tracking-widest opacity-60">Email</span> · {pendingDeleteTeacher.email}
+              </p>
+            )}
+            {pendingDeleteTeacher.assignments?.length > 0 && (
+              <p className="text-slate-600 dark:text-slate-300">
+                <span className="font-bold uppercase tracking-widest opacity-60">Assignments</span> · {pendingDeleteTeacher.assignments.length} class{pendingDeleteTeacher.assignments.length !== 1 ? 'es' : ''}
+              </p>
+            )}
+          </div>
+        )}
+      </ConfirmModal>
     </div>
   );
 }
