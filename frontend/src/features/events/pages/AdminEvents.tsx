@@ -1,13 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Calendar, Plus, Clock, MapPin,
-  Trash2, Bell, Check, X, ArrowRight,
-  Zap, CalendarDays, Star, Pencil
+  Calendar, Plus, Clock, MapPin, FileText, Tag,
+  Trash2, Bell, Check, X, Users as UsersIcon,
+  Zap, CalendarDays, Star, Pencil, Loader2,
 } from 'lucide-react';
 import { eventsApi } from '@/features/events/api';
 import { useApp } from '@/shared/contexts/AppContext';
 import { cn } from '@/shared/lib/utils';
+import { getErrorMessage } from '@/shared/lib/errorHandler';
+import ConfirmModal from '@/shared/components/ui/ConfirmModal';
+import { useToast } from '@/shared/components/ui/Toast';
 import type { Event } from '@/shared/types';
 
 // Admin-only fields that aren't on the shared Event type (visibility lives
@@ -17,18 +20,41 @@ interface AdminEvent extends Event {
   visibility?: { parents: boolean; teachers: boolean; students: boolean };
 }
 
+const EVENT_TYPES = [
+  { value: 'meeting', label: 'Meeting' },
+  { value: 'exam', label: 'Exam' },
+  { value: 'sports', label: 'Sports' },
+  { value: 'workshop', label: 'Workshop' },
+  { value: 'ceremony', label: 'Ceremony' },
+  { value: 'other', label: 'Other' },
+];
+
 export default function AdminEvents() {
   const { events, refreshDirectory } = useApp();
+  const toast = useToast();
   const [isAdding, setIsAdding] = useState(false);
   const [editingEvent, setEditingEvent] = useState<AdminEvent | null>(null);
   const [filter, setFilter] = useState('all');
-  
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [pendingDeleteEvent, setPendingDeleteEvent] = useState<AdminEvent | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
   const [form, setForm] = useState({
     title: '', description: '', type: 'meeting',
     category: 'General', date: '', time: '',
     location: '', is_holiday: false,
     visibility: { parents: true, teachers: true, students: true }
   });
+
+  // Lock body scroll while either modal is open so the page underneath
+  // doesn't keep growing as the user scrolls inside the dialog.
+  useEffect(() => {
+    if (!isAdding && !pendingDeleteEvent) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [isAdding, pendingDeleteEvent]);
 
   useEffect(() => {
     refreshDirectory();
@@ -51,8 +77,10 @@ export default function AdminEvents() {
   };
 
   const closeModal = () => {
+    if (isSubmitting) return;
     setIsAdding(false);
     setEditingEvent(null);
+    setFormError(null);
     setForm({
       title: '', description: '', type: 'meeting',
       category: 'General', date: '', time: '',
@@ -61,25 +89,60 @@ export default function AdminEvents() {
     });
   };
 
+  const visibilityCount = useMemo(
+    () => Object.values(form.visibility).filter(Boolean).length,
+    [form.visibility],
+  );
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
+    // Cheap client-side checks so we don't fire a network request when
+    // the obvious holes are right there in the form.
+    if (!form.title.trim()) return setFormError('Event title is required.');
+    if (!form.date) return setFormError('Pick an event date.');
+    if (!form.time.trim()) return setFormError('Enter an event time.');
+    if (visibilityCount === 0) {
+      return setFormError('Make the event visible to at least one audience.');
+    }
+
+    setIsSubmitting(true);
     try {
+      const payload = { ...form, title: form.title.trim() };
+      const wasEditing = !!editingEvent;
       if (editingEvent) {
-        await eventsApi.updateEvent(editingEvent.id, form);
+        await eventsApi.updateEvent(editingEvent.id, payload);
       } else {
-        await eventsApi.createEvent(form);
+        await eventsApi.createEvent(payload);
       }
       closeModal();
       await refreshDirectory(true);
-    } catch (err) { console.error(err); }
+      toast.success(
+        wasEditing ? 'Event updated' : 'Event scheduled',
+        payload.title,
+      );
+    } catch (err) {
+      setFormError(getErrorMessage(err).message || 'Could not save the event. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Erase this event from the timeline?')) return;
+  const confirmDeleteEvent = async () => {
+    if (!pendingDeleteEvent) return;
+    const target = pendingDeleteEvent;
+    setDeleting(true);
     try {
-      await eventsApi.deleteEvent(id);
+      await eventsApi.deleteEvent(target.id);
+      setPendingDeleteEvent(null);
       await refreshDirectory(true);
-    } catch (err) { console.error(err); }
+      toast.success('Event removed', target.title);
+    } catch (err) {
+      toast.error('Could not remove event', getErrorMessage(err).message || 'Please try again.');
+      setPendingDeleteEvent(null);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const filteredEvents = filter === 'all'
@@ -180,7 +243,7 @@ export default function AdminEvents() {
                       <Pencil className="w-4 h-4" />
                     </button>
                     <button 
-                      onClick={() => handleDelete(e.id)}
+                      onClick={() => setPendingDeleteEvent(e as AdminEvent)}
                       className="p-3 rounded-xl bg-rose-500/5 text-rose-500 opacity-0 group-hover:opacity-100 transition-all border border-rose-500/10 hover:bg-rose-500/20"
                     >
                       <Trash2 className="w-5 h-5" />
@@ -242,107 +305,317 @@ export default function AdminEvents() {
         </div>
       )}
 
-      {/* Scheduler Modal */}
+      {/* ── Add / Edit Event Modal ─────────────────────────────────── */}
       <AnimatePresence>
         {isAdding && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsAdding(false)} className="absolute inset-0 bg-black/95 backdrop-blur-3xl" />
-            <motion.div initial={{ scale: 0.9, opacity: 0, y: 30 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 30 }} className="relative w-full max-w-2xl obsidian-card border-blue-500/30 p-10 overflow-hidden">
-              <div className="flex items-center justify-between mb-8">
-                <div className="space-y-1">
-                  <h2 className="text-4xl font-black tracking-tight italic">{editingEvent ? 'Edit Milestone' : 'Institutional Scheduler'}</h2>
-                  <p className="text-text-secondary font-medium">{editingEvent ? 'Refine institutional event specifications.' : 'Calibrate institutional milestones and role-based visibility.'}</p>
+          <div className="fixed inset-0 z-50">
+            <motion.button
+              type="button"
+              aria-label="Close"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={closeModal}
+              className="fixed inset-0 bg-slate-950/65 backdrop-blur-md cursor-default"
+            />
+            <div className="fixed inset-0 flex items-center justify-center p-4 sm:p-6 pointer-events-none">
+              <motion.div
+                initial={{ scale: 0.94, opacity: 0, y: 12 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.94, opacity: 0, y: 12 }}
+                transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+                className="relative w-full max-w-2xl max-h-[88vh] obsidian-card border-blue-500/30 shadow-2xl pointer-events-auto flex flex-col overflow-hidden"
+              >
+                {/* Sticky header */}
+                <div className="shrink-0 flex items-center justify-between gap-3 px-6 py-4 border-b border-glass-border">
+                  <div className="min-w-0">
+                    <h2 className="text-lg sm:text-xl font-black tracking-tight uppercase">
+                      {editingEvent ? 'Edit event' : 'Schedule event'}
+                    </h2>
+                    <p className="text-text-secondary text-xs mt-0.5">
+                      {editingEvent ? 'Update the details of this event.' : 'Add a new milestone and choose who sees it.'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={closeModal}
+                    className="p-2 hover:bg-white/5 rounded-xl border border-glass-border transition-all shrink-0"
+                    aria-label="Close"
+                  >
+                    <X className="w-5 h-5 opacity-60" />
+                  </button>
                 </div>
-                <button onClick={closeModal} className="p-3 rounded-xl hover:bg-white/5 transition-all"><X className="w-6 h-6" /></button>
-              </div>
 
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2 md:col-span-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-text-secondary ml-4">Event Headline</label>
-                    <input autoFocus placeholder="e.g. Annual Scholastic Symposium" className="input-obsidian" value={form.title} onChange={e => setForm({...form, title: e.target.value})} required />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-text-secondary ml-4">Primary Type</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Meeting, Sports, Workshop"
-                      className="input-obsidian"
-                      value={form.type}
-                      onChange={e => setForm({...form, type: e.target.value})}
-                      required
-                    />
-                  </div>
+                {/* Scrollable body */}
+                <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5">
+                  {formError && (
+                    <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold flex items-start gap-2">
+                      <X className="w-4 h-4 shrink-0 mt-0.5" />
+                      <span className="leading-snug">{formError}</span>
+                    </div>
+                  )}
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-text-secondary ml-4">Start Sequence (Date)</label>
-                    <input type="date" className="input-obsidian" value={form.date} onChange={e => setForm({...form, date: e.target.value})} required />
-                  </div>
+                  <form id="event-form" onSubmit={handleSubmit} className="space-y-5">
+                    {/* ── Section: Basics ── */}
+                    <SectionHeader icon={<FileText className="w-3.5 h-3.5" />} label="Basics" />
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <FormField label="Title" required className="sm:col-span-3">
+                        <input
+                          autoFocus
+                          placeholder="e.g. Annual sports day"
+                          className="input-obsidian h-11"
+                          value={form.title}
+                          onChange={e => setForm({...form, title: e.target.value})}
+                          required
+                        />
+                      </FormField>
+                      <FormField label="Type" className="sm:col-span-1">
+                        <div className="relative">
+                          <select
+                            className="input-obsidian h-11 appearance-none pr-8 capitalize"
+                            value={EVENT_TYPES.some(t => t.value === form.type) ? form.type : 'other'}
+                            onChange={e => setForm({...form, type: e.target.value})}
+                          >
+                            {EVENT_TYPES.map(t => (
+                              <option key={t.value} value={t.value}>{t.label}</option>
+                            ))}
+                          </select>
+                          <Tag className="w-3.5 h-3.5 text-text-secondary pointer-events-none absolute right-3 top-1/2 -translate-y-1/2" />
+                        </div>
+                      </FormField>
+                      <FormField label="Category" className="sm:col-span-2">
+                        <input
+                          placeholder="e.g. General, Academics"
+                          className="input-obsidian h-11"
+                          value={form.category}
+                          onChange={e => setForm({...form, category: e.target.value})}
+                        />
+                      </FormField>
+                      <FormField label="Description" className="sm:col-span-3" hint="Shown to parents and students in the announcement.">
+                        <textarea
+                          rows={2}
+                          placeholder="Optional — short note about what to expect."
+                          className="input-obsidian py-2.5 leading-snug resize-none"
+                          value={form.description}
+                          onChange={e => setForm({...form, description: e.target.value})}
+                        />
+                      </FormField>
+                    </div>
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-text-secondary ml-4">Temporal Alignment (Time)</label>
-                    <input type="text" placeholder="e.g. 02:45 PM" className="input-obsidian" value={form.time} onChange={e => setForm({...form, time: e.target.value})} required />
-                  </div>
+                    {/* ── Section: Schedule ── */}
+                    <SectionHeader icon={<Calendar className="w-3.5 h-3.5" />} label="Schedule" />
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <FormField label="Date" required>
+                        <input
+                          type="date"
+                          className="input-obsidian h-11"
+                          value={form.date}
+                          onChange={e => setForm({...form, date: e.target.value})}
+                          required
+                        />
+                      </FormField>
+                      <FormField label="Time" required>
+                        <input
+                          type="text"
+                          placeholder="e.g. 02:45 PM"
+                          className="input-obsidian h-11"
+                          value={form.time}
+                          onChange={e => setForm({...form, time: e.target.value})}
+                          required
+                        />
+                      </FormField>
+                      <FormField label="Location">
+                        <div className="relative">
+                          <input
+                            placeholder="Auditorium / Zoom"
+                            className="input-obsidian h-11 pl-9"
+                            value={form.location}
+                            onChange={e => setForm({...form, location: e.target.value})}
+                          />
+                          <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-secondary" />
+                        </div>
+                      </FormField>
+                    </div>
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-text-secondary ml-4">Spatial Coordinate (Location)</label>
-                    <input placeholder="Auditorium / Zoom / etc." className="input-obsidian" value={form.location} onChange={e => setForm({...form, location: e.target.value})} />
-                  </div>
-
-                  <div className="md:col-span-2 pt-2">
+                    {/* Holiday switch — inline, compact */}
                     <button
                       type="button"
                       onClick={() => setForm({...form, is_holiday: !form.is_holiday})}
                       className={cn(
-                        "w-full p-4 rounded-2xl border transition-all flex items-center justify-between",
+                        'w-full px-4 py-3 rounded-xl border transition-all flex items-center justify-between gap-3 text-left',
                         form.is_holiday
-                          ? "bg-amber-500/10 border-amber-500/30 text-amber-400"
-                          : "bg-white/5 border-glass-border text-text-secondary"
+                          ? 'bg-amber-500/10 border-amber-500/30 text-amber-500 dark:text-amber-400'
+                          : 'bg-white/[0.02] border-glass-border text-text-secondary hover:border-white/15',
                       )}
                     >
-                      <div className="flex items-center gap-3">
-                        <Star className={cn("w-4 h-4", form.is_holiday ? "fill-amber-400" : "")} />
-                        <div className="text-left">
-                          <div className="text-[10px] font-black uppercase tracking-widest">Mark as Non-Teaching Day</div>
-                          <div className="text-[10px] opacity-60 font-medium normal-case tracking-normal">No classes will be held on this date</div>
-                        </div>
-                      </div>
-                      {form.is_holiday ? <Check className="w-4 h-4" /> : <X className="w-4 h-4 opacity-30" />}
-                    </button>
-                  </div>
-
-                  <div className="md:col-span-2 space-y-4 pt-4">
-                    <h4 className="text-[10px] font-black uppercase tracking-widest text-text-secondary ml-2">Channel Visibility</h4>
-                    <div className="flex gap-4">
-                      {['parents', 'teachers', 'students'].map((role) => (
-                        <button
-                          key={role}
-                          type="button"
-                          onClick={() => setForm({...form, visibility: {...form.visibility, [role]: !form.visibility[role as keyof typeof form.visibility]}})}
+                      <span className="flex items-center gap-3">
+                        <Star className={cn('w-4 h-4', form.is_holiday && 'fill-current')} />
+                        <span>
+                          <span className="block text-[11px] font-black uppercase tracking-widest">
+                            Non-teaching day
+                          </span>
+                          <span className="block text-[11px] opacity-70 normal-case tracking-normal mt-0.5">
+                            Classes are paused on this date.
+                          </span>
+                        </span>
+                      </span>
+                      <span
+                        role="switch"
+                        aria-checked={form.is_holiday}
+                        className={cn(
+                          'relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors',
+                          form.is_holiday ? 'bg-amber-500' : 'bg-white/15',
+                        )}
+                      >
+                        <span
                           className={cn(
-                            "flex-1 p-4 rounded-2xl border transition-all flex items-center justify-between group/v",
-                            form.visibility[role as keyof typeof form.visibility] 
-                              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" 
-                              : "bg-white/5 border-glass-border text-text-secondary"
+                            'absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform',
+                            form.is_holiday && 'translate-x-4',
                           )}
-                        >
-                          <span className="text-[10px] font-black uppercase tracking-widest">{role}</span>
-                          {form.visibility[role as keyof typeof form.visibility] ? <Check className="w-4 h-4" /> : <X className="w-4 h-4 opacity-30 group-hover/v:opacity-100" />}
-                        </button>
-                      ))}
+                        />
+                      </span>
+                    </button>
+
+                    {/* ── Section: Audience ── */}
+                    <SectionHeader
+                      icon={<UsersIcon className="w-3.5 h-3.5" />}
+                      label="Audience"
+                      hint={`${visibilityCount} of 3 selected`}
+                    />
+                    <div className="grid grid-cols-3 gap-2">
+                      {(['parents', 'teachers', 'students'] as const).map(role => {
+                        const active = form.visibility[role];
+                        return (
+                          <button
+                            key={role}
+                            type="button"
+                            onClick={() =>
+                              setForm({
+                                ...form,
+                                visibility: { ...form.visibility, [role]: !active },
+                              })
+                            }
+                            className={cn(
+                              'px-3 py-2.5 rounded-xl border text-[11px] font-black uppercase tracking-widest transition-all flex items-center justify-between gap-2',
+                              active
+                                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500 dark:text-emerald-400'
+                                : 'bg-white/[0.02] border-glass-border text-text-secondary hover:border-white/15',
+                            )}
+                          >
+                            <span>{role}</span>
+                            {active ? <Check className="w-3.5 h-3.5" /> : <span className="w-3.5 h-3.5 rounded border border-current opacity-40" />}
+                          </button>
+                        );
+                      })}
                     </div>
-                  </div>
+                  </form>
                 </div>
 
-                <button type="submit" className="indigo-glow-button w-full py-5 text-sm tracking-widest uppercase mt-4">
-                  {editingEvent ? 'Synchronize Updates' : 'Commence Synchronization'} <ArrowRight className="w-4 h-4 ml-2" />
-                </button>
-              </form>
-            </motion.div>
+                {/* Sticky footer */}
+                <div className="shrink-0 flex items-center justify-between gap-2 px-6 py-3 border-t border-glass-border bg-[var(--bg-card)]/60">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-text-secondary hidden sm:inline">
+                    {visibilityCount === 0 ? 'Pick at least one audience' : `Notifies ${visibilityCount} audience${visibilityCount > 1 ? 's' : ''}`}
+                  </span>
+                  <div className="flex items-center gap-2 ml-auto">
+                    <button
+                      type="button"
+                      onClick={closeModal}
+                      disabled={isSubmitting}
+                      className="px-4 h-10 rounded-xl text-xs font-black uppercase tracking-widest text-text-secondary hover:text-foreground border border-glass-border transition-colors disabled:opacity-40"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      form="event-form"
+                      disabled={isSubmitting}
+                      className={cn(
+                        'inline-flex items-center gap-2 h-10 px-5 rounded-xl text-xs font-black uppercase tracking-widest bg-primary text-white shadow-lg shadow-primary/20 hover:opacity-95 transition-all',
+                        isSubmitting && 'opacity-60 cursor-wait',
+                      )}
+                    >
+                      {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                      {editingEvent ? 'Save changes' : 'Schedule event'}
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
           </div>
         )}
       </AnimatePresence>
+
+      {/* ── Delete confirmation ─────────────────────────────────────── */}
+      <ConfirmModal
+        open={!!pendingDeleteEvent}
+        title="Remove this event?"
+        confirmLabel="Remove event"
+        tone="danger"
+        isLoading={deleting}
+        onConfirm={confirmDeleteEvent}
+        onCancel={() => !deleting && setPendingDeleteEvent(null)}
+        description="Parents, teachers, and students who could see this event will lose access to it. This cannot be undone."
+      >
+        {pendingDeleteEvent && (
+          <div className="rounded-xl border border-glass-border bg-slate-900/[0.03] dark:bg-white/[0.02] p-3.5 text-xs space-y-1.5">
+            <p className="font-black text-slate-900 dark:text-white text-sm">{pendingDeleteEvent.title}</p>
+            <p className="text-slate-600 dark:text-slate-300">
+              <span className="font-bold uppercase tracking-widest opacity-60">When</span> ·{' '}
+              {new Date(pendingDeleteEvent.date).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
+              {' · '}{pendingDeleteEvent.time}
+            </p>
+            {pendingDeleteEvent.location && (
+              <p className="text-slate-600 dark:text-slate-300">
+                <span className="font-bold uppercase tracking-widest opacity-60">Where</span> · {pendingDeleteEvent.location}
+              </p>
+            )}
+          </div>
+        )}
+      </ConfirmModal>
+    </div>
+  );
+}
+
+/* ── Local form primitives ──────────────────────────────────────────── */
+
+function SectionHeader({
+  icon, label, hint,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  hint?: string;
+}) {
+  return (
+    <div className="flex items-center justify-between pt-1">
+      <div className="flex items-center gap-2 text-text-secondary">
+        <span className="text-brand-indigo">{icon}</span>
+        <span className="text-[10px] font-black uppercase tracking-[0.25em]">{label}</span>
+      </div>
+      {hint && (
+        <span className="text-[10px] font-black uppercase tracking-widest text-text-secondary opacity-70">{hint}</span>
+      )}
+    </div>
+  );
+}
+
+function FormField({
+  label, required, children, className, hint,
+}: {
+  label: string;
+  required?: boolean;
+  children: React.ReactNode;
+  className?: string;
+  hint?: string;
+}) {
+  return (
+    <div className={cn('space-y-1.5', className)}>
+      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1 flex justify-between items-center">
+        <span>
+          {label}
+          {required && <span className="text-rose-400"> *</span>}
+        </span>
+      </label>
+      {children}
+      {hint && <p className="text-[10px] text-text-secondary opacity-60 ml-1">{hint}</p>}
     </div>
   );
 }

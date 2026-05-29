@@ -54,6 +54,8 @@ export default function TeacherDirectory() {
   const [assignmentForm, setAssignmentForm] = useState({ school_class_id: 0, subject_id: 0 });
   const [assignError, setAssignError] = useState<string | null>(null);
   const [isSubmittingAssign, setIsSubmittingAssign] = useState(false);
+  // Local-only search inside the Manage Assignments modal.
+  const [assignmentSearch, setAssignmentSearch] = useState('');
 
   // Delete confirmation
   const [pendingDeleteTeacher, setPendingDeleteTeacher] = useState<TeacherWithPassword | null>(null);
@@ -346,7 +348,7 @@ export default function TeacherDirectory() {
                         <BookOpen className="w-3 h-3" /> Classes Assigned
                       </h5>
                       <button
-                        onClick={() => { setIsAssigningId(t.id); setAssignError(null); setAssignmentForm({ school_class_id: 0, subject_id: 0 }); }}
+                        onClick={() => { setIsAssigningId(t.id); setAssignError(null); setAssignmentForm({ school_class_id: 0, subject_id: 0 }); setAssignmentSearch(''); }}
                         className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg bg-brand-indigo/10 border border-brand-indigo/30 text-brand-indigo hover:bg-brand-indigo hover:text-white hover:border-brand-indigo transition-all cursor-pointer"
                       >
                         Manage →
@@ -526,132 +528,238 @@ export default function TeacherDirectory() {
                 transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
                 className="relative w-full max-w-2xl max-h-[88vh] obsidian-card border-brand-indigo/30 shadow-2xl pointer-events-auto flex flex-col overflow-hidden"
               >
-                {/* Sticky header */}
-                <div className="shrink-0 flex items-start justify-between gap-3 px-6 sm:px-7 py-5 border-b border-glass-border bg-[var(--bg-card)]/60">
-                  <div className="min-w-0">
-                    <h2 className="text-xl sm:text-2xl font-black tracking-tight uppercase truncate">{isAssigning.name}</h2>
-                    <p className="text-brand-indigo text-[11px] font-bold tracking-widest uppercase mt-0.5">Manage class assignments</p>
-                  </div>
-                  <button
-                    onClick={() => setIsAssigningId(null)}
-                    className="p-2 hover:bg-white/5 rounded-xl border border-glass-border transition-all shrink-0"
-                    aria-label="Close"
-                  >
-                    <X className="w-5 h-5 opacity-60" />
-                  </button>
-                </div>
+                {(() => {
+                  // Compute display-time values once per render.
+                  const assignments = isAssigning.assignments ?? [];
+                  const totalAssignments = assignments.length;
 
-                {/* Sticky add-assignment form (compact) */}
-                <div className="shrink-0 px-6 sm:px-7 py-4 border-b border-glass-border bg-brand-indigo/[0.025]">
-                  {assignError && (
-                    <div className="mb-3 p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold flex items-start gap-2">
-                      <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" /> {assignError}
-                    </div>
-                  )}
-                  <form
-                    onSubmit={handleAddAssignment}
-                    className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2.5 items-end"
-                  >
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-0.5 flex items-center gap-1.5">
-                        <School className="w-3 h-3" /> Class & section
-                      </label>
-                      <div className="relative">
-                        <select
-                          className="input-obsidian h-10 text-xs font-semibold appearance-none pr-8"
-                          value={assignmentForm.school_class_id || ''}
-                          onChange={e => setAssignmentForm({ ...assignmentForm, school_class_id: Number(e.target.value) })}
-                          required
-                        >
-                          <option value="">Select…</option>
-                          {schoolClasses.map(sc => (
-                            <option key={sc.id} value={sc.id}>{sc.display_name}</option>
-                          ))}
-                        </select>
-                        <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-secondary pointer-events-none" />
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-0.5 flex items-center gap-1.5">
-                        <BookOpen className="w-3 h-3" /> Subject
-                      </label>
-                      <div className="relative">
-                        <select
-                          className="input-obsidian h-10 text-xs font-semibold appearance-none pr-8"
-                          value={assignmentForm.subject_id || ''}
-                          onChange={e => setAssignmentForm({ ...assignmentForm, subject_id: Number(e.target.value) })}
-                          required
-                        >
-                          <option value="">Select…</option>
-                          {subjects.map(s => (
-                            <option key={s.id} value={s.id}>{s.name}</option>
-                          ))}
-                        </select>
-                        <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-secondary pointer-events-none" />
-                      </div>
-                    </div>
-                    <button
-                      type="submit"
-                      disabled={isSubmittingAssign}
-                      className={cn("indigo-glow-button h-10 px-4 text-[11px] font-black uppercase tracking-wider", isSubmittingAssign && "opacity-50 cursor-wait")}
-                    >
-                      {isSubmittingAssign ? <Loader className="w-3.5 h-3.5 animate-spin mx-auto" /> : 'Assign'}
-                    </button>
-                  </form>
-                </div>
+                  // Filter on free text (matches class or subject).
+                  const q = assignmentSearch.trim().toLowerCase();
+                  const filtered = q
+                    ? assignments.filter(a =>
+                        (a.school_class.display_name || '').toLowerCase().includes(q) ||
+                        (a.subject_ref.name || '').toLowerCase().includes(q),
+                      )
+                    : assignments;
 
-                {/* Scrollable assignments list */}
-                <div className="flex-1 min-h-0 overflow-y-auto px-6 sm:px-7 py-4 space-y-2">
-                  <div className="flex items-center justify-between sticky top-0 -mx-6 sm:-mx-7 px-6 sm:px-7 py-2 bg-[var(--bg-card)]/85 backdrop-blur-sm">
-                    <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary">
-                      Current assignments
-                    </h4>
-                    <span className="text-[10px] font-black tabular-nums text-text-secondary">
-                      {isAssigning.assignments?.length ?? 0}
-                    </span>
-                  </div>
+                  // Group by class so 9 entries become 3 class rows with 3
+                  // subject chips each — far easier to scan than a flat list.
+                  const byClass = new Map<string, typeof assignments>();
+                  for (const a of filtered) {
+                    const key = a.school_class.display_name || '—';
+                    if (!byClass.has(key)) byClass.set(key, []);
+                    byClass.get(key)!.push(a);
+                  }
+                  const groupedClasses = Array.from(byClass.entries())
+                    .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }));
 
-                  {(!isAssigning.assignments || isAssigning.assignments.length === 0) ? (
-                    <div className="py-10 text-center border border-dashed border-glass-border rounded-xl opacity-50">
-                      <p className="text-xs font-bold uppercase tracking-widest">No assignments yet</p>
-                      <p className="text-[11px] text-text-secondary mt-1">Use the form above to assign a class.</p>
-                    </div>
-                  ) : (
-                    <ul className="space-y-1.5">
-                      {isAssigning.assignments.map((a) => (
-                        <li
-                          key={a.id}
-                          className="group/item grid grid-cols-[auto_1fr_auto] items-center gap-3 px-3 py-2 rounded-lg bg-white/[0.02] border border-glass-border hover:border-brand-indigo/30 transition-colors"
-                        >
-                          <span className="inline-flex items-center justify-center w-9 h-7 rounded-md bg-brand-indigo/10 text-brand-indigo text-[11px] font-black tabular-nums">
-                            {a.school_class.display_name}
-                          </span>
-                          <span className="text-sm font-bold text-foreground truncate">
-                            {a.subject_ref.name}
-                          </span>
+                  // Distinct subjects + classes for the header chips.
+                  const distinctSubjects = new Set(assignments.map(a => a.subject_ref.name)).size;
+                  const distinctClasses = new Set(assignments.map(a => a.school_class.display_name)).size;
+                  const initials = isAssigning.name
+                    .split(/\s+/)
+                    .map(s => s[0])
+                    .filter(Boolean)
+                    .slice(0, 2)
+                    .join('')
+                    .toUpperCase();
+
+                  return (
+                    <>
+                      {/* Sticky header with avatar + summary chips */}
+                      <div className="shrink-0 px-6 sm:px-7 py-4 border-b border-glass-border bg-[var(--bg-card)]/60">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-11 h-11 rounded-xl bg-brand-indigo/15 border border-brand-indigo/30 grid place-items-center text-brand-indigo font-black text-sm shrink-0">
+                              {initials || 'T'}
+                            </div>
+                            <div className="min-w-0">
+                              <h2 className="text-lg sm:text-xl font-black tracking-tight uppercase truncate">{isAssigning.name}</h2>
+                              <p className="text-text-secondary text-[11px] mt-0.5">
+                                Manage class assignments
+                              </p>
+                            </div>
+                          </div>
                           <button
-                            onClick={() => handleDeleteAssignment(a.id)}
-                            className="p-1.5 text-rose-500/40 hover:text-rose-500 hover:bg-rose-500/10 rounded-md transition-all"
-                            title="Remove assignment"
+                            onClick={() => setIsAssigningId(null)}
+                            className="p-2 hover:bg-white/5 rounded-xl border border-glass-border transition-all shrink-0"
+                            aria-label="Close"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <X className="w-5 h-5 opacity-60" />
                           </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                          <StatChip label="Classes" value={distinctClasses} />
+                          <StatChip label="Subjects" value={distinctSubjects} />
+                          <StatChip label="Total" value={totalAssignments} accent />
+                        </div>
+                      </div>
 
-                {/* Sticky footer with close — guarantees the control stays visible */}
-                <div className="shrink-0 flex items-center justify-end gap-2 px-6 sm:px-7 py-3 border-t border-glass-border bg-[var(--bg-card)]/60">
-                  <button
-                    type="button"
-                    onClick={() => setIsAssigningId(null)}
-                    className="px-4 h-10 rounded-xl text-xs font-black uppercase tracking-widest text-text-secondary hover:text-foreground border border-glass-border transition-colors"
-                  >
-                    Close
-                  </button>
-                </div>
+                      {/* Sticky add-assignment form */}
+                      <div className="shrink-0 px-6 sm:px-7 py-4 border-b border-glass-border bg-brand-indigo/[0.025]">
+                        {assignError && (
+                          <div className="mb-3 p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold flex items-start gap-2">
+                            <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" /> {assignError}
+                          </div>
+                        )}
+                        <form
+                          onSubmit={handleAddAssignment}
+                          className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2.5 items-end"
+                        >
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-0.5 flex items-center gap-1.5">
+                              <School className="w-3 h-3" /> Class & section
+                            </label>
+                            <div className="relative">
+                              <select
+                                className="input-obsidian h-10 text-xs font-semibold appearance-none pr-8"
+                                value={assignmentForm.school_class_id || ''}
+                                onChange={e => setAssignmentForm({ ...assignmentForm, school_class_id: Number(e.target.value) })}
+                                required
+                              >
+                                <option value="">Select…</option>
+                                {schoolClasses.map(sc => (
+                                  <option key={sc.id} value={sc.id}>{sc.display_name}</option>
+                                ))}
+                              </select>
+                              <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-secondary pointer-events-none" />
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-0.5 flex items-center gap-1.5">
+                              <BookOpen className="w-3 h-3" /> Subject
+                            </label>
+                            <div className="relative">
+                              <select
+                                className="input-obsidian h-10 text-xs font-semibold appearance-none pr-8"
+                                value={assignmentForm.subject_id || ''}
+                                onChange={e => setAssignmentForm({ ...assignmentForm, subject_id: Number(e.target.value) })}
+                                required
+                              >
+                                <option value="">Select…</option>
+                                {subjects.map(s => (
+                                  <option key={s.id} value={s.id}>{s.name}</option>
+                                ))}
+                              </select>
+                              <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-secondary pointer-events-none" />
+                            </div>
+                          </div>
+                          <button
+                            type="submit"
+                            disabled={isSubmittingAssign}
+                            className={cn("indigo-glow-button h-10 px-4 text-[11px] font-black uppercase tracking-wider", isSubmittingAssign && "opacity-50 cursor-wait")}
+                          >
+                            {isSubmittingAssign ? <Loader className="w-3.5 h-3.5 animate-spin mx-auto" /> : 'Assign'}
+                          </button>
+                        </form>
+                      </div>
+
+                      {/* Search + grouped assignment list */}
+                      <div className="flex-1 min-h-0 overflow-y-auto px-6 sm:px-7 py-4">
+                        {totalAssignments > 0 && (
+                          <div className="relative mb-3">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-secondary" />
+                            <input
+                              type="search"
+                              placeholder="Search class or subject…"
+                              className="input-obsidian h-9 pl-9 pr-9 text-xs"
+                              value={assignmentSearch}
+                              onChange={e => setAssignmentSearch(e.target.value)}
+                            />
+                            {assignmentSearch && (
+                              <button
+                                type="button"
+                                onClick={() => setAssignmentSearch('')}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-text-secondary hover:text-foreground"
+                                aria-label="Clear search"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                        )}
+
+                        {totalAssignments === 0 ? (
+                          <div className="py-10 text-center border border-dashed border-glass-border rounded-xl">
+                            <div className="w-12 h-12 mx-auto rounded-xl bg-brand-indigo/10 border border-brand-indigo/20 grid place-items-center text-brand-indigo mb-3">
+                              <BookOpen className="w-5 h-5" />
+                            </div>
+                            <p className="text-sm font-black text-foreground">No assignments yet</p>
+                            <p className="text-[11px] text-text-secondary mt-1 max-w-xs mx-auto leading-relaxed">
+                              Pick a class and a subject above to give {isAssigning.name.split(' ')[0]} their first teaching slot.
+                            </p>
+                          </div>
+                        ) : groupedClasses.length === 0 ? (
+                          <div className="py-10 text-center border border-dashed border-glass-border rounded-xl opacity-60">
+                            <Search className="w-5 h-5 mx-auto text-text-secondary mb-2" />
+                            <p className="text-xs font-bold uppercase tracking-widest">No matches</p>
+                            <p className="text-[11px] text-text-secondary mt-1">
+                              Nothing matches “{assignmentSearch}”. Try a different keyword.
+                            </p>
+                          </div>
+                        ) : (
+                          <ul className="space-y-2">
+                            {groupedClasses.map(([className, items]) => (
+                              <li
+                                key={className}
+                                className="rounded-xl bg-white/[0.02] border border-glass-border overflow-hidden"
+                              >
+                                <div className="flex items-center justify-between px-3 py-2 bg-brand-indigo/[0.05] border-b border-glass-border">
+                                  <span className="inline-flex items-center gap-2">
+                                    <span className="inline-flex items-center justify-center min-w-[44px] h-6 px-2 rounded-md bg-brand-indigo/15 border border-brand-indigo/25 text-brand-indigo text-[11px] font-black tabular-nums">
+                                      {className}
+                                    </span>
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-text-secondary">
+                                      {items.length} subject{items.length === 1 ? '' : 's'}
+                                    </span>
+                                  </span>
+                                </div>
+                                <ul className="divide-y divide-glass-border">
+                                  {items.map(a => (
+                                    <li
+                                      key={a.id}
+                                      className="group/item flex items-center justify-between gap-3 px-3 py-2 hover:bg-brand-indigo/[0.04] transition-colors"
+                                    >
+                                      <span className="text-sm font-bold text-foreground truncate inline-flex items-center gap-2">
+                                        <BookOpen className="w-3.5 h-3.5 text-text-secondary opacity-70 shrink-0" />
+                                        {a.subject_ref.name}
+                                      </span>
+                                      <button
+                                        onClick={() => handleDeleteAssignment(a.id)}
+                                        className="p-1.5 text-rose-500/40 hover:text-rose-500 hover:bg-rose-500/10 rounded-md transition-all opacity-60 group-hover/item:opacity-100"
+                                        title="Remove assignment"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+
+                      {/* Sticky footer */}
+                      <div className="shrink-0 flex items-center justify-between gap-2 px-6 sm:px-7 py-3 border-t border-glass-border bg-[var(--bg-card)]/60">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-text-secondary hidden sm:block">
+                          {totalAssignments === 0
+                            ? 'No assignments yet'
+                            : assignmentSearch && filtered.length !== totalAssignments
+                              ? `${filtered.length} of ${totalAssignments} shown`
+                              : `${totalAssignments} assignment${totalAssignments === 1 ? '' : 's'}`}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setIsAssigningId(null)}
+                          className="px-4 h-10 rounded-xl text-xs font-black uppercase tracking-widest text-text-secondary hover:text-foreground border border-glass-border transition-colors ml-auto"
+                        >
+                          Close
+                        </button>
+                      </div>
+                    </>
+                  );
+                })()}
               </motion.div>
             </div>
           </div>
@@ -767,5 +875,22 @@ export default function TeacherDirectory() {
         )}
       </ConfirmModal>
     </div>
+  );
+}
+
+/** Tiny outlined stat chip used in the Manage Assignments header. */
+function StatChip({ label, value, accent }: { label: string; value: number; accent?: boolean }) {
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1.5 px-2 py-1 rounded-md border text-[10px] font-black uppercase tracking-widest',
+        accent
+          ? 'bg-brand-indigo/12 border-brand-indigo/30 text-brand-indigo'
+          : 'bg-white/[0.03] border-glass-border text-text-secondary',
+      )}
+    >
+      <span className="tabular-nums">{value}</span>
+      <span className="opacity-80">{label}</span>
+    </span>
   );
 }
