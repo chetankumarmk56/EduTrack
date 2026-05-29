@@ -215,16 +215,16 @@ export default function AdminEvents() {
                     </div>
                     <div>
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-text-secondary opacity-50">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-text-secondary">
                           {e.category || 'General'}
                         </span>
                         {e.is_holiday && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[9px] font-black uppercase tracking-widest">
-                            <Star className="w-2.5 h-2.5 fill-amber-400" /> Non-Teaching Day
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-[9px] font-bold uppercase tracking-widest">
+                            <Star className="w-2.5 h-2.5 fill-current" /> Non-Teaching Day
                           </span>
                         )}
                       </div>
-                      <h3 className="text-xl font-black tracking-tight leading-tight">{e.title}</h3>
+                      <h3 className="text-xl font-black tracking-tight leading-tight text-foreground">{e.title}</h3>
                     </div>
                   </div>
                   <div className="flex gap-2">
@@ -243,25 +243,28 @@ export default function AdminEvents() {
                   </div>
                 </div>
 
-                <p className="text-text-secondary text-sm font-medium line-clamp-2 leading-relaxed">
-                  {e.description || 'No descriptive details provided for this event.'}
+                <p className={cn(
+                  'text-sm leading-relaxed line-clamp-2',
+                  e.description ? 'text-text-secondary font-medium' : 'text-text-secondary/70 italic',
+                )}>
+                  {e.description || 'No description provided.'}
                 </p>
 
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="flex items-center gap-3 text-white/50">
-                    <Calendar className="w-4 h-4 text-blue-400" />
-                    <span className="text-xs font-bold">{new Date(e.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                  <div className="flex items-center gap-2.5 text-foreground/80">
+                    <Calendar className="w-4 h-4 text-blue-500 dark:text-blue-400 shrink-0" />
+                    <span className="text-xs font-semibold">{new Date(e.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                   </div>
-                  <div className="flex items-center gap-3 text-white/50">
-                    <Clock className="w-4 h-4 text-blue-400" />
-                    <span className="text-xs font-bold">{e.time}</span>
+                  <div className="flex items-center gap-2.5 text-foreground/80">
+                    <Clock className="w-4 h-4 text-blue-500 dark:text-blue-400 shrink-0" />
+                    <span className="text-xs font-semibold">{e.time}</span>
                   </div>
                 </div>
 
                 {e.location && (
-                  <div className="flex items-center gap-3 text-white/50">
-                    <MapPin className="w-4 h-4 text-blue-400" />
-                    <span className="text-xs font-bold">{e.location}</span>
+                  <div className="flex items-center gap-2.5 text-foreground/80">
+                    <MapPin className="w-4 h-4 text-blue-500 dark:text-blue-400 shrink-0" />
+                    <span className="text-xs font-semibold">{e.location}</span>
                   </div>
                 )}
               </div>
@@ -270,19 +273,21 @@ export default function AdminEvents() {
               <div className="mt-auto px-8 py-4 bg-white/[0.02] border-t border-glass-border flex items-center gap-4">
                 <div className="flex -space-x-2">
                   {['parents', 'teachers', 'students'].map(role => (
-                    <div 
+                    <div
                       key={role}
                       title={role}
                       className={cn(
-                        "w-7 h-7 rounded-full border-2 border-obsidian flex items-center justify-center text-[8px] font-black uppercase",
-                        e.visibility?.[role as 'parents' | 'teachers' | 'students'] ? "bg-emerald-500 text-white" : "bg-white/5 text-text-secondary"
+                        'w-7 h-7 rounded-full border-2 flex items-center justify-center text-[9px] font-bold uppercase',
+                        e.visibility?.[role as 'parents' | 'teachers' | 'students']
+                          ? 'bg-emerald-500 text-white border-white dark:border-slate-900'
+                          : 'bg-slate-200 dark:bg-white/10 text-text-secondary border-white dark:border-slate-900',
                       )}
                     >
                       {role[0]}
                     </div>
                   ))}
                 </div>
-                <span className="text-[10px] font-black uppercase tracking-widest text-text-secondary opacity-50">Visibility Rights</span>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-text-secondary">Visibility rights</span>
               </div>
             </motion.div>
           ))}

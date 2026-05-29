@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Trash2, Hash,
-  PlusCircle, X, Pencil,
+  PlusCircle, X, Pencil, Loader2,
   BookOpen, GraduationCap, ChevronRight,
   Layers, School, Library, AlertCircle, CheckCircle2,
 } from 'lucide-react';
@@ -11,6 +11,7 @@ import { useApp } from '@/shared/contexts/AppContext';
 import { cn } from '@/shared/lib/utils';
 import { getErrorMessage } from '@/shared/lib/errorHandler';
 import ConfirmModal from '@/shared/components/ui/ConfirmModal';
+import ModalShell, { ModalHeader, ModalBody, ModalFooter } from '@/shared/components/ui/ModalShell';
 import { useToast } from '@/shared/components/ui/Toast';
 import type { Grade, Subject } from '@/shared/types';
 
@@ -44,6 +45,8 @@ export default function AdminClasses() {
   const [isAddingSubject, setIsAddingSubject] = useState(false);
 
   const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
+  const [editingSubjectError, setEditingSubjectError] = useState<string | null>(null);
+  const [editingSubjectSubmitting, setEditingSubjectSubmitting] = useState(false);
   const [editingClass, setEditingClass] = useState<Grade | null>(null);
 
   const [classForm, setClassForm] = useState({ name: '', level: 0, tuition_fee: 0, fee_due_date: '' });
@@ -236,6 +239,8 @@ export default function AdminClasses() {
   const handleUpdateSubject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingSubject) return;
+    setEditingSubjectError(null);
+    setEditingSubjectSubmitting(true);
     try {
       await academicApi.updateSubject(editingSubject.id, {
         name: editingSubject.name,
@@ -243,10 +248,11 @@ export default function AdminClasses() {
       });
       setEditingSubject(null);
       await refreshDirectory(true);
+      toast.success('Subject updated');
     } catch (err) {
-      // Surface duplicate-name conflicts back inside the edit modal.
-      setEditingSubject(prev => prev ? { ...prev } : prev);
-      alert(getErrorMessage(err).message || 'Failed to update subject.');
+      setEditingSubjectError(getErrorMessage(err).message || 'Failed to update subject.');
+    } finally {
+      setEditingSubjectSubmitting(false);
     }
   };
 
@@ -773,31 +779,78 @@ export default function AdminClasses() {
       />
 
       {/* Edit Subject Modal */}
-      <AnimatePresence>
+      <ModalShell
+        open={!!editingSubject}
+        onClose={() => !editingSubjectSubmitting && (setEditingSubject(null), setEditingSubjectError(null))}
+        size="md"
+        locked={editingSubjectSubmitting}
+        labelledBy="edit-subject-title"
+      >
         {editingSubject && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setEditingSubject(null)} className="absolute inset-0 bg-black/80 backdrop-blur-xl" />
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full max-w-md obsidian-card border-brand-indigo/30 p-8 shadow-2xl overflow-hidden">
-              <div className="absolute -top-10 -left-10 w-32 h-32 bg-brand-indigo/10 blur-[60px] rounded-full" />
-              <div className="flex items-center justify-between mb-8 relative z-10">
-                <h2 className="text-xl font-black italic uppercase tracking-tight text-white">Calibrate Discipline</h2>
-                <button onClick={() => setEditingSubject(null)} className="p-2 hover:bg-white/5 rounded-lg transition-all"><X className="w-5 h-5 text-text-secondary" /></button>
-              </div>
-              <form onSubmit={handleUpdateSubject} className="space-y-6 relative z-10">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-[0.3em] text-text-secondary">Identifier</label>
-                  <input autoFocus className="input-obsidian text-sm" value={editingSubject.name} onChange={e => setEditingSubject({...editingSubject, name: e.target.value})} required />
+          <>
+            <ModalHeader
+              id="edit-subject-title"
+              icon={<Pencil className="w-4 h-4" />}
+              title="Edit subject"
+              subtitle="Rename the subject or update its short code."
+              onClose={() => !editingSubjectSubmitting && (setEditingSubject(null), setEditingSubjectError(null))}
+            />
+            <ModalBody>
+              {editingSubjectError && (
+                <div className="mb-4 px-3 py-2.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-500 dark:text-rose-400 text-xs font-medium flex items-start gap-2">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <span className="leading-snug">{editingSubjectError}</span>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-[0.3em] text-text-secondary">Core Hash (Code)</label>
-                  <input className="input-obsidian text-sm italic tabular-nums" value={editingSubject.code} onChange={e => setEditingSubject({...editingSubject, code: e.target.value})} />
+              )}
+              <form
+                id="edit-subject-form"
+                onSubmit={handleUpdateSubject}
+                className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3"
+              >
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-medium text-text-secondary">Subject name <span className="text-rose-500 dark:text-rose-400">*</span></label>
+                  <input
+                    autoFocus
+                    placeholder="e.g. Mathematics"
+                    className="input-modal"
+                    value={editingSubject.name}
+                    onChange={e => setEditingSubject({ ...editingSubject, name: e.target.value })}
+                    required
+                  />
                 </div>
-                <button type="submit" className="indigo-glow-button w-full py-4 text-[10px] font-black uppercase tracking-widest mt-4 italic">Commit Hash Update</button>
+                <div className="space-y-1 sm:w-[120px]">
+                  <label className="block text-[11px] font-medium text-text-secondary">Code</label>
+                  <input
+                    placeholder="MATH"
+                    className="input-modal tabular-nums uppercase"
+                    value={editingSubject.code}
+                    onChange={e => setEditingSubject({ ...editingSubject, code: e.target.value })}
+                  />
+                </div>
               </form>
-            </motion.div>
-          </div>
+            </ModalBody>
+            <ModalFooter>
+              <button
+                type="button"
+                onClick={() => { setEditingSubject(null); setEditingSubjectError(null); }}
+                disabled={editingSubjectSubmitting}
+                className="modal-btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                form="edit-subject-form"
+                disabled={editingSubjectSubmitting}
+                className={cn('modal-btn-primary', editingSubjectSubmitting && 'opacity-50 cursor-wait')}
+              >
+                {editingSubjectSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                Save changes
+              </button>
+            </ModalFooter>
+          </>
         )}
-      </AnimatePresence>
+      </ModalShell>
     </div>
   );
 }
