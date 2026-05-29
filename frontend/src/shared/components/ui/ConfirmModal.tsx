@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, Loader2, X } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
@@ -30,19 +31,19 @@ interface ConfirmModalProps {
 
 const TONE_STYLES: Record<ConfirmTone, { icon: string; button: string; ring: string }> = {
   danger: {
-    icon: 'bg-rose-500/15 text-rose-500',
-    button: 'bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-900/20',
-    ring: 'ring-rose-500/20',
+    icon: 'bg-rose-500/12 text-rose-500',
+    button: 'bg-rose-600 hover:bg-rose-500 text-white',
+    ring: 'ring-rose-500/15',
   },
   warning: {
-    icon: 'bg-amber-500/15 text-amber-500',
-    button: 'bg-amber-600 hover:bg-amber-500 text-white shadow-lg shadow-amber-900/20',
-    ring: 'ring-amber-500/20',
+    icon: 'bg-amber-500/12 text-amber-600 dark:text-amber-400',
+    button: 'bg-amber-600 hover:bg-amber-500 text-white',
+    ring: 'ring-amber-500/15',
   },
   primary: {
-    icon: 'bg-primary/15 text-primary',
-    button: 'bg-primary hover:opacity-90 text-white shadow-lg',
-    ring: 'ring-primary/20',
+    icon: 'bg-primary/12 text-primary',
+    button: 'bg-primary hover:opacity-90 text-white',
+    ring: 'ring-primary/15',
   },
 };
 
@@ -98,7 +99,10 @@ export default function ConfirmModal({
   const t = TONE_STYLES[tone];
   const confirmGated = !!requireConfirmText && confirmInput !== requireConfirmText;
 
-  return (
+  // Portal into <body> so we escape any transformed ancestor
+  // (e.g. the route-transition PageWrapper) — otherwise `position: fixed`
+  // pins to the content area, not the actual viewport.
+  const tree = (
     <AnimatePresence>
       {open && (
         <div className="fixed inset-0 z-[200] grid place-items-center p-4 sm:p-6">
@@ -110,19 +114,19 @@ export default function ConfirmModal({
             exit={{ opacity: 0 }}
             disabled={isLoading}
             onClick={onCancel}
-            className="absolute inset-0 bg-slate-950/55 backdrop-blur-[3px] cursor-default disabled:cursor-not-allowed"
+            className="absolute inset-0 modal-scrim cursor-default disabled:cursor-not-allowed"
           />
           <motion.div
             role="dialog"
             aria-modal="true"
             aria-labelledby="confirm-modal-title"
-            initial={{ scale: 0.94, opacity: 0, y: 12 }}
+            initial={{ scale: 0.97, opacity: 0, y: 6 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.94, opacity: 0, y: 12 }}
-            transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
+            exit={{ scale: 0.97, opacity: 0, y: 4 }}
+            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
             className={cn(
-              'relative w-full max-w-md rounded-2xl border border-glass-border',
-              'bg-white dark:bg-slate-900 shadow-2xl ring-4',
+              'modal-panel relative w-full max-w-md',
+              t.ring && 'ring-2',
               t.ring,
             )}
           >
@@ -186,12 +190,12 @@ export default function ConfirmModal({
               </div>
             )}
 
-            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-glass-border bg-slate-50/60 dark:bg-white/[0.02] rounded-b-2xl">
+            <div className="flex items-center justify-end gap-2 px-6 py-3 border-t border-glass-border modal-section rounded-b-2xl">
               <button
                 type="button"
                 onClick={onCancel}
                 disabled={isLoading}
-                className="px-4 h-10 rounded-xl text-xs font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 hover:bg-slate-900/5 dark:hover:bg-white/5 transition-colors disabled:opacity-40"
+                className="modal-btn-secondary"
               >
                 {cancelLabel}
               </button>
@@ -201,7 +205,7 @@ export default function ConfirmModal({
                 disabled={isLoading || confirmGated}
                 title={confirmGated ? `Type ${requireConfirmText} to enable` : undefined}
                 className={cn(
-                  'inline-flex items-center gap-2 px-5 h-10 rounded-xl text-xs font-black uppercase tracking-widest transition-all disabled:opacity-60 disabled:cursor-not-allowed',
+                  'inline-flex items-center gap-1.5 px-3.5 h-9 rounded-lg text-[12.5px] font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed',
                   t.button,
                 )}
               >
@@ -214,4 +218,7 @@ export default function ConfirmModal({
       )}
     </AnimatePresence>
   );
+
+  if (typeof document === 'undefined') return tree;
+  return createPortal(tree, document.body);
 }

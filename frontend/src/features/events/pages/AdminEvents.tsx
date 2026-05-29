@@ -1,15 +1,16 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Calendar, Plus, Clock, MapPin, FileText, Tag,
-  Trash2, Bell, Check, X, Users as UsersIcon,
-  Zap, CalendarDays, Star, Pencil, Loader2,
+  Calendar, Plus, Clock, MapPin, Tag,
+  Trash2, Bell, Check, Users as UsersIcon,
+  Zap, CalendarDays, Star, Pencil, Loader2, AlertCircle,
 } from 'lucide-react';
 import { eventsApi } from '@/features/events/api';
 import { useApp } from '@/shared/contexts/AppContext';
 import { cn } from '@/shared/lib/utils';
 import { getErrorMessage } from '@/shared/lib/errorHandler';
 import ConfirmModal from '@/shared/components/ui/ConfirmModal';
+import ModalShell, { ModalHeader, ModalBody, ModalFooter } from '@/shared/components/ui/ModalShell';
 import { useToast } from '@/shared/components/ui/Toast';
 import type { Event } from '@/shared/types';
 
@@ -46,15 +47,6 @@ export default function AdminEvents() {
     location: '', is_holiday: false,
     visibility: { parents: true, teachers: true, students: true }
   });
-
-  // Lock body scroll while either modal is open so the page underneath
-  // doesn't keep growing as the user scrolls inside the dialog.
-  useEffect(() => {
-    if (!isAdding && !pendingDeleteEvent) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
-  }, [isAdding, pendingDeleteEvent]);
 
   useEffect(() => {
     refreshDirectory();
@@ -306,243 +298,224 @@ export default function AdminEvents() {
       )}
 
       {/* ── Add / Edit Event Modal ─────────────────────────────────── */}
-      <AnimatePresence>
-        {isAdding && (
-          <div className="fixed inset-0 z-50">
-            <motion.button
-              type="button"
-              aria-label="Close"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={closeModal}
-              className="fixed inset-0 bg-slate-950/65 backdrop-blur-md cursor-default"
-            />
-            <div className="fixed inset-0 flex items-center justify-center p-4 sm:p-6 pointer-events-none">
-              <motion.div
-                initial={{ scale: 0.94, opacity: 0, y: 12 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.94, opacity: 0, y: 12 }}
-                transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
-                className="relative w-full max-w-2xl max-h-[88vh] obsidian-card border-blue-500/30 shadow-2xl pointer-events-auto flex flex-col overflow-hidden"
-              >
-                {/* Sticky header */}
-                <div className="shrink-0 flex items-center justify-between gap-3 px-6 py-4 border-b border-glass-border">
-                  <div className="min-w-0">
-                    <h2 className="text-lg sm:text-xl font-black tracking-tight uppercase">
-                      {editingEvent ? 'Edit event' : 'Schedule event'}
-                    </h2>
-                    <p className="text-text-secondary text-xs mt-0.5">
-                      {editingEvent ? 'Update the details of this event.' : 'Add a new milestone and choose who sees it.'}
-                    </p>
-                  </div>
-                  <button
-                    onClick={closeModal}
-                    className="p-2 hover:bg-white/5 rounded-xl border border-glass-border transition-all shrink-0"
-                    aria-label="Close"
-                  >
-                    <X className="w-5 h-5 opacity-60" />
-                  </button>
-                </div>
+      <ModalShell
+        open={isAdding}
+        onClose={closeModal}
+        size="xl"
+        locked={isSubmitting}
+        labelledBy="event-modal-title"
+      >
+        <ModalHeader
+          id="event-modal-title"
+          icon={<Calendar className="w-4 h-4" />}
+          title={editingEvent ? 'Edit event' : 'Schedule event'}
+          subtitle={editingEvent
+            ? 'Update the details of this event.'
+            : 'Add a new milestone and choose who sees it.'}
+          onClose={closeModal}
+        />
 
-                {/* Scrollable body */}
-                <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5">
-                  {formError && (
-                    <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold flex items-start gap-2">
-                      <X className="w-4 h-4 shrink-0 mt-0.5" />
-                      <span className="leading-snug">{formError}</span>
-                    </div>
-                  )}
-
-                  <form id="event-form" onSubmit={handleSubmit} className="space-y-5">
-                    {/* ── Section: Basics ── */}
-                    <SectionHeader icon={<FileText className="w-3.5 h-3.5" />} label="Basics" />
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <FormField label="Title" required className="sm:col-span-3">
-                        <input
-                          autoFocus
-                          placeholder="e.g. Annual sports day"
-                          className="input-obsidian h-11"
-                          value={form.title}
-                          onChange={e => setForm({...form, title: e.target.value})}
-                          required
-                        />
-                      </FormField>
-                      <FormField label="Type" className="sm:col-span-1">
-                        <div className="relative">
-                          <select
-                            className="input-obsidian h-11 appearance-none pr-8 capitalize"
-                            value={EVENT_TYPES.some(t => t.value === form.type) ? form.type : 'other'}
-                            onChange={e => setForm({...form, type: e.target.value})}
-                          >
-                            {EVENT_TYPES.map(t => (
-                              <option key={t.value} value={t.value}>{t.label}</option>
-                            ))}
-                          </select>
-                          <Tag className="w-3.5 h-3.5 text-text-secondary pointer-events-none absolute right-3 top-1/2 -translate-y-1/2" />
-                        </div>
-                      </FormField>
-                      <FormField label="Category" className="sm:col-span-2">
-                        <input
-                          placeholder="e.g. General, Academics"
-                          className="input-obsidian h-11"
-                          value={form.category}
-                          onChange={e => setForm({...form, category: e.target.value})}
-                        />
-                      </FormField>
-                      <FormField label="Description" className="sm:col-span-3" hint="Shown to parents and students in the announcement.">
-                        <textarea
-                          rows={2}
-                          placeholder="Optional — short note about what to expect."
-                          className="input-obsidian py-2.5 leading-snug resize-none"
-                          value={form.description}
-                          onChange={e => setForm({...form, description: e.target.value})}
-                        />
-                      </FormField>
-                    </div>
-
-                    {/* ── Section: Schedule ── */}
-                    <SectionHeader icon={<Calendar className="w-3.5 h-3.5" />} label="Schedule" />
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <FormField label="Date" required>
-                        <input
-                          type="date"
-                          className="input-obsidian h-11"
-                          value={form.date}
-                          onChange={e => setForm({...form, date: e.target.value})}
-                          required
-                        />
-                      </FormField>
-                      <FormField label="Time" required>
-                        <input
-                          type="text"
-                          placeholder="e.g. 02:45 PM"
-                          className="input-obsidian h-11"
-                          value={form.time}
-                          onChange={e => setForm({...form, time: e.target.value})}
-                          required
-                        />
-                      </FormField>
-                      <FormField label="Location">
-                        <div className="relative">
-                          <input
-                            placeholder="Auditorium / Zoom"
-                            className="input-obsidian h-11 pl-9"
-                            value={form.location}
-                            onChange={e => setForm({...form, location: e.target.value})}
-                          />
-                          <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-secondary" />
-                        </div>
-                      </FormField>
-                    </div>
-
-                    {/* Holiday switch — inline, compact */}
-                    <button
-                      type="button"
-                      onClick={() => setForm({...form, is_holiday: !form.is_holiday})}
-                      className={cn(
-                        'w-full px-4 py-3 rounded-xl border transition-all flex items-center justify-between gap-3 text-left',
-                        form.is_holiday
-                          ? 'bg-amber-500/10 border-amber-500/30 text-amber-500 dark:text-amber-400'
-                          : 'bg-white/[0.02] border-glass-border text-text-secondary hover:border-white/15',
-                      )}
-                    >
-                      <span className="flex items-center gap-3">
-                        <Star className={cn('w-4 h-4', form.is_holiday && 'fill-current')} />
-                        <span>
-                          <span className="block text-[11px] font-black uppercase tracking-widest">
-                            Non-teaching day
-                          </span>
-                          <span className="block text-[11px] opacity-70 normal-case tracking-normal mt-0.5">
-                            Classes are paused on this date.
-                          </span>
-                        </span>
-                      </span>
-                      <span
-                        role="switch"
-                        aria-checked={form.is_holiday}
-                        className={cn(
-                          'relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors',
-                          form.is_holiday ? 'bg-amber-500' : 'bg-white/15',
-                        )}
-                      >
-                        <span
-                          className={cn(
-                            'absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform',
-                            form.is_holiday && 'translate-x-4',
-                          )}
-                        />
-                      </span>
-                    </button>
-
-                    {/* ── Section: Audience ── */}
-                    <SectionHeader
-                      icon={<UsersIcon className="w-3.5 h-3.5" />}
-                      label="Audience"
-                      hint={`${visibilityCount} of 3 selected`}
-                    />
-                    <div className="grid grid-cols-3 gap-2">
-                      {(['parents', 'teachers', 'students'] as const).map(role => {
-                        const active = form.visibility[role];
-                        return (
-                          <button
-                            key={role}
-                            type="button"
-                            onClick={() =>
-                              setForm({
-                                ...form,
-                                visibility: { ...form.visibility, [role]: !active },
-                              })
-                            }
-                            className={cn(
-                              'px-3 py-2.5 rounded-xl border text-[11px] font-black uppercase tracking-widest transition-all flex items-center justify-between gap-2',
-                              active
-                                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500 dark:text-emerald-400'
-                                : 'bg-white/[0.02] border-glass-border text-text-secondary hover:border-white/15',
-                            )}
-                          >
-                            <span>{role}</span>
-                            {active ? <Check className="w-3.5 h-3.5" /> : <span className="w-3.5 h-3.5 rounded border border-current opacity-40" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </form>
-                </div>
-
-                {/* Sticky footer */}
-                <div className="shrink-0 flex items-center justify-between gap-2 px-6 py-3 border-t border-glass-border bg-[var(--bg-card)]/60">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-text-secondary hidden sm:inline">
-                    {visibilityCount === 0 ? 'Pick at least one audience' : `Notifies ${visibilityCount} audience${visibilityCount > 1 ? 's' : ''}`}
-                  </span>
-                  <div className="flex items-center gap-2 ml-auto">
-                    <button
-                      type="button"
-                      onClick={closeModal}
-                      disabled={isSubmitting}
-                      className="px-4 h-10 rounded-xl text-xs font-black uppercase tracking-widest text-text-secondary hover:text-foreground border border-glass-border transition-colors disabled:opacity-40"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      form="event-form"
-                      disabled={isSubmitting}
-                      className={cn(
-                        'inline-flex items-center gap-2 h-10 px-5 rounded-xl text-xs font-black uppercase tracking-widest bg-primary text-white shadow-lg shadow-primary/20 hover:opacity-95 transition-all',
-                        isSubmitting && 'opacity-60 cursor-wait',
-                      )}
-                    >
-                      {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                      {editingEvent ? 'Save changes' : 'Schedule event'}
-                    </button>
-                  </div>
-                </div>
-              </motion.div>
+        <ModalBody className="py-4">
+          {formError && (
+            <div className="mb-4 px-3 py-2.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-500 dark:text-rose-400 text-xs font-medium flex items-start gap-2">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              <span className="leading-snug">{formError}</span>
             </div>
-          </div>
-        )}
-      </AnimatePresence>
+          )}
+
+          <form id="event-form" onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-12 gap-x-4 gap-y-3">
+            {/* Title — full width */}
+            <CompactField label="Title" required className="md:col-span-12">
+              <input
+                autoFocus
+                placeholder="e.g. Annual sports day"
+                className="input-modal"
+                value={form.title}
+                onChange={e => setForm({ ...form, title: e.target.value })}
+                required
+              />
+            </CompactField>
+
+            {/* Type, Category — same row on desktop */}
+            <CompactField label="Type" className="md:col-span-4">
+              <div className="relative">
+                <select
+                  className="input-modal capitalize"
+                  value={EVENT_TYPES.some(t => t.value === form.type) ? form.type : 'other'}
+                  onChange={e => setForm({ ...form, type: e.target.value })}
+                >
+                  {EVENT_TYPES.map(t => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </select>
+                <Tag className="w-3.5 h-3.5 text-text-secondary pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" />
+              </div>
+            </CompactField>
+            <CompactField label="Category" className="md:col-span-8">
+              <input
+                placeholder="e.g. General, Academics"
+                className="input-modal"
+                value={form.category}
+                onChange={e => setForm({ ...form, category: e.target.value })}
+              />
+            </CompactField>
+
+            {/* Description — full width, compact */}
+            <CompactField label="Description" className="md:col-span-12">
+              <textarea
+                rows={2}
+                placeholder="Optional — short note about what to expect."
+                className="input-modal resize-none"
+                value={form.description}
+                onChange={e => setForm({ ...form, description: e.target.value })}
+              />
+            </CompactField>
+
+            {/* Date, Time, Location — single row on desktop */}
+            <CompactField label="Date" required className="md:col-span-4">
+              <input
+                type="date"
+                className="input-modal"
+                value={form.date}
+                onChange={e => setForm({ ...form, date: e.target.value })}
+                required
+              />
+            </CompactField>
+            <CompactField label="Time" required className="md:col-span-3">
+              <div className="relative">
+                <Clock className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-secondary pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="02:45 PM"
+                  className="input-modal pl-8"
+                  value={form.time}
+                  onChange={e => setForm({ ...form, time: e.target.value })}
+                  required
+                />
+              </div>
+            </CompactField>
+            <CompactField label="Location" className="md:col-span-5">
+              <div className="relative">
+                <MapPin className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-secondary pointer-events-none" />
+                <input
+                  placeholder="Auditorium / Zoom"
+                  className="input-modal pl-8"
+                  value={form.location}
+                  onChange={e => setForm({ ...form, location: e.target.value })}
+                />
+              </div>
+            </CompactField>
+
+            {/* Non-teaching toggle + audience pills share the same row */}
+            <div className="md:col-span-12 grid grid-cols-1 md:grid-cols-12 gap-x-4 gap-y-3 pt-1">
+              <div className="md:col-span-5">
+                <span className="block text-[11px] font-medium text-text-secondary mb-1">Schedule</span>
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, is_holiday: !form.is_holiday })}
+                  className={cn(
+                    'w-full h-9 px-3 rounded-lg border transition-colors flex items-center justify-between gap-2 text-left',
+                    form.is_holiday
+                      ? 'bg-amber-500/10 border-amber-500/35 text-amber-600 dark:text-amber-400'
+                      : 'border-glass-border text-text-secondary hover:bg-white/[0.03] dark:hover:bg-white/[0.03]',
+                  )}
+                  aria-pressed={form.is_holiday}
+                >
+                  <span className="inline-flex items-center gap-2 text-[12px] font-medium">
+                    <Star className={cn('w-3.5 h-3.5', form.is_holiday && 'fill-current')} />
+                    Non-teaching day
+                  </span>
+                  <span
+                    role="switch"
+                    aria-checked={form.is_holiday}
+                    className={cn(
+                      'relative inline-flex h-4 w-7 shrink-0 rounded-full transition-colors',
+                      form.is_holiday ? 'bg-amber-500' : 'bg-text-secondary/30',
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'absolute top-0.5 left-0.5 h-3 w-3 rounded-full bg-white shadow-sm transition-transform',
+                        form.is_holiday && 'translate-x-3',
+                      )}
+                    />
+                  </span>
+                </button>
+              </div>
+
+              <div className="md:col-span-7">
+                <span className="block text-[11px] font-medium text-text-secondary mb-1 flex items-center justify-between">
+                  <span className="inline-flex items-center gap-1.5">
+                    <UsersIcon className="w-3 h-3" /> Visible to
+                  </span>
+                  <span className="text-text-secondary/70 normal-case tracking-normal">
+                    {visibilityCount} of 3
+                  </span>
+                </span>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(['parents', 'teachers', 'students'] as const).map(role => {
+                    const active = form.visibility[role];
+                    return (
+                      <button
+                        key={role}
+                        type="button"
+                        onClick={() =>
+                          setForm({
+                            ...form,
+                            visibility: { ...form.visibility, [role]: !active },
+                          })
+                        }
+                        className={cn(
+                          'h-9 px-2.5 rounded-lg border text-[12px] font-medium capitalize transition-colors flex items-center justify-between gap-1.5',
+                          active
+                            ? 'bg-emerald-500/10 border-emerald-500/35 text-emerald-600 dark:text-emerald-400'
+                            : 'border-glass-border text-text-secondary hover:bg-white/[0.03] dark:hover:bg-white/[0.03]',
+                        )}
+                        aria-pressed={active}
+                      >
+                        <span>{role}</span>
+                        {active ? (
+                          <Check className="w-3.5 h-3.5" />
+                        ) : (
+                          <span className="w-3.5 h-3.5 rounded border border-current opacity-30" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </form>
+        </ModalBody>
+
+        <ModalFooter
+          leading={
+            <span className={cn(visibilityCount === 0 && 'text-rose-500 dark:text-rose-400')}>
+              {visibilityCount === 0
+                ? 'Pick at least one audience'
+                : `Notifies ${visibilityCount} audience${visibilityCount > 1 ? 's' : ''}`}
+            </span>
+          }
+        >
+          <button
+            type="button"
+            onClick={closeModal}
+            disabled={isSubmitting}
+            className="modal-btn-secondary"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form="event-form"
+            disabled={isSubmitting}
+            className={cn('modal-btn-primary', isSubmitting && 'opacity-60 cursor-wait')}
+          >
+            {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            {editingEvent ? 'Save changes' : 'Schedule event'}
+          </button>
+        </ModalFooter>
+      </ModalShell>
 
       {/* ── Delete confirmation ─────────────────────────────────────── */}
       <ConfirmModal
@@ -577,45 +550,21 @@ export default function AdminEvents() {
 
 /* ── Local form primitives ──────────────────────────────────────────── */
 
-function SectionHeader({
-  icon, label, hint,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  hint?: string;
-}) {
-  return (
-    <div className="flex items-center justify-between pt-1">
-      <div className="flex items-center gap-2 text-text-secondary">
-        <span className="text-brand-indigo">{icon}</span>
-        <span className="text-[10px] font-black uppercase tracking-[0.25em]">{label}</span>
-      </div>
-      {hint && (
-        <span className="text-[10px] font-black uppercase tracking-widest text-text-secondary opacity-70">{hint}</span>
-      )}
-    </div>
-  );
-}
-
-function FormField({
-  label, required, children, className, hint,
+function CompactField({
+  label, required, children, className,
 }: {
   label: string;
   required?: boolean;
   children: React.ReactNode;
   className?: string;
-  hint?: string;
 }) {
   return (
-    <div className={cn('space-y-1.5', className)}>
-      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1 flex justify-between items-center">
-        <span>
-          {label}
-          {required && <span className="text-rose-400"> *</span>}
-        </span>
+    <div className={cn('space-y-1', className)}>
+      <label className="block text-[11px] font-medium text-text-secondary">
+        {label}
+        {required && <span className="text-rose-500 dark:text-rose-400"> *</span>}
       </label>
       {children}
-      {hint && <p className="text-[10px] text-text-secondary opacity-60 ml-1">{hint}</p>}
     </div>
   );
 }

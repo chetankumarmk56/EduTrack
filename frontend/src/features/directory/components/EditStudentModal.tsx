@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ArrowRight, AlertCircle, Loader, UserPlus, User } from 'lucide-react';
 import { directoryApi } from '@/features/directory/api';
@@ -61,10 +62,10 @@ export default function EditStudentModal({ student, onClose, onUpdated }: EditSt
     }
   };
 
-  return (
+  const tree = (
     <AnimatePresence>
       {student && localStudent && (
-        <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain">
+        <div className="fixed inset-0 z-[100] overflow-y-auto overscroll-contain">
           <motion.button
             type="button"
             aria-label="Close"
@@ -72,7 +73,7 @@ export default function EditStudentModal({ student, onClose, onUpdated }: EditSt
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-slate-950/65 backdrop-blur-md cursor-default"
+            className="fixed inset-0 modal-scrim cursor-default"
           />
           <div className="relative min-h-full flex items-start sm:items-center justify-center p-4 sm:p-6 pointer-events-none">
             <motion.div
@@ -80,7 +81,7 @@ export default function EditStudentModal({ student, onClose, onUpdated }: EditSt
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.96, opacity: 0, y: 12 }}
               transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
-              className="relative w-full max-w-2xl obsidian-card border-brand-indigo/30 p-6 sm:p-8 shadow-2xl my-4 sm:my-6 pointer-events-auto"
+              className="modal-panel relative w-full max-w-2xl p-6 sm:p-8 my-4 sm:my-6 pointer-events-auto"
             >
             <div className="flex items-center justify-between mb-8">
               <div>
@@ -164,4 +165,7 @@ export default function EditStudentModal({ student, onClose, onUpdated }: EditSt
       )}
     </AnimatePresence>
   );
+
+  if (typeof document === 'undefined') return tree;
+  return createPortal(tree, document.body);
 }

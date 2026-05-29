@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -387,14 +388,17 @@ export default function MyFiles() {
         defaultTab="upload"
       />
 
-      {/* Delete confirm modal */}
+      {/* Delete confirm modal — portaled into <body> so it escapes the
+          route-transition transform that would otherwise pin it inside
+          the content area instead of the viewport. */}
+      {createPortal(
       <AnimatePresence>
         {pendingDelete && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-center justify-center p-4"
+            className="fixed inset-0 z-[100] modal-scrim flex items-center justify-center p-4"
             onClick={() => setPendingDelete(null)}
           >
             <motion.div
@@ -433,7 +437,8 @@ export default function MyFiles() {
             </motion.div>
           </motion.div>
         )}
-      </AnimatePresence>
+      </AnimatePresence>,
+      document.body)}
     </div>
   );
 }

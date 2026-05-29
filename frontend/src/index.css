@@ -167,6 +167,174 @@ button, a, [role="button"] {
   filter: brightness(1.05);
 }
 
+/* ============================================================
+   MODAL SYSTEM — soft scrim + theme-aware solid panel
+   Inspired by Linear / Vercel / Stripe: a light scrim keeps
+   the page visually present, with a barely-perceptible 2px
+   blur to nudge focus to the dialog instead of obliterating
+   the background. The panel itself is a true solid surface
+   so content underneath never bleeds through.
+   ============================================================ */
+
+.modal-scrim {
+  background-color: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+.dark .modal-scrim {
+  background-color: rgba(2, 6, 23, 0.52);
+}
+.crystal-theme .modal-scrim,
+.teacher-light-theme .modal-scrim,
+.superadmin-light-theme .modal-scrim {
+  background-color: rgba(15, 23, 42, 0.28);
+}
+
+/* The dialog itself. A proper solid surface — no card translucency
+   — with a single soft shadow. No double blur, no aurora glow. */
+.modal-panel {
+  background-color: #0d1117;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow:
+    0 24px 50px -20px rgba(0, 0, 0, 0.55),
+    0 8px 16px -8px rgba(0, 0, 0, 0.35),
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+  border-radius: 16px;
+}
+.dark .modal-panel {
+  background-color: #0d1117;
+  border-color: rgba(255, 255, 255, 0.07);
+}
+.crystal-theme .modal-panel,
+.teacher-light-theme .modal-panel,
+.superadmin-light-theme .modal-panel {
+  background-color: #ffffff;
+  border-color: rgba(15, 23, 42, 0.08);
+  box-shadow:
+    0 24px 50px -20px rgba(15, 23, 42, 0.22),
+    0 8px 16px -8px rgba(15, 23, 42, 0.10),
+    0 0 0 1px rgba(15, 23, 42, 0.02) inset;
+}
+
+/* Sticky header / footer surfaces inside the panel. Subtle tint
+   so the user can tell sections apart without harsh dividers. */
+.modal-section {
+  background-color: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+.crystal-theme .modal-section,
+.teacher-light-theme .modal-section,
+.superadmin-light-theme .modal-section {
+  background-color: rgba(15, 23, 42, 0.025);
+  border-color: rgba(15, 23, 42, 0.06);
+}
+
+/* Modal action buttons — short, calm pills. The primary uses the
+   brand color but without the heavy "glow" shadow that the page-level
+   `.indigo-glow-button` has; in a tight modal footer that glow reads
+   as noise. */
+.modal-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 2.25rem;       /* 36px */
+  padding: 0 0.95rem;
+  border-radius: 0.55rem;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.005em;
+  color: #ffffff;
+  background-color: var(--brand-indigo);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.05), 0 1px 2px rgba(99, 102, 241, 0.20);
+  transition: background-color 0.15s ease, box-shadow 0.15s ease, transform 0.05s ease;
+}
+.modal-btn-primary:hover {
+  filter: brightness(1.06);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.05), 0 4px 10px rgba(99, 102, 241, 0.24);
+}
+.modal-btn-primary:active { transform: translateY(0.5px); }
+
+.modal-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 2.25rem;
+  padding: 0 0.85rem;
+  border-radius: 0.55rem;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background-color: transparent;
+  border: 1px solid var(--glass-border);
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.modal-btn-secondary:hover {
+  color: var(--text-primary);
+  background-color: rgba(255, 255, 255, 0.04);
+  border-color: var(--glass-border-bright);
+}
+.crystal-theme .modal-btn-secondary:hover,
+.teacher-light-theme .modal-btn-secondary:hover,
+.superadmin-light-theme .modal-btn-secondary:hover {
+  background-color: rgba(15, 23, 42, 0.04);
+}
+.modal-btn-secondary:disabled,
+.modal-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Compact field used inside the redesigned modal forms. Defined as
+   a component so Tailwind utility classes (`pl-8`, `pr-7`, …) can
+   override individual padding sides — `.input-obsidian` lives outside
+   any layer and wins specificity ties, which would otherwise eat the
+   icon-prefix utilities the modals depend on. */
+@layer components {
+  .input-modal {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--glass-border);
+    border-radius: 0.5rem;
+    color: var(--text-primary);
+    font-size: 13px;
+    width: 100%;
+    height: 2.25rem;
+    padding-top: 0;
+    padding-bottom: 0;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+    transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .input-modal:focus {
+    outline: none;
+    border-color: var(--brand-indigo);
+    background: rgba(255, 255, 255, 0.06);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.10);
+  }
+  .crystal-theme .input-modal,
+  .teacher-light-theme .input-modal,
+  .superadmin-light-theme .input-modal {
+    background: rgba(15, 23, 42, 0.03);
+    color: var(--text-primary);
+  }
+  .crystal-theme .input-modal:focus,
+  .teacher-light-theme .input-modal:focus,
+  .superadmin-light-theme .input-modal:focus {
+    background: #ffffff;
+    border-color: var(--brand-indigo);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.08);
+  }
+  select.input-modal {
+    appearance: none;
+    -webkit-appearance: none;
+  }
+  textarea.input-modal {
+    height: auto;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+    line-height: 1.4;
+  }
+}
+
 /* --- Interactive Elements --- */
 
 .input-obsidian {

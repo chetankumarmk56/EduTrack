@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   CloudUpload,
@@ -189,14 +190,14 @@ export function FilePicker({
   };
 
   // ----- Render -----
-  return (
+  const tree = (
     <AnimatePresence>
       {open && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-center justify-center p-4"
+          className="fixed inset-0 z-[100] modal-scrim flex items-center justify-center p-4"
           onClick={onClose}
         >
           <motion.div
@@ -310,6 +311,9 @@ export function FilePicker({
       )}
     </AnimatePresence>
   );
+
+  if (typeof document === 'undefined') return tree;
+  return createPortal(tree, document.body);
 }
 
 // ----------------------------------------------------------------------

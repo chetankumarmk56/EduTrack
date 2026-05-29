@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X, UserPlus, User, ShieldCheck, ArrowRight, ArrowLeft,
@@ -220,10 +221,10 @@ export default function EnrollStudentModal({
     }
   };
 
-  return (
+  const tree = (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain">
+        <div className="fixed inset-0 z-[100] overflow-y-auto overscroll-contain">
           <motion.button
             type="button"
             aria-label="Close"
@@ -231,7 +232,7 @@ export default function EnrollStudentModal({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={handleClose}
-            className="fixed inset-0 bg-slate-950/65 backdrop-blur-md cursor-default"
+            className="fixed inset-0 modal-scrim cursor-default"
           />
           <div className="relative min-h-full flex items-start sm:items-center justify-center p-4 sm:p-6 pointer-events-none">
             <motion.div
@@ -239,12 +240,11 @@ export default function EnrollStudentModal({
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.96, opacity: 0, y: 12 }}
               transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
-              className="relative w-full max-w-xl obsidian-card border-brand-indigo/30 shadow-[0_0_80px_rgba(99,102,241,0.12)] my-4 sm:my-6 pointer-events-auto overflow-hidden"
+              className="modal-panel relative w-full max-w-xl my-4 sm:my-6 pointer-events-auto overflow-hidden"
             >
-              <div className="absolute -top-16 -right-16 w-48 h-48 bg-brand-indigo/8 blur-[80px] rounded-full pointer-events-none" />
 
               {/* ── Header + stepper ─────────────────────────── */}
-              <div className="relative z-10 flex items-start justify-between gap-3 px-6 sm:px-7 pt-6">
+              <div className="flex items-start justify-between gap-3 px-6 sm:px-7 pt-6">
                 <div className="min-w-0">
                   <h2 className="text-xl sm:text-2xl font-black tracking-tight uppercase">Enroll Student</h2>
                   <p className="text-text-secondary text-sm mt-0.5">Add a new student to the selected class.</p>
@@ -267,7 +267,7 @@ export default function EnrollStudentModal({
                 </div>
               )}
 
-              <form onSubmit={handleSubmit} className="relative z-10 px-6 sm:px-7 pt-5 pb-6 space-y-5">
+              <form onSubmit={handleSubmit} className="px-6 sm:px-7 pt-5 pb-6 space-y-5">
                 {step === 'student' && (
                   <Section
                     icon={<UserPlus className="w-4 h-4" />}
@@ -432,6 +432,9 @@ export default function EnrollStudentModal({
       )}
     </AnimatePresence>
   );
+
+  if (typeof document === 'undefined') return tree;
+  return createPortal(tree, document.body);
 }
 
 /* ── Local helpers ────────────────────────────────────────────────── */

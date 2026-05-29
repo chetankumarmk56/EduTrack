@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Plus, CheckCircle2, AlertCircle, Loader2, ArrowUpRight } from 'lucide-react';
 import { financeApi } from '@/features/finance/api';
@@ -45,14 +46,14 @@ export default function ManualPaymentModal({ isOpen, onClose, initialStudentId, 
     }
   };
 
-  return (
+  const tree = (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6">
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-6">
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             onClick={onClose}
-            className="absolute inset-0 bg-black/40 backdrop-blur-md"
+            className="absolute inset-0 modal-scrim"
           />
           <motion.div
             initial={{ opacity: 0, scale: 0.9, y: 20 }}
@@ -143,4 +144,7 @@ export default function ManualPaymentModal({ isOpen, onClose, initialStudentId, 
       )}
     </AnimatePresence>
   );
+
+  if (typeof document === 'undefined') return tree;
+  return createPortal(tree, document.body);
 }

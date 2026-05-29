@@ -3,13 +3,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   UserPlus, Pencil, Trash2,
   Key, Shield, Mail, Phone, BookOpen, X, Search,
-  School, AlertCircle, Users, ChevronDown, Loader
+  School, AlertCircle, Users, ChevronDown, Loader, Plus,
 } from 'lucide-react';
 import { directoryApi, type TeacherWithPassword } from '@/features/directory/api';
 import { useApp } from '@/shared/contexts/AppContext';
 import { cn } from '@/shared/lib/utils';
 import { getErrorMessage } from '@/shared/lib/errorHandler';
 import ConfirmModal from '@/shared/components/ui/ConfirmModal';
+import ModalShell, { ModalHeader, ModalBody, ModalFooter } from '@/shared/components/ui/ModalShell';
 import { useToast } from '@/shared/components/ui/Toast';
 
 /** Password policy mirrors `validate_password_strength` in the backend. */
@@ -61,16 +62,6 @@ export default function TeacherDirectory() {
   const [pendingDeleteTeacher, setPendingDeleteTeacher] = useState<TeacherWithPassword | null>(null);
   const [deleting, setDeleting] = useState(false);
   const toast = useToast();
-
-  // Lock body scroll while any of our larger modals are open so the
-  // page underneath can't be scrolled into blank space.
-  useEffect(() => {
-    const anyOpen = isAdding || !!editingTeacher || isAssigningId != null;
-    if (!anyOpen) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
-  }, [isAdding, editingTeacher, isAssigningId]);
 
   const isAssigning = useMemo(() =>
     teachers.find(t => t.id === isAssigningId),
@@ -402,450 +393,396 @@ export default function TeacherDirectory() {
       )}
 
       {/* ── Add Teacher Modal ── */}
-      <AnimatePresence>
-        {isAdding && (
-          <div className="fixed inset-0 z-50">
-            <motion.button
-              type="button"
-              aria-label="Close"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsAdding(false)}
-              className="fixed inset-0 bg-slate-950/65 backdrop-blur-md cursor-default"
-            />
-            <div className="fixed inset-0 flex items-center justify-center p-4 sm:p-6 pointer-events-none">
-              <motion.div
-                initial={{ scale: 0.94, opacity: 0, y: 12 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.94, opacity: 0, y: 12 }}
-                transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
-                className="relative w-full max-w-lg max-h-[88vh] obsidian-card border-brand-indigo/30 shadow-2xl pointer-events-auto flex flex-col overflow-hidden"
-              >
-                {/* Sticky header */}
-                <div className="shrink-0 flex items-center justify-between gap-3 px-6 py-4 border-b border-glass-border">
-                  <div className="min-w-0">
-                    <h2 className="text-xl font-black tracking-tight uppercase">Add teacher</h2>
-                    <p className="text-text-secondary text-xs mt-0.5">Create a new teacher account</p>
-                  </div>
-                  <button onClick={() => setIsAdding(false)} className="p-2 hover:bg-white/5 rounded-xl border border-glass-border transition-all shrink-0" aria-label="Close">
-                    <X className="w-5 h-5 opacity-60" />
-                  </button>
-                </div>
+      <ModalShell
+        open={isAdding}
+        onClose={() => !isSubmittingForm && setIsAdding(false)}
+        size="lg"
+        locked={isSubmittingForm}
+        labelledBy="add-teacher-title"
+      >
+        <ModalHeader
+          id="add-teacher-title"
+          icon={<UserPlus className="w-4 h-4" />}
+          title="Add teacher"
+          subtitle="Create a new teacher account and set their login credentials."
+          onClose={() => !isSubmittingForm && setIsAdding(false)}
+        />
 
-                {/* Scrollable body */}
-                <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5">
-                  {formError && (
-                    <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold flex items-start gap-2">
-                      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" /> {formError}
-                    </div>
-                  )}
-
-                  <form id="add-teacher-form" onSubmit={handleCreate} className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                    <div className="space-y-1.5 sm:col-span-2">
-                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Full name</label>
-                      <input autoFocus placeholder="e.g. Anita Sharma" className="input-obsidian h-11" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Email address</label>
-                      <input type="email" placeholder="anita@school.edu" className="input-obsidian h-11" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} required />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Phone number</label>
-                      <input placeholder="+91 98765 43210" className="input-obsidian h-11" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} required />
-                    </div>
-                    <div className="space-y-1.5 sm:col-span-2">
-                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Password</label>
-                      <input type="password" placeholder="Set login password" className="input-obsidian h-11" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} required />
-                      <ul className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
-                        {PASSWORD_RULES.map(r => {
-                          const ok = form.password ? r.test(form.password) : false;
-                          return (
-                            <li key={r.label} className={cn(
-                              'flex items-center gap-1.5 text-[10px] font-bold transition-colors',
-                              ok ? 'text-emerald-500 dark:text-emerald-400' : 'text-text-secondary opacity-60',
-                            )}>
-                              <span className={cn(
-                                'w-1.5 h-1.5 rounded-full',
-                                ok ? 'bg-emerald-500 dark:bg-emerald-400' : 'bg-text-secondary/30',
-                              )} />
-                              {r.label}
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </div>
-                  </form>
-                </div>
-
-                {/* Sticky footer */}
-                <div className="shrink-0 flex items-center justify-end gap-2 px-6 py-3 border-t border-glass-border bg-[var(--bg-card)]/60">
-                  <button
-                    type="button"
-                    onClick={() => setIsAdding(false)}
-                    disabled={isSubmittingForm}
-                    className="px-4 h-10 rounded-xl text-xs font-black uppercase tracking-widest text-text-secondary hover:text-foreground border border-glass-border transition-colors disabled:opacity-40"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    form="add-teacher-form"
-                    disabled={isSubmittingForm || !pwCheck.ok}
-                    className={cn(
-                      'indigo-glow-button h-10 px-5 text-xs font-black uppercase tracking-wider',
-                      (isSubmittingForm || !pwCheck.ok) && 'opacity-50 cursor-not-allowed',
-                    )}
-                    title={!pwCheck.ok ? 'Password does not meet the policy yet' : undefined}
-                  >
-                    {isSubmittingForm ? <Loader className="w-3.5 h-3.5 animate-spin" /> : 'Add teacher'}
-                  </button>
-                </div>
-              </motion.div>
+        <ModalBody>
+          {formError && (
+            <div className="mb-4 px-3 py-2.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-500 dark:text-rose-400 text-xs font-medium flex items-start gap-2">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              <span className="leading-snug">{formError}</span>
             </div>
-          </div>
-        )}
-      </AnimatePresence>
+          )}
+
+          <form id="add-teacher-form" onSubmit={handleCreate} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <CompactField label="Full name" required className="sm:col-span-2">
+              <input
+                autoFocus
+                placeholder="e.g. Anita Sharma"
+                className="input-modal"
+                value={form.name}
+                onChange={e => setForm({ ...form, name: e.target.value })}
+                required
+              />
+            </CompactField>
+            <CompactField label="Email">
+              <input
+                type="email"
+                placeholder="anita@school.edu"
+                className="input-modal"
+                value={form.email}
+                onChange={e => setForm({ ...form, email: e.target.value })}
+                required
+              />
+            </CompactField>
+            <CompactField label="Phone">
+              <input
+                placeholder="+91 98765 43210"
+                className="input-modal"
+                value={form.phone}
+                onChange={e => setForm({ ...form, phone: e.target.value })}
+                required
+              />
+            </CompactField>
+            <CompactField label="Password" required className="sm:col-span-2">
+              <input
+                type="password"
+                placeholder="Set login password"
+                className="input-modal"
+                value={form.password}
+                onChange={e => setForm({ ...form, password: e.target.value })}
+                required
+              />
+              <ul className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
+                {PASSWORD_RULES.map(r => {
+                  const ok = form.password ? r.test(form.password) : false;
+                  return (
+                    <li key={r.label} className={cn(
+                      'flex items-center gap-1.5 text-[10.5px] transition-colors',
+                      ok ? 'text-emerald-600 dark:text-emerald-400 font-medium' : 'text-text-secondary opacity-70',
+                    )}>
+                      <span className={cn(
+                        'w-1.5 h-1.5 rounded-full',
+                        ok ? 'bg-emerald-500 dark:bg-emerald-400' : 'bg-text-secondary/40',
+                      )} />
+                      {r.label}
+                    </li>
+                  );
+                })}
+              </ul>
+            </CompactField>
+          </form>
+        </ModalBody>
+
+        <ModalFooter>
+          <button
+            type="button"
+            onClick={() => setIsAdding(false)}
+            disabled={isSubmittingForm}
+            className="modal-btn-secondary"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form="add-teacher-form"
+            disabled={isSubmittingForm || !pwCheck.ok}
+            className={cn('modal-btn-primary', (isSubmittingForm || !pwCheck.ok) && 'opacity-50 cursor-not-allowed')}
+            title={!pwCheck.ok ? 'Password does not meet the policy yet' : undefined}
+          >
+            {isSubmittingForm && <Loader className="w-3.5 h-3.5 animate-spin" />}
+            Add teacher
+          </button>
+        </ModalFooter>
+      </ModalShell>
 
       {/* ── Manage Assignments Modal ── */}
-      <AnimatePresence>
-        {isAssigningId && isAssigning && (
-          <div className="fixed inset-0 z-50">
-            <motion.button
-              type="button"
-              aria-label="Close"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsAssigningId(null)}
-              className="fixed inset-0 bg-slate-950/65 backdrop-blur-md cursor-default"
-            />
-            <div className="fixed inset-0 flex items-center justify-center p-4 sm:p-6 pointer-events-none">
-              <motion.div
-                initial={{ scale: 0.94, opacity: 0, y: 12 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.94, opacity: 0, y: 12 }}
-                transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
-                className="relative w-full max-w-2xl max-h-[88vh] obsidian-card border-brand-indigo/30 shadow-2xl pointer-events-auto flex flex-col overflow-hidden"
-              >
-                {(() => {
-                  // Compute display-time values once per render.
-                  const assignments = isAssigning.assignments ?? [];
-                  const totalAssignments = assignments.length;
+      <ModalShell
+        open={!!(isAssigningId && isAssigning)}
+        onClose={() => setIsAssigningId(null)}
+        size="xl"
+        labelledBy="manage-assignments-title"
+      >
+        {isAssigning && (() => {
+          const assignments = isAssigning.assignments ?? [];
+          const totalAssignments = assignments.length;
 
-                  // Filter on free text (matches class or subject).
-                  const q = assignmentSearch.trim().toLowerCase();
-                  const filtered = q
-                    ? assignments.filter(a =>
-                        (a.school_class.display_name || '').toLowerCase().includes(q) ||
-                        (a.subject_ref.name || '').toLowerCase().includes(q),
-                      )
-                    : assignments;
+          const q = assignmentSearch.trim().toLowerCase();
+          const filtered = q
+            ? assignments.filter(a =>
+                (a.school_class.display_name || '').toLowerCase().includes(q) ||
+                (a.subject_ref.name || '').toLowerCase().includes(q),
+              )
+            : assignments;
 
-                  // Group by class so 9 entries become 3 class rows with 3
-                  // subject chips each — far easier to scan than a flat list.
-                  const byClass = new Map<string, typeof assignments>();
-                  for (const a of filtered) {
-                    const key = a.school_class.display_name || '—';
-                    if (!byClass.has(key)) byClass.set(key, []);
-                    byClass.get(key)!.push(a);
-                  }
-                  const groupedClasses = Array.from(byClass.entries())
-                    .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }));
+          const byClass = new Map<string, typeof assignments>();
+          for (const a of filtered) {
+            const key = a.school_class.display_name || '—';
+            if (!byClass.has(key)) byClass.set(key, []);
+            byClass.get(key)!.push(a);
+          }
+          const groupedClasses = Array.from(byClass.entries())
+            .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }));
 
-                  // Distinct subjects + classes for the header chips.
-                  const distinctSubjects = new Set(assignments.map(a => a.subject_ref.name)).size;
-                  const distinctClasses = new Set(assignments.map(a => a.school_class.display_name)).size;
-                  const initials = isAssigning.name
-                    .split(/\s+/)
-                    .map(s => s[0])
-                    .filter(Boolean)
-                    .slice(0, 2)
-                    .join('')
-                    .toUpperCase();
+          const distinctSubjects = new Set(assignments.map(a => a.subject_ref.name)).size;
+          const distinctClasses = new Set(assignments.map(a => a.school_class.display_name)).size;
+          const initials = isAssigning.name
+            .split(/\s+/)
+            .map(s => s[0])
+            .filter(Boolean)
+            .slice(0, 2)
+            .join('')
+            .toUpperCase();
 
-                  return (
-                    <>
-                      {/* Sticky header with avatar + summary chips */}
-                      <div className="shrink-0 px-6 sm:px-7 py-4 border-b border-glass-border bg-[var(--bg-card)]/60">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="w-11 h-11 rounded-xl bg-brand-indigo/15 border border-brand-indigo/30 grid place-items-center text-brand-indigo font-black text-sm shrink-0">
-                              {initials || 'T'}
-                            </div>
-                            <div className="min-w-0">
-                              <h2 className="text-lg sm:text-xl font-black tracking-tight uppercase truncate">{isAssigning.name}</h2>
-                              <p className="text-text-secondary text-[11px] mt-0.5">
-                                Manage class assignments
-                              </p>
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => setIsAssigningId(null)}
-                            className="p-2 hover:bg-white/5 rounded-xl border border-glass-border transition-all shrink-0"
-                            aria-label="Close"
-                          >
-                            <X className="w-5 h-5 opacity-60" />
-                          </button>
-                        </div>
-                        <div className="mt-3 flex flex-wrap gap-1.5">
-                          <StatChip label="Classes" value={distinctClasses} />
-                          <StatChip label="Subjects" value={distinctSubjects} />
-                          <StatChip label="Total" value={totalAssignments} accent />
-                        </div>
-                      </div>
+          return (
+            <>
+              {/* Header: avatar + name + summary stats inline */}
+              <header className="shrink-0 flex items-start gap-3 px-5 sm:px-6 py-4 border-b border-glass-border">
+                <div className="shrink-0 w-9 h-9 rounded-lg bg-brand-indigo/12 border border-brand-indigo/25 grid place-items-center text-brand-indigo text-[11px] font-bold">
+                  {initials || 'T'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h2 id="manage-assignments-title" className="text-[15px] sm:text-base font-bold tracking-tight text-foreground truncate">
+                    {isAssigning.name}
+                  </h2>
+                  <p className="text-text-secondary text-[12px] mt-0.5 leading-snug">
+                    Manage class &amp; subject assignments
+                  </p>
+                </div>
+                <div className="hidden sm:flex items-center gap-1.5 shrink-0">
+                  <StatChip label="classes" value={distinctClasses} />
+                  <StatChip label="subjects" value={distinctSubjects} />
+                  <StatChip label="total" value={totalAssignments} accent />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsAssigningId(null)}
+                  className="shrink-0 -mt-1 -mr-1.5 w-8 h-8 grid place-items-center rounded-lg text-text-secondary hover:text-foreground hover:bg-white/[0.06] transition-colors"
+                  aria-label="Close"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </header>
 
-                      {/* Sticky add-assignment form */}
-                      <div className="shrink-0 px-6 sm:px-7 py-4 border-b border-glass-border bg-brand-indigo/[0.025]">
-                        {assignError && (
-                          <div className="mb-3 p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold flex items-start gap-2">
-                            <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" /> {assignError}
-                          </div>
-                        )}
-                        <form
-                          onSubmit={handleAddAssignment}
-                          className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2.5 items-end"
-                        >
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-0.5 flex items-center gap-1.5">
-                              <School className="w-3 h-3" /> Class & section
-                            </label>
-                            <div className="relative">
-                              <select
-                                className="input-obsidian h-10 text-xs font-semibold appearance-none pr-8"
-                                value={assignmentForm.school_class_id || ''}
-                                onChange={e => setAssignmentForm({ ...assignmentForm, school_class_id: Number(e.target.value) })}
-                                required
-                              >
-                                <option value="">Select…</option>
-                                {schoolClasses.map(sc => (
-                                  <option key={sc.id} value={sc.id}>{sc.display_name}</option>
-                                ))}
-                              </select>
-                              <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-secondary pointer-events-none" />
-                            </div>
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-0.5 flex items-center gap-1.5">
-                              <BookOpen className="w-3 h-3" /> Subject
-                            </label>
-                            <div className="relative">
-                              <select
-                                className="input-obsidian h-10 text-xs font-semibold appearance-none pr-8"
-                                value={assignmentForm.subject_id || ''}
-                                onChange={e => setAssignmentForm({ ...assignmentForm, subject_id: Number(e.target.value) })}
-                                required
-                              >
-                                <option value="">Select…</option>
-                                {subjects.map(s => (
-                                  <option key={s.id} value={s.id}>{s.name}</option>
-                                ))}
-                              </select>
-                              <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-secondary pointer-events-none" />
-                            </div>
-                          </div>
-                          <button
-                            type="submit"
-                            disabled={isSubmittingAssign}
-                            className={cn("indigo-glow-button h-10 px-4 text-[11px] font-black uppercase tracking-wider", isSubmittingAssign && "opacity-50 cursor-wait")}
-                          >
-                            {isSubmittingAssign ? <Loader className="w-3.5 h-3.5 animate-spin mx-auto" /> : 'Assign'}
-                          </button>
-                        </form>
-                      </div>
+              {/* Add row — sticky, single line on desktop */}
+              <div className="shrink-0 px-5 sm:px-6 py-3 border-b border-glass-border modal-section">
+                {assignError && (
+                  <div className="mb-2.5 px-3 py-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-500 dark:text-rose-400 text-xs font-medium flex items-start gap-2">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                    <span className="leading-snug">{assignError}</span>
+                  </div>
+                )}
+                <form
+                  onSubmit={handleAddAssignment}
+                  className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2 items-center"
+                >
+                  <div className="relative">
+                    <School className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-secondary pointer-events-none z-10" />
+                    <select
+                      className="input-modal pl-8 pr-7"
+                      value={assignmentForm.school_class_id || ''}
+                      onChange={e => setAssignmentForm({ ...assignmentForm, school_class_id: Number(e.target.value) })}
+                      required
+                    >
+                      <option value="">Class &amp; section…</option>
+                      {schoolClasses.map(sc => (
+                        <option key={sc.id} value={sc.id}>{sc.display_name}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-secondary pointer-events-none" />
+                  </div>
+                  <div className="relative">
+                    <BookOpen className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-secondary pointer-events-none z-10" />
+                    <select
+                      className="input-modal pl-8 pr-7"
+                      value={assignmentForm.subject_id || ''}
+                      onChange={e => setAssignmentForm({ ...assignmentForm, subject_id: Number(e.target.value) })}
+                      required
+                    >
+                      <option value="">Subject…</option>
+                      {subjects.map(s => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-secondary pointer-events-none" />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingAssign || !assignmentForm.school_class_id || !assignmentForm.subject_id}
+                    className={cn(
+                      'modal-btn-primary h-9 px-3.5 text-xs gap-1.5',
+                      (isSubmittingAssign || !assignmentForm.school_class_id || !assignmentForm.subject_id) && 'opacity-50 cursor-not-allowed',
+                    )}
+                  >
+                    {isSubmittingAssign
+                      ? <Loader className="w-3.5 h-3.5 animate-spin" />
+                      : <><Plus className="w-3.5 h-3.5" /> Assign</>}
+                  </button>
+                </form>
+              </div>
 
-                      {/* Search + grouped assignment list */}
-                      <div className="flex-1 min-h-0 overflow-y-auto px-6 sm:px-7 py-4">
-                        {totalAssignments > 0 && (
-                          <div className="relative mb-3">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-secondary" />
-                            <input
-                              type="search"
-                              placeholder="Search class or subject…"
-                              className="input-obsidian h-9 pl-9 pr-9 text-xs"
-                              value={assignmentSearch}
-                              onChange={e => setAssignmentSearch(e.target.value)}
-                            />
-                            {assignmentSearch && (
+              {/* Search + compact responsive class grid */}
+              <div className="flex-1 min-h-0 overflow-y-auto px-5 sm:px-6 py-3">
+                {totalAssignments > 0 && (
+                  <div className="relative mb-3">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-secondary z-10" />
+                    <input
+                      type="search"
+                      placeholder="Filter by class or subject…"
+                      className="input-modal pl-8 pr-8"
+                      value={assignmentSearch}
+                      onChange={e => setAssignmentSearch(e.target.value)}
+                    />
+                    {assignmentSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setAssignmentSearch('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-text-secondary hover:text-foreground"
+                        aria-label="Clear search"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {totalAssignments === 0 ? (
+                  <div className="py-10 text-center border border-dashed border-glass-border rounded-xl">
+                    <div className="w-10 h-10 mx-auto rounded-lg bg-brand-indigo/10 border border-brand-indigo/20 grid place-items-center text-brand-indigo mb-2.5">
+                      <BookOpen className="w-4 h-4" />
+                    </div>
+                    <p className="text-[13px] font-semibold text-foreground">No assignments yet</p>
+                    <p className="text-[11.5px] text-text-secondary mt-1 max-w-xs mx-auto leading-relaxed">
+                      Pick a class &amp; subject above to give {isAssigning.name.split(' ')[0]} their first teaching slot.
+                    </p>
+                  </div>
+                ) : groupedClasses.length === 0 ? (
+                  <div className="py-10 text-center border border-dashed border-glass-border rounded-xl">
+                    <Search className="w-4 h-4 mx-auto text-text-secondary mb-2 opacity-60" />
+                    <p className="text-[12px] font-semibold text-foreground">No matches</p>
+                    <p className="text-[11.5px] text-text-secondary mt-0.5">
+                      Nothing matches “{assignmentSearch}”.
+                    </p>
+                  </div>
+                ) : (
+                  <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
+                    {groupedClasses.map(([className, items]) => (
+                      <li
+                        key={className}
+                        className="flex items-center gap-2 pl-1.5 pr-2 py-1.5 rounded-lg border border-glass-border hover:border-brand-indigo/25 hover:bg-white/[0.02] dark:hover:bg-white/[0.02] transition-colors min-w-0"
+                      >
+                        <span className="inline-flex items-center justify-center min-w-[44px] h-6 px-1.5 rounded-md bg-brand-indigo/12 border border-brand-indigo/25 text-brand-indigo text-[11px] font-bold tabular-nums shrink-0">
+                          {className}
+                        </span>
+                        <div className="flex flex-wrap items-center gap-1 min-w-0 flex-1">
+                          {items.map(a => (
+                            <span
+                              key={a.id}
+                              className="group/chip inline-flex items-center gap-0.5 pl-1.5 pr-0.5 h-5 rounded text-[11px] font-medium text-foreground hover:bg-rose-500/[0.06] transition-colors"
+                            >
+                              <span className="truncate max-w-[120px]">{a.subject_ref.name}</span>
                               <button
                                 type="button"
-                                onClick={() => setAssignmentSearch('')}
-                                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-text-secondary hover:text-foreground"
-                                aria-label="Clear search"
+                                onClick={() => handleDeleteAssignment(a.id)}
+                                className="w-4 h-4 grid place-items-center rounded text-text-secondary/60 hover:text-rose-500 transition-colors"
+                                title={`Remove ${a.subject_ref.name}`}
+                                aria-label={`Remove ${a.subject_ref.name}`}
                               >
                                 <X className="w-3 h-3" />
                               </button>
-                            )}
-                          </div>
-                        )}
+                            </span>
+                          ))}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
 
-                        {totalAssignments === 0 ? (
-                          <div className="py-10 text-center border border-dashed border-glass-border rounded-xl">
-                            <div className="w-12 h-12 mx-auto rounded-xl bg-brand-indigo/10 border border-brand-indigo/20 grid place-items-center text-brand-indigo mb-3">
-                              <BookOpen className="w-5 h-5" />
-                            </div>
-                            <p className="text-sm font-black text-foreground">No assignments yet</p>
-                            <p className="text-[11px] text-text-secondary mt-1 max-w-xs mx-auto leading-relaxed">
-                              Pick a class and a subject above to give {isAssigning.name.split(' ')[0]} their first teaching slot.
-                            </p>
-                          </div>
-                        ) : groupedClasses.length === 0 ? (
-                          <div className="py-10 text-center border border-dashed border-glass-border rounded-xl opacity-60">
-                            <Search className="w-5 h-5 mx-auto text-text-secondary mb-2" />
-                            <p className="text-xs font-bold uppercase tracking-widest">No matches</p>
-                            <p className="text-[11px] text-text-secondary mt-1">
-                              Nothing matches “{assignmentSearch}”. Try a different keyword.
-                            </p>
-                          </div>
-                        ) : (
-                          <ul className="space-y-2">
-                            {groupedClasses.map(([className, items]) => (
-                              <li
-                                key={className}
-                                className="rounded-xl bg-white/[0.02] border border-glass-border overflow-hidden"
-                              >
-                                <div className="flex items-center justify-between px-3 py-2 bg-brand-indigo/[0.05] border-b border-glass-border">
-                                  <span className="inline-flex items-center gap-2">
-                                    <span className="inline-flex items-center justify-center min-w-[44px] h-6 px-2 rounded-md bg-brand-indigo/15 border border-brand-indigo/25 text-brand-indigo text-[11px] font-black tabular-nums">
-                                      {className}
-                                    </span>
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-text-secondary">
-                                      {items.length} subject{items.length === 1 ? '' : 's'}
-                                    </span>
-                                  </span>
-                                </div>
-                                <ul className="divide-y divide-glass-border">
-                                  {items.map(a => (
-                                    <li
-                                      key={a.id}
-                                      className="group/item flex items-center justify-between gap-3 px-3 py-2 hover:bg-brand-indigo/[0.04] transition-colors"
-                                    >
-                                      <span className="text-sm font-bold text-foreground truncate inline-flex items-center gap-2">
-                                        <BookOpen className="w-3.5 h-3.5 text-text-secondary opacity-70 shrink-0" />
-                                        {a.subject_ref.name}
-                                      </span>
-                                      <button
-                                        onClick={() => handleDeleteAssignment(a.id)}
-                                        className="p-1.5 text-rose-500/40 hover:text-rose-500 hover:bg-rose-500/10 rounded-md transition-all opacity-60 group-hover/item:opacity-100"
-                                        title="Remove assignment"
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-
-                      {/* Sticky footer */}
-                      <div className="shrink-0 flex items-center justify-between gap-2 px-6 sm:px-7 py-3 border-t border-glass-border bg-[var(--bg-card)]/60">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-text-secondary hidden sm:block">
-                          {totalAssignments === 0
-                            ? 'No assignments yet'
-                            : assignmentSearch && filtered.length !== totalAssignments
-                              ? `${filtered.length} of ${totalAssignments} shown`
-                              : `${totalAssignments} assignment${totalAssignments === 1 ? '' : 's'}`}
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => setIsAssigningId(null)}
-                          className="px-4 h-10 rounded-xl text-xs font-black uppercase tracking-widest text-text-secondary hover:text-foreground border border-glass-border transition-colors ml-auto"
-                        >
-                          Close
-                        </button>
-                      </div>
-                    </>
-                  );
-                })()}
-              </motion.div>
-            </div>
-          </div>
-        )}
-      </AnimatePresence>
+              <ModalFooter
+                leading={
+                  <span>
+                    {totalAssignments === 0
+                      ? 'No assignments yet'
+                      : assignmentSearch && filtered.length !== totalAssignments
+                        ? `${filtered.length} of ${totalAssignments} shown`
+                        : `${totalAssignments} assignment${totalAssignments === 1 ? '' : 's'} across ${distinctClasses} class${distinctClasses === 1 ? '' : 'es'}`}
+                  </span>
+                }
+              >
+                <button
+                  type="button"
+                  onClick={() => setIsAssigningId(null)}
+                  className="modal-btn-secondary"
+                >
+                  Done
+                </button>
+              </ModalFooter>
+            </>
+          );
+        })()}
+      </ModalShell>
 
       {/* ── Edit Teacher Modal ── */}
-      <AnimatePresence>
+      <ModalShell
+        open={!!editingTeacher}
+        onClose={() => !isSubmittingEdit && setEditingTeacher(null)}
+        size="lg"
+        locked={isSubmittingEdit}
+        labelledBy="edit-teacher-title"
+      >
         {editingTeacher && (
-          <div className="fixed inset-0 z-50">
-            <motion.button
-              type="button"
-              aria-label="Close"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setEditingTeacher(null)}
-              className="fixed inset-0 bg-slate-950/65 backdrop-blur-md cursor-default"
+          <>
+            <ModalHeader
+              id="edit-teacher-title"
+              icon={<Pencil className="w-4 h-4" />}
+              title="Edit teacher"
+              subtitle="Update name, email, or phone number."
+              onClose={() => !isSubmittingEdit && setEditingTeacher(null)}
             />
-            <div className="fixed inset-0 flex items-center justify-center p-4 sm:p-6 pointer-events-none">
-              <motion.div
-                initial={{ scale: 0.94, opacity: 0, y: 12 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.94, opacity: 0, y: 12 }}
-                transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
-                className="relative w-full max-w-lg max-h-[88vh] obsidian-card border-brand-indigo/30 shadow-2xl pointer-events-auto flex flex-col overflow-hidden"
+            <ModalBody>
+              {editError && (
+                <div className="mb-4 px-3 py-2.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-500 dark:text-rose-400 text-xs font-medium flex items-start gap-2">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <span className="leading-snug">{editError}</span>
+                </div>
+              )}
+              <form id="edit-teacher-form" onSubmit={handleUpdate} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <CompactField label="Full name" required className="sm:col-span-2">
+                  <input autoFocus className="input-modal" value={editingTeacher.name} onChange={e => setEditingTeacher({ ...editingTeacher, name: e.target.value })} required />
+                </CompactField>
+                <CompactField label="Email">
+                  <input type="email" className="input-modal" value={editingTeacher.email} onChange={e => setEditingTeacher({ ...editingTeacher, email: e.target.value })} required />
+                </CompactField>
+                <CompactField label="Phone">
+                  <input className="input-modal" value={editingTeacher.phone || ''} onChange={e => setEditingTeacher({ ...editingTeacher, phone: e.target.value })} />
+                </CompactField>
+              </form>
+            </ModalBody>
+            <ModalFooter>
+              <button
+                type="button"
+                onClick={() => setEditingTeacher(null)}
+                disabled={isSubmittingEdit}
+                className="modal-btn-secondary"
               >
-                {/* Sticky header */}
-                <div className="shrink-0 flex items-center justify-between gap-3 px-6 py-4 border-b border-glass-border">
-                  <div className="min-w-0">
-                    <h2 className="text-xl font-black tracking-tight uppercase truncate">Edit teacher</h2>
-                    <p className="text-text-secondary text-xs mt-0.5">Update profile information</p>
-                  </div>
-                  <button onClick={() => setEditingTeacher(null)} className="p-2 hover:bg-white/5 rounded-xl border border-glass-border transition-all shrink-0" aria-label="Close">
-                    <X className="w-5 h-5 opacity-60" />
-                  </button>
-                </div>
-
-                {/* Scrollable body */}
-                <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5">
-                  {editError && (
-                    <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold flex items-start gap-2">
-                      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" /> {editError}
-                    </div>
-                  )}
-
-                  <form id="edit-teacher-form" onSubmit={handleUpdate} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-1.5 sm:col-span-2">
-                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Full name</label>
-                      <input autoFocus className="input-obsidian h-11" value={editingTeacher.name} onChange={e => setEditingTeacher({ ...editingTeacher, name: e.target.value })} required />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Email address</label>
-                      <input type="email" className="input-obsidian h-11" value={editingTeacher.email} onChange={e => setEditingTeacher({ ...editingTeacher, email: e.target.value })} required />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Phone number</label>
-                      <input className="input-obsidian h-11" value={editingTeacher.phone || ''} onChange={e => setEditingTeacher({ ...editingTeacher, phone: e.target.value })} />
-                    </div>
-                  </form>
-                </div>
-
-                {/* Sticky footer */}
-                <div className="shrink-0 flex items-center justify-end gap-2 px-6 py-3 border-t border-glass-border bg-[var(--bg-card)]/60">
-                  <button
-                    type="button"
-                    onClick={() => setEditingTeacher(null)}
-                    disabled={isSubmittingEdit}
-                    className="px-4 h-10 rounded-xl text-xs font-black uppercase tracking-widest text-text-secondary hover:text-foreground border border-glass-border transition-colors disabled:opacity-40"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    form="edit-teacher-form"
-                    disabled={isSubmittingEdit}
-                    className={cn("indigo-glow-button h-10 px-5 text-xs font-black uppercase tracking-wider", isSubmittingEdit && "opacity-50 cursor-wait")}
-                  >
-                    {isSubmittingEdit ? <Loader className="w-3.5 h-3.5 animate-spin" /> : 'Save changes'}
-                  </button>
-                </div>
-              </motion.div>
-            </div>
-          </div>
+                Cancel
+              </button>
+              <button
+                type="submit"
+                form="edit-teacher-form"
+                disabled={isSubmittingEdit}
+                className={cn('modal-btn-primary', isSubmittingEdit && 'opacity-50 cursor-wait')}
+              >
+                {isSubmittingEdit && <Loader className="w-3.5 h-3.5 animate-spin" />}
+                Save changes
+              </button>
+            </ModalFooter>
+          </>
         )}
-      </AnimatePresence>
+      </ModalShell>
 
       {/* ── Delete Teacher Confirmation ── */}
       <ConfirmModal
@@ -878,19 +815,38 @@ export default function TeacherDirectory() {
   );
 }
 
-/** Tiny outlined stat chip used in the Manage Assignments header. */
+/** Tiny outlined stat pill used in the Manage Assignments header. */
 function StatChip({ label, value, accent }: { label: string; value: number; accent?: boolean }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 px-2 py-1 rounded-md border text-[10px] font-black uppercase tracking-widest',
+        'inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10.5px] font-medium tabular-nums',
         accent
-          ? 'bg-brand-indigo/12 border-brand-indigo/30 text-brand-indigo'
+          ? 'bg-brand-indigo/10 border-brand-indigo/25 text-brand-indigo'
           : 'bg-white/[0.03] border-glass-border text-text-secondary',
       )}
     >
-      <span className="tabular-nums">{value}</span>
-      <span className="opacity-80">{label}</span>
+      <span className="font-semibold">{value}</span>
+      <span className="opacity-70">{label}</span>
     </span>
+  );
+}
+
+/** Compact label/value pair used inside the redesigned modals. */
+function CompactField({
+  label, required, className, children,
+}: {
+  label: string;
+  required?: boolean;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={cn('space-y-1', className)}>
+      <label className="block text-[11px] font-medium text-text-secondary">
+        {label}{required && <span className="text-rose-500 dark:text-rose-400"> *</span>}
+      </label>
+      {children}
+    </div>
   );
 }
