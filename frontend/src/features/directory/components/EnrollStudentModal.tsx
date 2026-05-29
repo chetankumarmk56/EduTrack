@@ -1,9 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, UserPlus, User, ShieldCheck, ArrowRight, AlertCircle, Loader } from 'lucide-react';
+import {
+  X, UserPlus, User, ShieldCheck, ArrowRight, ArrowLeft,
+  AlertCircle, Loader, CheckCircle2,
+} from 'lucide-react';
 import { directoryApi } from '@/features/directory/api';
 import { cn } from '@/shared/lib/utils';
 import { getErrorMessage } from '@/shared/lib/errorHandler';
+import { useToast } from '@/shared/components/ui/Toast';
 
 interface EnrollStudentModalProps {
   isOpen: boolean;
@@ -12,16 +16,101 @@ interface EnrollStudentModalProps {
   onEnrolled: () => void;
 }
 
-const EMPTY_FORM = { name: '', dob: '', whatsapp: '', parent_name: '', parent_email: '', parent_phone: '' };
+interface EnrollForm {
+  name: string;
+  dob: string;
+  whatsapp: string;
+  parent_name: string;
+  parent_email: string;
+  parent_phone: string;
+}
 
-export default function EnrollStudentModal({ isOpen, onClose, selectedSchoolClassId, onEnrolled }: EnrollStudentModalProps) {
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+const EMPTY_FORM: EnrollForm = {
+  name: '', dob: '', whatsapp: '',
+  parent_name: '', parent_email: '', parent_phone: '',
+};
+
+const NAME_REGEX = /^[A-Za-z][A-Za-z\s.'-]{1,}$/;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+type StepKey = 'student' | 'guardian';
+const STEP_ORDER: StepKey[] = ['student', 'guardian'];
+
+/**
+ * Field-by-field validation. Returns an object keyed by field name with
+ * a string when the field has an issue and `undefined` when it's fine.
+ *
+ * We expose `fieldsForStep` so the wizard can check only the visible
+ * step before letting the user advance.
+ */
+function validateField(field: keyof EnrollForm, value: string, form: EnrollForm): string | undefined {
+  switch (field) {
+    case 'name': {
+      const v = value.trim();
+      if (!v) return 'Student name is required.';
+      if (v.length < 2) return 'Name must be at least 2 characters.';
+      if (!NAME_REGEX.test(v)) return "Letters, spaces, and . ' - only.";
+      return undefined;
+    }
+    case 'dob': {
+      if (!value) return 'Date of birth is required.';
+      const dobDate = new Date(value);
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      if (Number.isNaN(dobDate.getTime())) return 'Invalid date.';
+      if (dobDate >= today) return 'Must be in the past.';
+      const ageYears = (today.getTime() - dobDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+      if (ageYears < 3) return 'Student must be at least 3 years old.';
+      if (ageYears > 25) return 'Date of birth seems too old.';
+      return undefined;
+    }
+    case 'whatsapp': {
+      const digits = (value.match(/\d/g) || []).length;
+      if (!value.trim()) return 'WhatsApp number is required.';
+      if (digits < 10) return 'Enter a complete number (min 10 digits).';
+      if (digits > 15) return 'Number is too long (max 15 digits).';
+      return undefined;
+    }
+    case 'parent_name': {
+      const v = value.trim();
+      if (!v) return 'Guardian name is required.';
+      if (v.length < 2) return 'Name must be at least 2 characters.';
+      if (!NAME_REGEX.test(v)) return "Letters, spaces, and . ' - only.";
+      return undefined;
+    }
+    case 'parent_email': {
+      if (!value.trim()) return 'Email is required.';
+      if (!EMAIL_REGEX.test(value.trim())) return 'Invalid email format.';
+      return undefined;
+    }
+    case 'parent_phone': {
+      const digits = (value.match(/\d/g) || []).length;
+      if (!value.trim()) return 'Phone is required for portal login.';
+      if (digits < 10) return 'Enter a complete number (min 10 digits).';
+      if (digits > 15) return 'Number is too long (max 15 digits).';
+      // Mismatch with student DOB → the parent-portal login won't work.
+      if (form.parent_phone && !form.parent_phone.trim()) return undefined;
+      return undefined;
+    }
+  }
+}
+
+const FIELDS_FOR_STEP: Record<StepKey, (keyof EnrollForm)[]> = {
+  student: ['name', 'dob', 'whatsapp'],
+  guardian: ['parent_name', 'parent_email', 'parent_phone'],
+};
+
+export default function EnrollStudentModal({
+  isOpen, onClose, selectedSchoolClassId, onEnrolled,
+}: EnrollStudentModalProps) {
+  const [form, setForm] = useState<EnrollForm>(EMPTY_FORM);
+  const [errors, setErrors] = useState<Partial<Record<keyof EnrollForm | 'submit', string>>>({});
+  const [step, setStep] = useState<StepKey>('student');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const toast = useToast();
 
-  // Lock body scroll while the modal is open so the page underneath
-  // doesn't keep growing as the user scrolls. Previously the user could
-  // scroll past the bottom of the page into blank space.
+  // Lock body scroll so the page underneath doesn't keep growing as
+  // the user scrolls. Was the source of the "infinite blank scroll"
+  // complaint earlier.
   useEffect(() => {
     if (!isOpen) return;
     const prev = document.body.style.overflow;
@@ -29,94 +118,82 @@ export default function EnrollStudentModal({ isOpen, onClose, selectedSchoolClas
     return () => { document.body.style.overflow = prev; };
   }, [isOpen]);
 
+  // Reset state every time the modal opens.
+  useEffect(() => {
+    if (isOpen) {
+      setForm(EMPTY_FORM);
+      setErrors({});
+      setStep('student');
+    }
+  }, [isOpen]);
+
   const handleClose = () => {
-    setForm(EMPTY_FORM);
-    setErrors({});
+    if (isSubmitting) return;
     onClose();
   };
 
-  const validateForm = () => {
-    const newErrors: Record<string, string> = {};
-    const nameRegex = /^[A-Za-z][A-Za-z\s.'-]{1,}$/;
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const setField = (field: keyof EnrollForm, value: string) => {
+    setForm(prev => ({ ...prev, [field]: value }));
+    if (errors[field]) setErrors(prev => ({ ...prev, [field]: undefined }));
+    if (errors.submit) setErrors(prev => ({ ...prev, submit: undefined }));
+  };
 
-    const name = form.name.trim();
-    if (!name) {
-      newErrors.name = "Student name is required.";
-    } else if (name.length < 2) {
-      newErrors.name = "Name must be at least 2 characters.";
-    } else if (!nameRegex.test(name)) {
-      newErrors.name = "Name can only contain letters, spaces, and . ' -";
+  const blurValidate = (field: keyof EnrollForm) => {
+    setErrors(prev => ({ ...prev, [field]: validateField(field, form[field], form) }));
+  };
+
+  const stepErrors = useMemo(() => {
+    const next: Partial<Record<keyof EnrollForm, string>> = {};
+    for (const field of FIELDS_FOR_STEP[step]) {
+      const msg = validateField(field, form[field], form);
+      if (msg) next[field] = msg;
     }
+    return next;
+  }, [form, step]);
 
-    if (!form.dob) {
-      newErrors.dob = "Date of birth is required.";
-    } else {
-      const dobDate = new Date(form.dob);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      if (Number.isNaN(dobDate.getTime())) {
-        newErrors.dob = "Invalid date.";
-      } else if (dobDate >= today) {
-        newErrors.dob = "Must be in the past.";
-      } else {
-        const ageMs = today.getTime() - dobDate.getTime();
-        const ageYears = ageMs / (365.25 * 24 * 60 * 60 * 1000);
-        if (ageYears < 3) newErrors.dob = "Student must be at least 3 years old.";
-        else if (ageYears > 25) newErrors.dob = "Date of birth seems too old.";
-      }
+  const stepIndex = STEP_ORDER.indexOf(step);
+  const isLastStep = stepIndex === STEP_ORDER.length - 1;
+  const canAdvance = Object.keys(stepErrors).length === 0;
+
+  const handleNext = () => {
+    if (!canAdvance) {
+      setErrors(prev => ({ ...prev, ...stepErrors }));
+      return;
     }
+    setStep(STEP_ORDER[stepIndex + 1]);
+  };
 
-    const whatsappDigits = (form.whatsapp.match(/\d/g) || []).length;
-    if (!form.whatsapp.trim()) {
-      newErrors.whatsapp = "WhatsApp number is required.";
-    } else if (whatsappDigits < 10) {
-      newErrors.whatsapp = "Enter a complete number (min 10 digits).";
-    } else if (whatsappDigits > 15) {
-      newErrors.whatsapp = "Number is too long (max 15 digits).";
-    }
-
-    const parentName = form.parent_name.trim();
-    if (!parentName) {
-      newErrors.parent_name = "Guardian name is required.";
-    } else if (parentName.length < 2) {
-      newErrors.parent_name = "Name must be at least 2 characters.";
-    } else if (!nameRegex.test(parentName)) {
-      newErrors.parent_name = "Name can only contain letters, spaces, and . ' -";
-    }
-
-    if (!form.parent_email.trim()) {
-      newErrors.parent_email = "Email is required.";
-    } else if (!emailRegex.test(form.parent_email.trim())) {
-      newErrors.parent_email = "Invalid email format.";
-    }
-
-    // Parent phone is compulsory — the parent portal login uses (guardian_phone, student_dob).
-    const phoneDigits = (form.parent_phone.match(/\d/g) || []).length;
-    if (!form.parent_phone.trim()) {
-      newErrors.parent_phone = "Parent phone is required for portal login.";
-    } else if (phoneDigits < 10) {
-      newErrors.parent_phone = "Enter a complete phone number (min 10 digits).";
-    } else if (phoneDigits > 15) {
-      newErrors.parent_phone = "Number is too long (max 15 digits).";
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+  const handleBack = () => {
+    if (stepIndex > 0) setStep(STEP_ORDER[stepIndex - 1]);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedSchoolClassId) {
-      setErrors({ submit: "Please select a class before enrolling a student." });
+      setErrors({ submit: 'Please select a class before enrolling a student.' });
       return;
     }
-    if (!validateForm()) return;
+
+    // Validate every field across both steps before sending.
+    const allErrors: Partial<Record<keyof EnrollForm, string>> = {};
+    for (const field of [...FIELDS_FOR_STEP.student, ...FIELDS_FOR_STEP.guardian]) {
+      const msg = validateField(field, form[field], form);
+      if (msg) allErrors[field] = msg;
+    }
+    if (Object.keys(allErrors).length > 0) {
+      setErrors(allErrors);
+      // Jump back to the first step that has an error so the user sees it.
+      const firstBadStep = STEP_ORDER.find(s =>
+        FIELDS_FOR_STEP[s].some(f => allErrors[f]),
+      );
+      if (firstBadStep) setStep(firstBadStep);
+      return;
+    }
 
     setIsSubmitting(true);
     setErrors({});
     try {
-      await directoryApi.createStudent({
+      const created = await directoryApi.createStudent({
         name: form.name.trim(),
         dob: form.dob,
         whatsapp: form.whatsapp.trim(),
@@ -126,11 +203,18 @@ export default function EnrollStudentModal({ isOpen, onClose, selectedSchoolClas
         password: form.dob,
         school_class_id: selectedSchoolClassId,
       });
-      handleClose();
+      toast.success(
+        'Student enrolled',
+        `${created?.name ?? form.name.trim()} added to the class.`,
+      );
+      onClose();
       onEnrolled();
     } catch (err) {
       const error = getErrorMessage(err);
-      setErrors({ submit: error.message || "Failed to enroll student. Please check your input and try again." });
+      setErrors({
+        submit: error.message
+          || 'Could not enroll this student. Check the details and try again.',
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -155,163 +239,281 @@ export default function EnrollStudentModal({ isOpen, onClose, selectedSchoolClas
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.96, opacity: 0, y: 12 }}
               transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
-              className="relative w-full max-w-2xl obsidian-card border-brand-indigo/30 p-6 sm:p-8 shadow-[0_0_80px_rgba(99,102,241,0.12)] my-4 sm:my-6 pointer-events-auto"
+              className="relative w-full max-w-xl obsidian-card border-brand-indigo/30 shadow-[0_0_80px_rgba(99,102,241,0.12)] my-4 sm:my-6 pointer-events-auto overflow-hidden"
             >
-            <div className="absolute -top-16 -right-16 w-48 h-48 bg-brand-indigo/8 blur-[80px] rounded-full pointer-events-none" />
+              <div className="absolute -top-16 -right-16 w-48 h-48 bg-brand-indigo/8 blur-[80px] rounded-full pointer-events-none" />
 
-            <div className="flex items-center justify-between mb-6 sm:mb-8 relative z-10">
-              <div>
-                <h2 className="text-xl sm:text-2xl font-black tracking-tight uppercase">Enroll Student</h2>
-                <p className="text-text-secondary text-sm mt-0.5">Add a new student to the selected class.</p>
+              {/* ── Header + stepper ─────────────────────────── */}
+              <div className="relative z-10 flex items-start justify-between gap-3 px-6 sm:px-7 pt-6">
+                <div className="min-w-0">
+                  <h2 className="text-xl sm:text-2xl font-black tracking-tight uppercase">Enroll Student</h2>
+                  <p className="text-text-secondary text-sm mt-0.5">Add a new student to the selected class.</p>
+                </div>
+                <button
+                  onClick={handleClose}
+                  className="p-2.5 hover:bg-white/5 rounded-xl transition-all border border-glass-border shrink-0"
+                  aria-label="Close"
+                >
+                  <X className="w-5 h-5 opacity-50 hover:opacity-100" />
+                </button>
               </div>
-              <button onClick={handleClose} className="p-2.5 hover:bg-white/5 rounded-xl transition-all border border-glass-border">
-                <X className="w-5 h-5 opacity-50 hover:opacity-100" />
-              </button>
-            </div>
 
-            {errors.submit && (
-              <div className="mb-6 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold flex items-center gap-2.5">
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                {errors.submit}
-              </div>
-            )}
+              <Stepper current={stepIndex} total={STEP_ORDER.length} className="px-6 sm:px-7 mt-5" />
 
-            <form onSubmit={handleSubmit} className="space-y-6 relative z-10">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-6">
+              {errors.submit && (
+                <div className="mx-6 sm:mx-7 mt-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <span className="leading-snug">{errors.submit}</span>
+                </div>
+              )}
 
-                {/* Student details */}
-                <div className="space-y-5">
-                  <div className="flex items-center gap-2 text-brand-indigo/80">
-                    <UserPlus className="w-4 h-4" />
-                    <span className="text-[10px] font-black uppercase tracking-[0.25em]">Student Details</span>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1 flex justify-between items-center">
-                        <span>Full Name <span className="text-rose-400">*</span></span>
-                        {errors.name && <span className="text-rose-400 normal-case tracking-normal font-medium italic">{errors.name}</span>}
-                      </label>
+              <form onSubmit={handleSubmit} className="relative z-10 px-6 sm:px-7 pt-5 pb-6 space-y-5">
+                {step === 'student' && (
+                  <Section
+                    icon={<UserPlus className="w-4 h-4" />}
+                    label="Student details"
+                  >
+                    <Field
+                      label="Full name"
+                      required
+                      error={errors.name}
+                    >
                       <input
                         autoFocus
                         placeholder="e.g. Arjun Mehta"
                         maxLength={80}
-                        className={cn("input-obsidian", errors.name && "border-rose-500/50 bg-rose-500/[0.02]")}
+                        className={cn('input-obsidian', errors.name && 'border-rose-500/50 bg-rose-500/[0.02]')}
                         value={form.name}
-                        onChange={e => { setForm({ ...form, name: e.target.value }); if (errors.name) setErrors({ ...errors, name: '' }); }}
+                        onChange={e => setField('name', e.target.value)}
+                        onBlur={() => blurValidate('name')}
                       />
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1 flex justify-between">
-                          <span>Date of Birth <span className="text-rose-400">*</span></span>
-                          {errors.dob && <span className="text-rose-400 normal-case tracking-normal font-medium italic">{errors.dob}</span>}
-                        </label>
+                    </Field>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <Field
+                        label="Date of birth"
+                        required
+                        error={errors.dob}
+                      >
                         <input
                           type="date"
-                          max={(() => {
-                            const t = new Date();
-                            const y = t.getFullYear();
-                            const m = String(t.getMonth() + 1).padStart(2, '0');
-                            const d = String(t.getDate()).padStart(2, '0');
-                            return `${y}-${m}-${d}`;
-                          })()}
-                          className={cn("input-obsidian", errors.dob && "border-rose-500/50 bg-rose-500/[0.02]")}
+                          max={maxDobToday()}
+                          className={cn('input-obsidian', errors.dob && 'border-rose-500/50 bg-rose-500/[0.02]')}
                           value={form.dob}
-                          onChange={e => { setForm({ ...form, dob: e.target.value }); if (errors.dob) setErrors({ ...errors, dob: '' }); }}
+                          onChange={e => setField('dob', e.target.value)}
+                          onBlur={() => blurValidate('dob')}
                         />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1 flex justify-between">
-                          <span>WhatsApp <span className="text-rose-400">*</span></span>
-                          {errors.whatsapp && <span className="text-rose-400 normal-case tracking-normal font-medium italic">{errors.whatsapp}</span>}
-                        </label>
+                      </Field>
+                      <Field
+                        label="WhatsApp"
+                        required
+                        error={errors.whatsapp}
+                      >
                         <input
                           type="tel"
                           inputMode="tel"
                           placeholder="+91 98765 43210"
                           maxLength={20}
-                          className={cn("input-obsidian", errors.whatsapp && "border-rose-500/50 bg-rose-500/[0.02]")}
+                          className={cn('input-obsidian', errors.whatsapp && 'border-rose-500/50 bg-rose-500/[0.02]')}
                           value={form.whatsapp}
-                          onChange={e => { setForm({ ...form, whatsapp: e.target.value }); if (errors.whatsapp) setErrors({ ...errors, whatsapp: '' }); }}
+                          onChange={e => setField('whatsapp', e.target.value)}
+                          onBlur={() => blurValidate('whatsapp')}
                         />
-                      </div>
+                      </Field>
                     </div>
-                  </div>
-                </div>
+                  </Section>
+                )}
 
-                {/* Parent/guardian details */}
-                <div className="space-y-5">
-                  <div className="flex items-center gap-2 text-brand-indigo/80">
-                    <User className="w-4 h-4" />
-                    <span className="text-[10px] font-black uppercase tracking-[0.25em]">Parent / Guardian</span>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1 flex justify-between">
-                        <span>Guardian Name <span className="text-rose-400">*</span></span>
-                        {errors.parent_name && <span className="text-rose-400 normal-case tracking-normal font-medium italic">{errors.parent_name}</span>}
-                      </label>
+                {step === 'guardian' && (
+                  <Section
+                    icon={<User className="w-4 h-4" />}
+                    label="Parent / guardian"
+                  >
+                    <Field
+                      label="Guardian name"
+                      required
+                      error={errors.parent_name}
+                    >
                       <input
+                        autoFocus
                         placeholder="e.g. Suresh Mehta"
                         maxLength={80}
-                        className={cn("input-obsidian", errors.parent_name && "border-rose-500/50 bg-rose-500/[0.02]")}
+                        className={cn('input-obsidian', errors.parent_name && 'border-rose-500/50 bg-rose-500/[0.02]')}
                         value={form.parent_name}
-                        onChange={e => { setForm({ ...form, parent_name: e.target.value }); if (errors.parent_name) setErrors({ ...errors, parent_name: '' }); }}
+                        onChange={e => setField('parent_name', e.target.value)}
+                        onBlur={() => blurValidate('parent_name')}
                       />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1 flex justify-between">
-                        <span>Email Address <span className="text-rose-400">*</span></span>
-                        {errors.parent_email && <span className="text-rose-400 normal-case tracking-normal font-medium italic">{errors.parent_email}</span>}
-                      </label>
+                    </Field>
+                    <Field
+                      label="Email address"
+                      required
+                      error={errors.parent_email}
+                    >
                       <input
                         type="email"
                         placeholder="suresh@gmail.com"
                         maxLength={120}
-                        className={cn("input-obsidian", errors.parent_email && "border-rose-500/50 bg-rose-500/[0.02]")}
+                        className={cn('input-obsidian', errors.parent_email && 'border-rose-500/50 bg-rose-500/[0.02]')}
                         value={form.parent_email}
-                        onChange={e => { setForm({ ...form, parent_email: e.target.value }); if (errors.parent_email) setErrors({ ...errors, parent_email: '' }); }}
+                        onChange={e => setField('parent_email', e.target.value)}
+                        onBlur={() => blurValidate('parent_email')}
                       />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1 flex justify-between">
-                        <span>Phone Number <span className="text-rose-400">*</span></span>
-                        {errors.parent_phone && <span className="text-rose-400 normal-case tracking-normal font-medium italic">{errors.parent_phone}</span>}
-                      </label>
+                    </Field>
+                    <Field
+                      label="Phone number"
+                      required
+                      error={errors.parent_phone}
+                      hint="Used as the parent's login credential."
+                    >
                       <input
                         type="tel"
                         inputMode="tel"
                         placeholder="+91 98765 43210"
-                        className={cn("input-obsidian", errors.parent_phone && "border-rose-500/50 bg-rose-500/[0.02]")}
+                        className={cn('input-obsidian', errors.parent_phone && 'border-rose-500/50 bg-rose-500/[0.02]')}
                         value={form.parent_phone}
-                        onChange={e => { setForm({ ...form, parent_phone: e.target.value }); if (errors.parent_phone) setErrors({ ...errors, parent_phone: '' }); }}
+                        onChange={e => setField('parent_phone', e.target.value)}
+                        onBlur={() => blurValidate('parent_phone')}
                       />
-                      <p className="text-[10px] text-text-secondary opacity-50 ml-1">Used as the parent's login credential.</p>
-                    </div>
+                    </Field>
+                    <SummaryRow form={form} />
+                  </Section>
+                )}
+
+                {/* ── Footer / actions ────────────────────────── */}
+                <div className="pt-4 border-t border-glass-border flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-[10px] text-text-secondary opacity-50">
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    Password auto-set to date of birth
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {stepIndex > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleBack}
+                        disabled={isSubmitting}
+                        className="inline-flex items-center gap-1.5 h-11 px-4 rounded-xl text-xs font-black uppercase tracking-widest text-text-secondary hover:text-foreground border border-glass-border transition-colors disabled:opacity-40"
+                      >
+                        <ArrowLeft className="w-3.5 h-3.5" /> Back
+                      </button>
+                    )}
+                    {!isLastStep ? (
+                      <button
+                        type="button"
+                        onClick={handleNext}
+                        disabled={!canAdvance}
+                        className={cn(
+                          'indigo-glow-button h-11 px-6 text-xs font-black uppercase tracking-widest inline-flex items-center gap-2',
+                          !canAdvance && 'opacity-50 cursor-not-allowed',
+                        )}
+                      >
+                        Continue <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    ) : (
+                      <button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className={cn(
+                          'indigo-glow-button h-11 px-6 text-xs font-black uppercase tracking-widest inline-flex items-center gap-2',
+                          isSubmitting && 'opacity-50 cursor-wait',
+                        )}
+                      >
+                        {isSubmitting ? (
+                          <><Loader className="w-3.5 h-3.5 animate-spin" /> Enrolling…</>
+                        ) : (
+                          <>Enroll student <CheckCircle2 className="w-3.5 h-3.5" /></>
+                        )}
+                      </button>
+                    )}
                   </div>
                 </div>
-              </div>
-
-              <div className="pt-5 border-t border-glass-border flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-0">
-                <div className="flex items-center gap-2 text-[10px] text-text-secondary opacity-40">
-                  <ShieldCheck className="w-3.5 h-3.5" /> Login password auto-set to date of birth
-                </div>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className={cn("indigo-glow-button h-12 px-8 text-sm font-black uppercase tracking-wider", isSubmitting && "opacity-50 cursor-wait")}
-                >
-                  {isSubmitting
-                    ? <><Loader className="w-4 h-4 animate-spin mr-2" /> Enrolling...</>
-                    : <>Enroll Student <ArrowRight className="w-4 h-4 ml-2" /></>
-                  }
-                </button>
-              </div>
-            </form>
+              </form>
             </motion.div>
           </div>
         </div>
       )}
     </AnimatePresence>
+  );
+}
+
+/* ── Local helpers ────────────────────────────────────────────────── */
+
+function maxDobToday(): string {
+  const t = new Date();
+  const y = t.getFullYear();
+  const m = String(t.getMonth() + 1).padStart(2, '0');
+  const d = String(t.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function Stepper({ current, total, className }: { current: number; total: number; className?: string }) {
+  return (
+    <div className={cn('flex items-center gap-2', className)}>
+      {Array.from({ length: total }).map((_, i) => (
+        <div
+          key={i}
+          className={cn(
+            'h-1.5 rounded-full transition-all duration-300',
+            i <= current ? 'bg-brand-indigo flex-[2]' : 'bg-white/10 dark:bg-white/10 flex-1',
+          )}
+          aria-current={i === current ? 'step' : undefined}
+        />
+      ))}
+      <span className="text-[10px] font-black uppercase tracking-widest text-text-secondary ml-2">
+        Step {current + 1} / {total}
+      </span>
+    </div>
+  );
+}
+
+function Section({
+  icon, label, children,
+}: { icon: React.ReactNode; label: string; children: React.ReactNode }) {
+  return (
+    <section className="space-y-4">
+      <div className="flex items-center gap-2 text-brand-indigo">
+        {icon}
+        <span className="text-[10px] font-black uppercase tracking-[0.25em]">{label}</span>
+      </div>
+      <div className="space-y-4">{children}</div>
+    </section>
+  );
+}
+
+function Field({
+  label, required, error, hint, children,
+}: {
+  label: string;
+  required?: boolean;
+  error?: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1 flex justify-between items-center">
+        <span>
+          {label}
+          {required && <span className="text-rose-400"> *</span>}
+        </span>
+        {error && (
+          <span className="text-rose-400 normal-case tracking-normal font-medium italic">{error}</span>
+        )}
+      </label>
+      {children}
+      {hint && !error && (
+        <p className="text-[10px] text-text-secondary opacity-60 ml-1">{hint}</p>
+      )}
+    </div>
+  );
+}
+
+function SummaryRow({ form }: { form: EnrollForm }) {
+  if (!form.name && !form.dob) return null;
+  return (
+    <div className="mt-2 p-3 rounded-xl border border-glass-border bg-white/[0.02] text-[11px] text-text-secondary leading-relaxed">
+      <p>
+        Enrolling <span className="font-black text-foreground">{form.name || '—'}</span>
+        {form.dob && <> · DOB <span className="font-mono">{form.dob}</span></>}
+      </p>
+    </div>
   );
 }

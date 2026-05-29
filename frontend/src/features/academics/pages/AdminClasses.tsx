@@ -11,6 +11,7 @@ import { useApp } from '@/shared/contexts/AppContext';
 import { cn } from '@/shared/lib/utils';
 import { getErrorMessage } from '@/shared/lib/errorHandler';
 import ConfirmModal from '@/shared/components/ui/ConfirmModal';
+import { useToast } from '@/shared/components/ui/Toast';
 import type { Grade, Subject } from '@/shared/types';
 
 type FormBanner = { kind: 'error' | 'success'; text: string } | null;
@@ -22,12 +23,20 @@ interface ClassDeleteTarget {
     classrooms: number;
     students: number;
     teacher_assignments: number;
+    teachers: number;
+    timetable_slots: number;
   };
   loadingCounts: boolean;
 }
 
+// Section identifiers stay short and tidy so the same chips fit in
+// timetable / marks badges. Mirrors SECTION_NAME_PATTERN in the backend.
+const SECTION_NAME_PATTERN = /^[A-Z0-9]{1,4}$/;
+const SECTION_NAME_RULE = '1–4 characters, letters/digits only (e.g. A, B, AB, 12).';
+
 export default function AdminClasses() {
   const { grades: classes, sections, subjects, refreshDirectory } = useApp();
+  const toast = useToast();
 
   const [selectedGradeId, setSelectedGradeId] = useState<number | null>(null);
   const [isAddingClass, setIsAddingClass] = useState(false);
@@ -66,6 +75,26 @@ export default function AdminClasses() {
       .map(n => n.trim().toUpperCase())
       .filter(Boolean);
 
+  /**
+   * Group the parsed tokens into "valid" / "invalid" / "duplicate in input"
+   * up-front so we can show the same triage the backend would return without
+   * a round trip when nothing is valid.
+   */
+  const triageSectionNames = (input: string) => {
+    const tokens = parseSectionNames(input);
+    const seen = new Set<string>();
+    const valid: string[] = [];
+    const invalid: string[] = [];
+    const dupInRequest: string[] = [];
+    for (const t of tokens) {
+      if (!SECTION_NAME_PATTERN.test(t)) { invalid.push(t); continue; }
+      if (seen.has(t)) { dupInRequest.push(t); continue; }
+      seen.add(t);
+      valid.push(t);
+    }
+    return { tokens, valid, invalid, dupInRequest };
+  };
+
   const handleCreateClass = async (e: React.FormEvent) => {
     e.preventDefault();
     setClassBanner(null);
@@ -80,6 +109,7 @@ export default function AdminClasses() {
         fee_due_date: classForm.fee_due_date === '' ? undefined : classForm.fee_due_date,
       };
 
+      const wasEditing = !!editingClass;
       const result = editingClass
         ? await academicApi.updateClass(editingClass.id, payload)
         : await academicApi.createClass(payload);
@@ -89,6 +119,10 @@ export default function AdminClasses() {
       setClassForm({ name: '', level: 0, tuition_fee: 0, fee_due_date: '' });
       await refreshDirectory(true);
       if (result?.id) setSelectedGradeId(result.id);
+      toast.success(
+        wasEditing ? 'Class updated' : 'Class created',
+        result?.name ? `${result.name} is ready to use.` : undefined,
+      );
     } catch (err) {
       setClassBanner({
         kind: 'error',
@@ -103,34 +137,72 @@ export default function AdminClasses() {
     e.preventDefault();
     setSectionBanner(null);
     if (!selectedGradeId) return;
-    const names = parseSectionNames(sectionInput);
-    if (names.length === 0) {
+
+    const trimmed = sectionInput.trim();
+    if (!trimmed) {
       setSectionBanner({ kind: 'error', text: 'Enter at least one section name.' });
       return;
     }
-    setSectionSubmitting(true);
-    try {
-      // Single name → use the original single-section endpoint so the
-      // existing audit / response shape doesn't change. Multiple names →
-      // batch endpoint which skips duplicates and reports them.
-      if (names.length === 1) {
-        await academicApi.deploySegment({ name: names[0], grade_id: selectedGradeId });
-        setSectionBanner({ kind: 'success', text: `Section ${names[0]} added.` });
-      } else {
-        const res = await academicApi.deploySegmentsBulk(selectedGradeId, names);
-        const createdNames = res.created.map(s => s.name).join(', ');
-        const msg = res.skipped.length
-          ? `Added ${res.created.length} section(s): ${createdNames || '—'}. Skipped existing: ${res.skipped.join(', ')}.`
-          : `Added ${res.created.length} section(s): ${createdNames}.`;
-        setSectionBanner({ kind: res.created.length ? 'success' : 'error', text: msg });
-      }
-      setSectionInput('');
-      await refreshDirectory(true);
-    } catch (err) {
+
+    const { valid, invalid, dupInRequest } = triageSectionNames(trimmed);
+    if (valid.length === 0) {
+      const reasons: string[] = [];
+      if (invalid.length) reasons.push(`Invalid: ${invalid.join(', ')}`);
+      if (dupInRequest.length) reasons.push(`Repeated: ${dupInRequest.join(', ')}`);
       setSectionBanner({
         kind: 'error',
-        text: getErrorMessage(err).message || 'Unable to add sections. Please try again.',
+        text: reasons.length
+          ? `${reasons.join('. ')}. Section names: ${SECTION_NAME_RULE}`
+          : `No valid section names. ${SECTION_NAME_RULE}`,
       });
+      return;
+    }
+
+    setSectionSubmitting(true);
+    try {
+      // Always go through the bulk endpoint — it gives us the richer
+      // triage shape and the single-name path is just N=1.
+      const res = await academicApi.deploySegmentsBulk(selectedGradeId, valid);
+
+      const createdNames = res.created.map(s => s.name);
+      const skippedExists = res.skipped.filter(s => s.reason === 'already_exists').map(s => s.name);
+      const skippedDupReq = [
+        ...dupInRequest,
+        ...res.skipped.filter(s => s.reason === 'duplicate_in_request').map(s => s.name),
+      ];
+      const invalidServer = res.invalid.map(s => s.name);
+      const allInvalid = [...new Set([...invalid, ...invalidServer])];
+
+      // Build a single concise toast that lists every bucket.
+      if (createdNames.length > 0) {
+        const tail: string[] = [];
+        if (skippedExists.length) tail.push(`already exists: ${skippedExists.join(', ')}`);
+        if (skippedDupReq.length) tail.push(`repeated: ${skippedDupReq.join(', ')}`);
+        if (allInvalid.length) tail.push(`invalid: ${allInvalid.join(', ')}`);
+        toast.success(
+          `Added ${createdNames.length} section${createdNames.length === 1 ? '' : 's'}: ${createdNames.join(', ')}`,
+          tail.length ? tail.join(' · ') : undefined,
+        );
+        // Wipe the field only when at least one section was created so
+        // the admin can correct + retry the invalid entries.
+        setSectionInput('');
+      } else {
+        const reasons: string[] = [];
+        if (skippedExists.length) reasons.push(`Already exist: ${skippedExists.join(', ')}`);
+        if (skippedDupReq.length) reasons.push(`Repeated: ${skippedDupReq.join(', ')}`);
+        if (allInvalid.length) reasons.push(`Invalid: ${allInvalid.join(', ')}`);
+        toast.error(
+          'No sections were added',
+          reasons.length ? reasons.join('. ') : 'Please review the section names and try again.',
+        );
+      }
+
+      await refreshDirectory(true);
+    } catch (err) {
+      toast.error(
+        'Could not add sections',
+        getErrorMessage(err).message || 'Please try again in a moment.',
+      );
     } finally {
       setSectionSubmitting(false);
     }
@@ -146,10 +218,11 @@ export default function AdminClasses() {
     setSubjectSubmitting(true);
     try {
       const uniqueCode = `${subjectForm.name.substring(0, 3).toUpperCase()}-${Math.floor(Date.now() % 10000)}`;
-      await academicApi.createSubject({ name: subjectForm.name.trim(), code: uniqueCode });
+      const created = await academicApi.createSubject({ name: subjectForm.name.trim(), code: uniqueCode });
       setIsAddingSubject(false);
       setSubjectForm({ name: '', code: '' });
       await refreshDirectory(true);
+      toast.success('Subject added', created?.name);
     } catch (err) {
       setSubjectBanner({
         kind: 'error',
@@ -192,14 +265,15 @@ export default function AdminClasses() {
   const performClassDelete = async () => {
     if (!classDeleteTarget) return;
     setDeleting(true);
+    const name = classDeleteTarget.grade.name;
     try {
       await academicApi.deleteClass(classDeleteTarget.grade.id);
       if (selectedGradeId === classDeleteTarget.grade.id) setSelectedGradeId(null);
       setClassDeleteTarget(null);
       await refreshDirectory(true);
+      toast.success('Class deleted', `${name} and its dependents were removed.`);
     } catch (err) {
-      setClassDeleteTarget(prev => prev ? prev : null);
-      alert(getErrorMessage(err).message || 'Unable to delete this class.');
+      toast.error('Could not delete class', getErrorMessage(err).message || 'Please try again.');
     } finally {
       setDeleting(false);
     }
@@ -212,8 +286,9 @@ export default function AdminClasses() {
       await academicApi.deleteSection(sectionDeleteId);
       setSectionDeleteId(null);
       await refreshDirectory(true);
+      toast.success('Section deleted');
     } catch (err) {
-      alert(getErrorMessage(err).message || 'Unable to delete this section.');
+      toast.error('Could not delete section', getErrorMessage(err).message || 'Please try again.');
     } finally {
       setDeleting(false);
     }
@@ -226,8 +301,9 @@ export default function AdminClasses() {
       await academicApi.deleteSubject(subjectDeleteId);
       setSubjectDeleteId(null);
       await refreshDirectory(true);
+      toast.success('Subject deleted');
     } catch (err) {
-      alert(getErrorMessage(err).message || 'Unable to delete this subject.');
+      toast.error('Could not delete subject', getErrorMessage(err).message || 'Please try again.');
     } finally {
       setDeleting(false);
     }
@@ -612,23 +688,26 @@ export default function AdminClasses() {
       {/* ── Confirmation modals ───────────────────────────────────────── */}
       <ConfirmModal
         open={!!classDeleteTarget}
-        title={`Delete ${classDeleteTarget?.grade.name ?? 'class'}?`}
+        title={classDeleteTarget ? `Delete ${classDeleteTarget.grade.name}?` : 'Delete class?'}
         confirmLabel="Delete class"
         tone="danger"
         isLoading={deleting}
+        requireConfirmText="DELETE"
+        requireConfirmHint="Type the word in capitals to enable the delete button. There is no undo."
         onConfirm={performClassDelete}
         onCancel={() => !deleting && setClassDeleteTarget(null)}
         description={
-          <span>
-            This permanently removes the class and every record linked to it.
-            This action cannot be undone.
-          </span>
+          <>
+            Removing a class detaches every section, student, teacher
+            assignment and timetable entry beneath it. Review the
+            impact summary below before confirming.
+          </>
         }
       >
         {classDeleteTarget && (
           <div className="rounded-xl border border-rose-500/20 bg-rose-500/[0.04] p-4 text-xs">
-            <p className="font-black uppercase tracking-widest text-rose-400 mb-3">
-              {classDeleteTarget.loadingCounts ? 'Checking dependent records…' : 'Cascading deletes'}
+            <p className="font-black uppercase tracking-widest text-rose-500 dark:text-rose-400 mb-3">
+              {classDeleteTarget.loadingCounts ? 'Checking dependent records…' : 'Impact summary'}
             </p>
             {!classDeleteTarget.loadingCounts && classDeleteTarget.dependents && (
               <ul className="grid grid-cols-2 gap-x-3 gap-y-2 text-slate-600 dark:text-slate-300">
@@ -645,17 +724,26 @@ export default function AdminClasses() {
                   <span className="font-black tabular-nums">{classDeleteTarget.dependents.students}</span>
                 </li>
                 <li className="flex items-center justify-between">
+                  <span>Teachers</span>
+                  <span className="font-black tabular-nums">{classDeleteTarget.dependents.teachers}</span>
+                </li>
+                <li className="flex items-center justify-between">
                   <span>Teacher assignments</span>
                   <span className="font-black tabular-nums">{classDeleteTarget.dependents.teacher_assignments}</span>
+                </li>
+                <li className="flex items-center justify-between">
+                  <span>Timetable entries</span>
+                  <span className="font-black tabular-nums">{classDeleteTarget.dependents.timetable_slots}</span>
                 </li>
               </ul>
             )}
             {!classDeleteTarget.loadingCounts
               && classDeleteTarget.dependents
               && (classDeleteTarget.dependents.students > 0
-                  || classDeleteTarget.dependents.teacher_assignments > 0) && (
-              <p className="mt-3 text-[11px] font-bold text-rose-400">
-                Warning: enrolled students and active teacher assignments will be detached.
+                  || classDeleteTarget.dependents.teacher_assignments > 0
+                  || classDeleteTarget.dependents.timetable_slots > 0) && (
+              <p className="mt-3 text-[11px] font-bold text-rose-500 dark:text-rose-400">
+                Warning: enrolled students, teacher assignments, and scheduled periods will be detached.
               </p>
             )}
           </div>
@@ -670,7 +758,7 @@ export default function AdminClasses() {
         isLoading={deleting}
         onConfirm={performSectionDelete}
         onCancel={() => !deleting && setSectionDeleteId(null)}
-        description="Students currently assigned to this section will be detached. This cannot be undone."
+        description="Students currently assigned to this section will be detached and timetable slots for it will be removed. This cannot be undone."
       />
 
       <ConfirmModal
@@ -681,7 +769,7 @@ export default function AdminClasses() {
         isLoading={deleting}
         onConfirm={performSubjectDelete}
         onCancel={() => !deleting && setSubjectDeleteId(null)}
-        description="Removes the subject from your school catalogue. Existing marks and attendance records that reference it may break."
+        description="Removes the subject from your school catalogue. Existing marks and attendance records that reference it may break — review them before deleting."
       />
 
       {/* Edit Subject Modal */}

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   UserPlus, LayoutGrid, List as ListIcon,
-  Search, GraduationCap, Users, AlertCircle, X, ChevronDown
+  Search, GraduationCap, Users, X, ChevronDown
 } from 'lucide-react';
 import { directoryApi } from '@/features/directory/api';
 import { useApp } from '@/shared/contexts/AppContext';
@@ -12,6 +12,7 @@ import StudentCard from '@/features/directory/components/StudentCard';
 import EnrollStudentModal from '@/features/directory/components/EnrollStudentModal';
 import EditStudentModal from '@/features/directory/components/EditStudentModal';
 import ConfirmModal from '@/shared/components/ui/ConfirmModal';
+import { useToast } from '@/shared/components/ui/Toast';
 import type { Student } from '@/shared/types';
 
 export default function StudentDirectory() {
@@ -50,10 +51,9 @@ export default function StudentDirectory() {
   const [isAdding, setIsAdding] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [deleteSuccess, setDeleteSuccess] = useState<string | null>(null);
   /** Student queued for delete-confirmation. Null when no confirmation is open. */
   const [pendingDeleteStudent, setPendingDeleteStudent] = useState<Student | null>(null);
+  const toast = useToast();
 
   useEffect(() => {
     refreshDirectory();
@@ -129,23 +129,21 @@ export default function StudentDirectory() {
    */
   const handleDelete = (id: number, name: string) => {
     const target = students.find(s => s.id === id) ?? { id, name } as Student;
-    setDeleteError(null);
-    setDeleteSuccess(null);
     setPendingDeleteStudent(target);
   };
 
   const confirmDelete = async () => {
     if (!pendingDeleteStudent) return;
-    setDeletingId(pendingDeleteStudent.id);
-    setDeleteError(null);
+    const target = pendingDeleteStudent;
+    setDeletingId(target.id);
     try {
-      await directoryApi.deleteStudent(pendingDeleteStudent.id);
-      setDeleteSuccess(`Removed ${pendingDeleteStudent.name}.`);
+      await directoryApi.deleteStudent(target.id);
+      toast.success('Student removed', `${target.name} was removed from the roster.`);
       setPendingDeleteStudent(null);
       refreshStudents();
     } catch (err) {
       const error = getErrorMessage(err);
-      setDeleteError(error.message || 'Failed to remove student. Please try again.');
+      toast.error('Could not remove student', error.message || 'Please try again.');
       setPendingDeleteStudent(null);
     } finally {
       setDeletingId(null);
@@ -157,26 +155,6 @@ export default function StudentDirectory() {
 
   return (
     <div className="w-full animate-fade-in flex flex-col gap-8 pb-20">
-
-      {deleteError && (
-        <div className="flex items-center gap-3 p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <span className="flex-1">{deleteError}</span>
-          <button onClick={() => setDeleteError(null)} className="opacity-50 hover:opacity-100">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-
-      {deleteSuccess && (
-        <div className="flex items-center gap-3 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
-          <span className="w-4 h-4 shrink-0 rounded-full bg-emerald-500/30" />
-          <span className="flex-1">{deleteSuccess}</span>
-          <button onClick={() => setDeleteSuccess(null)} className="opacity-50 hover:opacity-100">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
 
       {/* Header */}
       <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-6">

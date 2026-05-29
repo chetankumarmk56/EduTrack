@@ -5,6 +5,7 @@ import Sidebar from '../ui/Sidebar';
 import TopNav from '../ui/TopNav';
 import PageWrapper from '../ui/PageWrapper';
 import TeacherAurora from '../ui/TeacherAurora';
+import { ToastProvider } from '../ui/Toast';
 import { useTheme } from '@/shared/contexts/ThemeContext';
 
 export default function AdminLayout() {
@@ -28,21 +29,23 @@ export default function AdminLayout() {
   }, [isDark]);
 
   return (
-    <div className="min-h-screen bg-background text-foreground transition-colors duration-500 font-sans selection:bg-primary/30 selection:text-primary overflow-x-hidden">
-      <TeacherAurora isDark={isDark} />
-      <div className="relative z-10">
-        <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
-        <div className="md:ml-72 flex min-h-screen flex-col pr-4">
-          <TopNav onMenuClick={() => setMobileMenuOpen(prev => !prev)} />
-          <main className="flex-1 p-3 sm:p-4 md:p-6 overflow-y-auto pb-24 md:pb-8">
-            <AnimatePresence mode="wait">
-              <PageWrapper key={location.pathname} speed="fast">
-                <Outlet />
-              </PageWrapper>
-            </AnimatePresence>
-          </main>
+    <ToastProvider>
+      <div className="min-h-screen bg-background text-foreground transition-colors duration-500 font-sans selection:bg-primary/30 selection:text-primary overflow-x-hidden">
+        <TeacherAurora isDark={isDark} />
+        <div className="relative z-10">
+          <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
+          <div className="md:ml-72 flex min-h-screen flex-col pr-4">
+            <TopNav onMenuClick={() => setMobileMenuOpen(prev => !prev)} />
+            <main className="flex-1 p-3 sm:p-4 md:p-6 overflow-y-auto pb-24 md:pb-8">
+              <AnimatePresence mode="wait">
+                <PageWrapper key={location.pathname} speed="fast">
+                  <Outlet />
+                </PageWrapper>
+              </AnimatePresence>
+            </main>
+          </div>
         </div>
       </div>
-    </div>
+    </ToastProvider>
   );
 }

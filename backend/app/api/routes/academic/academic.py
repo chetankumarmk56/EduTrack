@@ -19,9 +19,21 @@ class SectionBulkCreate(BaseModel):
     names: List[str] = Field(..., min_length=1)
 
 
+class SectionBulkSkipped(BaseModel):
+    name: str
+    reason: str  # "already_exists" | "duplicate_in_request"
+
+
+class SectionBulkInvalid(BaseModel):
+    name: str
+    reason: str  # "invalid_format"
+
+
 class SectionBulkResponse(BaseModel):
     created: List[SectionResponse]
-    skipped: List[str]
+    skipped: List[SectionBulkSkipped]
+    invalid: List[SectionBulkInvalid]
+    rule: str
 
 
 class GradeDependents(BaseModel):
@@ -29,6 +41,8 @@ class GradeDependents(BaseModel):
     classrooms: int
     students: int
     teacher_assignments: int
+    teachers: int
+    timetable_slots: int
 
 router = APIRouter(prefix="/api/academic", tags=["Academic Organization"])
 

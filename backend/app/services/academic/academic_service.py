@@ -6,8 +6,19 @@ from fastapi import HTTPException, status
 from app.models.academic import Grade, Section, SchoolClass, Subject
 from app.models.directory import Student, Teacher, TeacherAssignment
 from app.models.finance import StudentFee
+from app.models.timetable import TimetableSlot
 from app.schemas import academic as schemas
 from app.core.logger import logger
+
+
+import re
+
+# Section codes are short alphanumeric identifiers (A, B, AB, A1, …).
+# Keeping the rule narrow means timetable/marks UI can rely on a tidy
+# label that fits in chips and badges. Adjust here if a school later
+# needs longer codes.
+SECTION_NAME_PATTERN = re.compile(r"^[A-Z0-9]{1,4}$")
+SECTION_NAME_RULE = "1–4 characters, letters/digits only (e.g. A, B, AB, 12)."
 
 
 def _norm(name: Optional[str]) -> str:
@@ -15,10 +26,26 @@ def _norm(name: Optional[str]) -> str:
     return (name or "").strip().casefold()
 
 
+def _validate_section_name(name: str) -> Optional[str]:
+    """Return None if valid, else a short reason string."""
+    if not name or not name.strip():
+        return "blank"
+    candidate = name.strip().upper()
+    if not SECTION_NAME_PATTERN.match(candidate):
+        return "invalid_format"
+    return None
+
+
 class DuplicateAcademicEntity(HTTPException):
     """409 with a friendly message — the UI surfaces `detail` verbatim."""
     def __init__(self, message: str):
         super().__init__(status_code=status.HTTP_409_CONFLICT, detail=message)
+
+
+class InvalidAcademicInput(HTTPException):
+    """400 with a friendly message for shape / format errors."""
+    def __init__(self, message: str):
+        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
 
 
 class AcademicService:
@@ -227,6 +254,8 @@ class AcademicService:
 
         students_count = 0
         assignments_count = 0
+        timetable_count = 0
+        teachers_distinct = 0
         if sc_ids:
             students_count = (await db.execute(
                 select(func.count(Student.id)).where(
@@ -239,12 +268,26 @@ class AcademicService:
                     TeacherAssignment.school_class_id.in_(sc_ids)
                 )
             )).scalar() or 0
+            # Distinct teachers across all assignments — the more useful
+            # number for the "X teachers will lose this class" warning.
+            teachers_distinct = (await db.execute(
+                select(func.count(func.distinct(TeacherAssignment.teacher_id))).where(
+                    TeacherAssignment.school_class_id.in_(sc_ids)
+                )
+            )).scalar() or 0
+            timetable_count = (await db.execute(
+                select(func.count(TimetableSlot.id)).where(
+                    TimetableSlot.school_class_id.in_(sc_ids)
+                )
+            )).scalar() or 0
 
         return {
             "sections": int(sections_count),
             "classrooms": len(sc_ids),
             "students": int(students_count),
             "teacher_assignments": int(assignments_count),
+            "teachers": int(teachers_distinct),
+            "timetable_slots": int(timetable_count),
         }
 
     # --- Section Methods ---
@@ -279,14 +322,24 @@ class AcademicService:
         if not grade_result.scalars().first():
             return None
 
+        # Normalise + format-check before any DB write.
+        reason = _validate_section_name(section_in.name)
+        if reason == "blank":
+            raise InvalidAcademicInput("Section name is required.")
+        if reason == "invalid_format":
+            raise InvalidAcademicInput(f"Section name is not allowed. {SECTION_NAME_RULE}")
+        normalised = section_in.name.strip().upper()
+
         if await AcademicService._section_name_taken(
-            db, institution_id, section_in.grade_id, section_in.name,
+            db, institution_id, section_in.grade_id, normalised,
         ):
             raise DuplicateAcademicEntity(
-                f"Section '{section_in.name.strip()}' already exists in this class."
+                f"Section '{normalised}' already exists in this class."
             )
 
-        db_section = Section(**section_in.model_dump(), institution_id=institution_id)
+        payload = section_in.model_dump()
+        payload['name'] = normalised
+        db_section = Section(**payload, institution_id=institution_id)
         db.add(db_section)
         await db.commit()
         await db.refresh(db_section)
@@ -305,16 +358,23 @@ class AcademicService:
         if not db_grade:
             return None
 
+        reason = _validate_section_name(section_in.name)
+        if reason == "blank":
+            raise InvalidAcademicInput("Section name is required.")
+        if reason == "invalid_format":
+            raise InvalidAcademicInput(f"Section name is not allowed. {SECTION_NAME_RULE}")
+        normalised = section_in.name.strip().upper()
+
         if await AcademicService._section_name_taken(
-            db, institution_id, section_in.grade_id, section_in.name,
+            db, institution_id, section_in.grade_id, normalised,
         ):
             raise DuplicateAcademicEntity(
-                f"Section '{section_in.name.strip()}' already exists in {db_grade.name}."
+                f"Section '{normalised}' already exists in {db_grade.name}."
             )
 
         # 1. Create Section
         db_section = Section(
-            name=section_in.name,
+            name=normalised,
             grade_id=section_in.grade_id,
             institution_id=institution_id
         )
@@ -348,12 +408,23 @@ class AcademicService:
     ) -> dict:
         """Create many sections + SchoolClass mappings in one shot.
 
+        The result distinguishes three buckets so the UI can show a
+        precise summary:
+
+        - ``created``: newly inserted Section rows.
+        - ``skipped``: names that already existed in this class (no
+          insert performed). Each entry includes a reason so the toast
+          can say "B already exists".
+        - ``invalid``: names that failed the format check (e.g. "10-A",
+          empty after trim). Each entry includes a reason. Invalid names
+          do not abort the batch — the admin still gets every valid
+          section processed.
+
         - Trims whitespace and uppercases names ("a, b, C" → A, B, C).
-        - Dedupes within the request so "A, A, B" becomes A, B.
-        - Skips names that already exist in the class (returns them as
-          'skipped' so the UI can show a partial-success message).
-        - Returns the freshly created sections plus a `skipped` list.
-        - All inserts run in a single transaction.
+        - Dedupes within the request so "A, A, B" becomes A, B (the
+          duplicate is reported once under ``skipped`` with reason
+          ``duplicate_in_request``).
+        - Empty payload (no valid candidates) raises 400.
         """
         grade_result = await db.execute(
             select(Grade).where(Grade.id == grade_id, Grade.institution_id == institution_id)
@@ -362,23 +433,30 @@ class AcademicService:
         if not db_grade:
             return None
 
-        # Normalize + dedupe input order
+        invalid: list[dict] = []
         seen: set[str] = set()
         cleaned: list[str] = []
-        for raw in names:
-            n = (raw or "").strip().upper()
-            if not n:
-                continue
-            if n in seen:
-                continue
-            seen.add(n)
-            cleaned.append(n)
+        skipped: list[dict] = []
 
-        if not cleaned:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="At least one section name is required.",
-            )
+        for raw in names:
+            label = (raw or "").strip()
+            reason = _validate_section_name(label)
+            if reason == "blank":
+                # Skip silently — a stray comma shouldn't fill the
+                # invalid list with empty entries.
+                continue
+            if reason == "invalid_format":
+                invalid.append({"name": label, "reason": "invalid_format"})
+                continue
+            normalised = label.upper()
+            if normalised in seen:
+                skipped.append({"name": normalised, "reason": "duplicate_in_request"})
+                continue
+            seen.add(normalised)
+            cleaned.append(normalised)
+
+        if not cleaned and not invalid:
+            raise InvalidAcademicInput("At least one section name is required.")
 
         # Pre-fetch existing names so we can skip duplicates without
         # rolling back the whole batch.
@@ -391,10 +469,9 @@ class AcademicService:
         existing_norm = {_norm(r[0]) for r in existing_rows.all()}
 
         created: list[Section] = []
-        skipped: list[str] = []
         for name in cleaned:
             if _norm(name) in existing_norm:
-                skipped.append(name)
+                skipped.append({"name": name, "reason": "already_exists"})
                 continue
             db_section = Section(
                 name=name,
@@ -424,6 +501,8 @@ class AcademicService:
         return {
             "created": created,
             "skipped": skipped,
+            "invalid": invalid,
+            "rule": SECTION_NAME_RULE,
         }
 
     @staticmethod

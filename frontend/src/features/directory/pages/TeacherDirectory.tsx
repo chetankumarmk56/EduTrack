@@ -3,13 +3,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   UserPlus, Pencil, Trash2,
   Key, Shield, Mail, Phone, BookOpen, X, Search,
-  School, CheckCircle, AlertCircle, Users, ChevronDown, Loader
+  School, AlertCircle, Users, ChevronDown, Loader
 } from 'lucide-react';
 import { directoryApi, type TeacherWithPassword } from '@/features/directory/api';
 import { useApp } from '@/shared/contexts/AppContext';
 import { cn } from '@/shared/lib/utils';
 import { getErrorMessage } from '@/shared/lib/errorHandler';
 import ConfirmModal from '@/shared/components/ui/ConfirmModal';
+import { useToast } from '@/shared/components/ui/Toast';
 
 /** Password policy mirrors `validate_password_strength` in the backend. */
 const PASSWORD_RULES: Array<{ label: string; test: (v: string) => boolean }> = [
@@ -45,7 +46,6 @@ export default function TeacherDirectory() {
 
   const [form, setForm] = useState({ name: '', email: '', phone: '', password: '' });
   const [formError, setFormError] = useState<string | null>(null);
-  const [formSuccess, setFormSuccess] = useState(false);
   const [isSubmittingForm, setIsSubmittingForm] = useState(false);
 
   const [editError, setEditError] = useState<string | null>(null);
@@ -58,8 +58,7 @@ export default function TeacherDirectory() {
   // Delete confirmation
   const [pendingDeleteTeacher, setPendingDeleteTeacher] = useState<TeacherWithPassword | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [pageError, setPageError] = useState<string | null>(null);
-  const [pageSuccess, setPageSuccess] = useState<string | null>(null);
+  const toast = useToast();
 
   // Lock body scroll while any of our larger modals are open so the
   // page underneath can't be scrolled into blank space.
@@ -70,13 +69,6 @@ export default function TeacherDirectory() {
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = prev; };
   }, [isAdding, editingTeacher, isAssigningId]);
-
-  // Auto-dismiss feedback banners
-  useEffect(() => {
-    if (!pageSuccess) return;
-    const t = setTimeout(() => setPageSuccess(null), 3500);
-    return () => clearTimeout(t);
-  }, [pageSuccess]);
 
   const isAssigning = useMemo(() =>
     teachers.find(t => t.id === isAssigningId),
@@ -108,11 +100,11 @@ export default function TeacherDirectory() {
     }
     setIsSubmittingForm(true);
     try {
-      await directoryApi.createTeacher(form);
-      setFormSuccess(true);
+      const created = await directoryApi.createTeacher(form);
       setForm({ name: '', email: '', phone: '', password: '' });
       refreshTeachers();
-      setTimeout(() => { setFormSuccess(false); setIsAdding(false); }, 1200);
+      setIsAdding(false);
+      toast.success('Teacher added', created?.name);
     } catch (err) {
       setFormError(getErrorMessage(err).message || 'Failed to add teacher.');
     } finally {
@@ -126,13 +118,14 @@ export default function TeacherDirectory() {
     setEditError(null);
     setIsSubmittingEdit(true);
     try {
-      await directoryApi.updateTeacher(editingTeacher.id, {
+      const updated = await directoryApi.updateTeacher(editingTeacher.id, {
         name: editingTeacher.name,
         email: editingTeacher.email,
         phone: editingTeacher.phone
       });
       setEditingTeacher(null);
       refreshTeachers();
+      toast.success('Profile updated', updated?.name);
     } catch (err) {
       setEditError(getErrorMessage(err).message || 'Failed to update teacher.');
     } finally {
@@ -141,20 +134,20 @@ export default function TeacherDirectory() {
   };
 
   const handleDelete = (teacher: TeacherWithPassword) => {
-    setPageError(null);
     setPendingDeleteTeacher(teacher);
   };
 
   const confirmDelete = async () => {
     if (!pendingDeleteTeacher) return;
+    const target = pendingDeleteTeacher;
     setDeleting(true);
     try {
-      await directoryApi.deleteTeacher(pendingDeleteTeacher.id);
-      setPageSuccess(`Removed ${pendingDeleteTeacher.name}.`);
+      await directoryApi.deleteTeacher(target.id);
+      toast.success('Teacher removed', `${target.name} was removed from the directory.`);
       setPendingDeleteTeacher(null);
       refreshTeachers();
     } catch (err) {
-      setPageError(getErrorMessage(err).message || 'Unable to delete this teacher.');
+      toast.error('Could not remove teacher', getErrorMessage(err).message || 'Please try again.');
       setPendingDeleteTeacher(null);
     } finally {
       setDeleting(false);
@@ -173,6 +166,7 @@ export default function TeacherDirectory() {
       });
       setAssignmentForm({ school_class_id: 0, subject_id: 0 });
       await refreshTeachers();
+      toast.success('Class assigned');
     } catch (err) {
       setAssignError(getErrorMessage(err).message || 'Failed to add assignment.');
     } finally {
@@ -184,7 +178,10 @@ export default function TeacherDirectory() {
     try {
       await directoryApi.deleteAssignment(id);
       refreshTeachers();
-    } catch (err) { console.error(err); }
+      toast.success('Assignment removed');
+    } catch (err) {
+      toast.error('Could not remove assignment', getErrorMessage(err).message || 'Please try again.');
+    }
   };
 
   const totalAssignments = useMemo(() =>
@@ -196,25 +193,6 @@ export default function TeacherDirectory() {
 
   return (
     <div className="w-full animate-fade-in flex flex-col gap-8 pb-20">
-
-      {pageError && (
-        <div className="flex items-center gap-3 p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <span className="flex-1">{pageError}</span>
-          <button onClick={() => setPageError(null)} className="opacity-50 hover:opacity-100">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-      {pageSuccess && (
-        <div className="flex items-center gap-3 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
-          <CheckCircle className="w-4 h-4 shrink-0" />
-          <span className="flex-1">{pageSuccess}</span>
-          <button onClick={() => setPageSuccess(null)} className="opacity-50 hover:opacity-100">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
 
       {/* Header */}
       <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-6">
@@ -229,7 +207,7 @@ export default function TeacherDirectory() {
         </div>
 
         <button
-          onClick={() => { setIsAdding(true); setFormError(null); setFormSuccess(false); }}
+          onClick={() => { setIsAdding(true); setFormError(null); }}
           className="indigo-glow-button h-[50px] px-7 self-start xl:self-auto"
         >
           <UserPlus className="w-4 h-4 mr-2" /> Add Teacher
@@ -424,7 +402,7 @@ export default function TeacherDirectory() {
       {/* ── Add Teacher Modal ── */}
       <AnimatePresence>
         {isAdding && (
-          <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain">
+          <div className="fixed inset-0 z-50">
             <motion.button
               type="button"
               aria-label="Close"
@@ -434,81 +412,93 @@ export default function TeacherDirectory() {
               onClick={() => setIsAdding(false)}
               className="fixed inset-0 bg-slate-950/65 backdrop-blur-md cursor-default"
             />
-            <div className="relative min-h-full flex items-start sm:items-center justify-center p-4 sm:p-6 pointer-events-none">
+            <div className="fixed inset-0 flex items-center justify-center p-4 sm:p-6 pointer-events-none">
               <motion.div
                 initial={{ scale: 0.94, opacity: 0, y: 12 }}
                 animate={{ scale: 1, opacity: 1, y: 0 }}
                 exit={{ scale: 0.94, opacity: 0, y: 12 }}
                 transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
-                className="relative w-full max-w-md obsidian-card border-brand-indigo/30 p-6 sm:p-8 shadow-2xl my-4 sm:my-6 pointer-events-auto"
+                className="relative w-full max-w-lg max-h-[88vh] obsidian-card border-brand-indigo/30 shadow-2xl pointer-events-auto flex flex-col overflow-hidden"
               >
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h2 className="text-2xl font-black tracking-tight uppercase">Add Teacher</h2>
+                {/* Sticky header */}
+                <div className="shrink-0 flex items-center justify-between gap-3 px-6 py-4 border-b border-glass-border">
+                  <div className="min-w-0">
+                    <h2 className="text-xl font-black tracking-tight uppercase">Add teacher</h2>
                     <p className="text-text-secondary text-xs mt-0.5">Create a new teacher account</p>
                   </div>
-                  <button onClick={() => setIsAdding(false)} className="p-2 hover:bg-white/5 rounded-xl border border-glass-border transition-all">
-                    <X className="w-5 h-5 opacity-50" />
+                  <button onClick={() => setIsAdding(false)} className="p-2 hover:bg-white/5 rounded-xl border border-glass-border transition-all shrink-0" aria-label="Close">
+                    <X className="w-5 h-5 opacity-60" />
                   </button>
                 </div>
 
-                {formError && (
-                  <div className="mb-5 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold flex items-start gap-2">
-                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" /> {formError}
-                  </div>
-                )}
-                {formSuccess && (
-                  <div className="mb-5 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 shrink-0" /> Teacher added successfully!
-                  </div>
-                )}
+                {/* Scrollable body */}
+                <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5">
+                  {formError && (
+                    <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" /> {formError}
+                    </div>
+                  )}
 
-                <form onSubmit={handleCreate} className="space-y-4">
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Full Name</label>
-                    <input autoFocus placeholder="e.g. Anita Sharma" className="input-obsidian" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Email Address</label>
-                    <input type="email" placeholder="anita@school.edu" className="input-obsidian" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} required />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Phone Number</label>
-                    <input placeholder="+91 98765 43210" className="input-obsidian" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} required />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Password</label>
-                    <input type="password" placeholder="Set login password" className="input-obsidian" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} required />
-                    <ul className="mt-2 grid grid-cols-1 gap-1">
-                      {PASSWORD_RULES.map(r => {
-                        const ok = form.password ? r.test(form.password) : false;
-                        return (
-                          <li key={r.label} className={cn(
-                            'flex items-center gap-1.5 text-[10px] font-bold transition-colors',
-                            ok ? 'text-emerald-400' : 'text-text-secondary opacity-60',
-                          )}>
-                            <span className={cn(
-                              'w-1.5 h-1.5 rounded-full',
-                              ok ? 'bg-emerald-400' : 'bg-text-secondary/30',
-                            )} />
-                            {r.label}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
+                  <form id="add-teacher-form" onSubmit={handleCreate} className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Full name</label>
+                      <input autoFocus placeholder="e.g. Anita Sharma" className="input-obsidian h-11" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Email address</label>
+                      <input type="email" placeholder="anita@school.edu" className="input-obsidian h-11" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} required />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Phone number</label>
+                      <input placeholder="+91 98765 43210" className="input-obsidian h-11" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} required />
+                    </div>
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Password</label>
+                      <input type="password" placeholder="Set login password" className="input-obsidian h-11" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} required />
+                      <ul className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
+                        {PASSWORD_RULES.map(r => {
+                          const ok = form.password ? r.test(form.password) : false;
+                          return (
+                            <li key={r.label} className={cn(
+                              'flex items-center gap-1.5 text-[10px] font-bold transition-colors',
+                              ok ? 'text-emerald-500 dark:text-emerald-400' : 'text-text-secondary opacity-60',
+                            )}>
+                              <span className={cn(
+                                'w-1.5 h-1.5 rounded-full',
+                                ok ? 'bg-emerald-500 dark:bg-emerald-400' : 'bg-text-secondary/30',
+                              )} />
+                              {r.label}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  </form>
+                </div>
+
+                {/* Sticky footer */}
+                <div className="shrink-0 flex items-center justify-end gap-2 px-6 py-3 border-t border-glass-border bg-[var(--bg-card)]/60">
+                  <button
+                    type="button"
+                    onClick={() => setIsAdding(false)}
+                    disabled={isSubmittingForm}
+                    className="px-4 h-10 rounded-xl text-xs font-black uppercase tracking-widest text-text-secondary hover:text-foreground border border-glass-border transition-colors disabled:opacity-40"
+                  >
+                    Cancel
+                  </button>
                   <button
                     type="submit"
+                    form="add-teacher-form"
                     disabled={isSubmittingForm || !pwCheck.ok}
                     className={cn(
-                      "indigo-glow-button w-full h-12 text-sm font-black uppercase tracking-wider mt-2",
-                      (isSubmittingForm || !pwCheck.ok) && "opacity-50 cursor-not-allowed",
+                      'indigo-glow-button h-10 px-5 text-xs font-black uppercase tracking-wider',
+                      (isSubmittingForm || !pwCheck.ok) && 'opacity-50 cursor-not-allowed',
                     )}
                     title={!pwCheck.ok ? 'Password does not meet the policy yet' : undefined}
                   >
-                    {isSubmittingForm ? <Loader className="w-4 h-4 animate-spin mx-auto" /> : 'Add Teacher'}
+                    {isSubmittingForm ? <Loader className="w-3.5 h-3.5 animate-spin" /> : 'Add teacher'}
                   </button>
-                </form>
+                </div>
               </motion.div>
             </div>
           </div>
@@ -518,7 +508,7 @@ export default function TeacherDirectory() {
       {/* ── Manage Assignments Modal ── */}
       <AnimatePresence>
         {isAssigningId && isAssigning && (
-          <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain">
+          <div className="fixed inset-0 z-50">
             <motion.button
               type="button"
               aria-label="Close"
@@ -528,109 +518,141 @@ export default function TeacherDirectory() {
               onClick={() => setIsAssigningId(null)}
               className="fixed inset-0 bg-slate-950/65 backdrop-blur-md cursor-default"
             />
-            <div className="relative min-h-full flex items-start sm:items-center justify-center p-4 sm:p-6 pointer-events-none">
-              <motion.div initial={{ scale: 0.94, opacity: 0, y: 12 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.94, opacity: 0, y: 12 }} className="relative w-full max-w-2xl obsidian-card border-brand-indigo/30 p-6 sm:p-8 shadow-2xl my-4 sm:my-6 pointer-events-auto">
-              <div className="flex items-center justify-between mb-8">
-                <div>
-                  <h2 className="text-2xl font-black tracking-tight uppercase">{isAssigning.name}</h2>
-                  <p className="text-brand-indigo text-xs font-bold tracking-widest uppercase mt-0.5">Manage Class Assignments</p>
+            <div className="fixed inset-0 flex items-center justify-center p-4 sm:p-6 pointer-events-none">
+              <motion.div
+                initial={{ scale: 0.94, opacity: 0, y: 12 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.94, opacity: 0, y: 12 }}
+                transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
+                className="relative w-full max-w-2xl max-h-[88vh] obsidian-card border-brand-indigo/30 shadow-2xl pointer-events-auto flex flex-col overflow-hidden"
+              >
+                {/* Sticky header */}
+                <div className="shrink-0 flex items-start justify-between gap-3 px-6 sm:px-7 py-5 border-b border-glass-border bg-[var(--bg-card)]/60">
+                  <div className="min-w-0">
+                    <h2 className="text-xl sm:text-2xl font-black tracking-tight uppercase truncate">{isAssigning.name}</h2>
+                    <p className="text-brand-indigo text-[11px] font-bold tracking-widest uppercase mt-0.5">Manage class assignments</p>
+                  </div>
+                  <button
+                    onClick={() => setIsAssigningId(null)}
+                    className="p-2 hover:bg-white/5 rounded-xl border border-glass-border transition-all shrink-0"
+                    aria-label="Close"
+                  >
+                    <X className="w-5 h-5 opacity-60" />
+                  </button>
                 </div>
-                <button onClick={() => setIsAssigningId(null)} className="p-2 hover:bg-white/5 rounded-xl border border-glass-border transition-all">
-                  <X className="w-5 h-5 opacity-50" />
-                </button>
-              </div>
 
-              <div className="space-y-8">
-                {/* Add new assignment */}
-                <div className="p-5 rounded-2xl bg-brand-indigo/[0.03] border border-brand-indigo/15">
-                  <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-brand-indigo mb-4 flex items-center gap-1.5">
-                    <UserPlus className="w-3 h-3" /> Add New Assignment
-                  </h4>
-
+                {/* Sticky add-assignment form (compact) */}
+                <div className="shrink-0 px-6 sm:px-7 py-4 border-b border-glass-border bg-brand-indigo/[0.025]">
                   {assignError && (
-                    <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold flex items-center gap-2">
-                      <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {assignError}
+                    <div className="mb-3 p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold flex items-start gap-2">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" /> {assignError}
                     </div>
                   )}
-
-                  <form onSubmit={handleAddAssignment} className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1 flex items-center gap-1.5">
-                          <School className="w-3 h-3" /> Class & Section
-                        </label>
-                        <div className="relative">
-                          <select
-                            className="input-obsidian text-sm font-semibold appearance-none pr-8"
-                            value={assignmentForm.school_class_id || ''}
-                            onChange={e => setAssignmentForm({ ...assignmentForm, school_class_id: Number(e.target.value) })}
-                            required
-                          >
-                            <option value="">Select class...</option>
-                            {schoolClasses.map(sc => (
-                              <option key={sc.id} value={sc.id}>{sc.display_name}</option>
-                            ))}
-                          </select>
-                          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-secondary pointer-events-none" />
-                        </div>
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1 flex items-center gap-1.5">
-                          <BookOpen className="w-3 h-3" /> Subject
-                        </label>
-                        <div className="relative">
-                          <select
-                            className="input-obsidian text-sm font-semibold appearance-none pr-8"
-                            value={assignmentForm.subject_id || ''}
-                            onChange={e => setAssignmentForm({ ...assignmentForm, subject_id: Number(e.target.value) })}
-                            required
-                          >
-                            <option value="">Select subject...</option>
-                            {subjects.map(s => (
-                              <option key={s.id} value={s.id}>{s.name}</option>
-                            ))}
-                          </select>
-                          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-secondary pointer-events-none" />
-                        </div>
+                  <form
+                    onSubmit={handleAddAssignment}
+                    className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2.5 items-end"
+                  >
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-0.5 flex items-center gap-1.5">
+                        <School className="w-3 h-3" /> Class & section
+                      </label>
+                      <div className="relative">
+                        <select
+                          className="input-obsidian h-10 text-xs font-semibold appearance-none pr-8"
+                          value={assignmentForm.school_class_id || ''}
+                          onChange={e => setAssignmentForm({ ...assignmentForm, school_class_id: Number(e.target.value) })}
+                          required
+                        >
+                          <option value="">Select…</option>
+                          {schoolClasses.map(sc => (
+                            <option key={sc.id} value={sc.id}>{sc.display_name}</option>
+                          ))}
+                        </select>
+                        <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-secondary pointer-events-none" />
                       </div>
                     </div>
-                    <button type="submit" disabled={isSubmittingAssign} className={cn("indigo-glow-button w-full h-11 text-xs font-black uppercase tracking-wider", isSubmittingAssign && "opacity-50 cursor-wait")}>
-                      {isSubmittingAssign ? <Loader className="w-4 h-4 animate-spin mx-auto" /> : 'Assign Class'}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-0.5 flex items-center gap-1.5">
+                        <BookOpen className="w-3 h-3" /> Subject
+                      </label>
+                      <div className="relative">
+                        <select
+                          className="input-obsidian h-10 text-xs font-semibold appearance-none pr-8"
+                          value={assignmentForm.subject_id || ''}
+                          onChange={e => setAssignmentForm({ ...assignmentForm, subject_id: Number(e.target.value) })}
+                          required
+                        >
+                          <option value="">Select…</option>
+                          {subjects.map(s => (
+                            <option key={s.id} value={s.id}>{s.name}</option>
+                          ))}
+                        </select>
+                        <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-secondary pointer-events-none" />
+                      </div>
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={isSubmittingAssign}
+                      className={cn("indigo-glow-button h-10 px-4 text-[11px] font-black uppercase tracking-wider", isSubmittingAssign && "opacity-50 cursor-wait")}
+                    >
+                      {isSubmittingAssign ? <Loader className="w-3.5 h-3.5 animate-spin mx-auto" /> : 'Assign'}
                     </button>
                   </form>
                 </div>
 
-                {/* Existing assignments */}
-                <div className="space-y-3">
-                  <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary">
-                    Current Assignments ({isAssigning.assignments?.length ?? 0})
-                  </h4>
-                  <div className="space-y-2">
-                    {isAssigning.assignments?.map((a) => (
-                      <div key={a.id} className="flex items-center justify-between p-4 rounded-xl bg-white/[0.02] border border-glass-border hover:border-brand-indigo/20 transition-all group/item">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-lg bg-brand-indigo/5 border border-brand-indigo/15 flex items-center justify-center font-black text-brand-indigo text-xs">
-                            {a.school_class.display_name?.split('-').pop()}
-                          </div>
-                          <div>
-                            <p className="text-sm font-black uppercase tracking-tight">{a.subject_ref.name}</p>
-                            <p className="text-[10px] text-text-secondary opacity-60">{a.school_class.display_name}</p>
-                          </div>
-                        </div>
-                        <button onClick={() => handleDeleteAssignment(a.id)} className="p-1.5 text-rose-500/30 hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-all opacity-0 group-hover/item:opacity-100">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ))}
-                    {(!isAssigning.assignments || isAssigning.assignments.length === 0) && (
-                      <div className="py-8 text-center obsidian-card border-dashed border-glass-border opacity-40">
-                        <p className="text-xs font-bold uppercase tracking-widest">No assignments yet</p>
-                      </div>
-                    )}
+                {/* Scrollable assignments list */}
+                <div className="flex-1 min-h-0 overflow-y-auto px-6 sm:px-7 py-4 space-y-2">
+                  <div className="flex items-center justify-between sticky top-0 -mx-6 sm:-mx-7 px-6 sm:px-7 py-2 bg-[var(--bg-card)]/85 backdrop-blur-sm">
+                    <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary">
+                      Current assignments
+                    </h4>
+                    <span className="text-[10px] font-black tabular-nums text-text-secondary">
+                      {isAssigning.assignments?.length ?? 0}
+                    </span>
                   </div>
+
+                  {(!isAssigning.assignments || isAssigning.assignments.length === 0) ? (
+                    <div className="py-10 text-center border border-dashed border-glass-border rounded-xl opacity-50">
+                      <p className="text-xs font-bold uppercase tracking-widest">No assignments yet</p>
+                      <p className="text-[11px] text-text-secondary mt-1">Use the form above to assign a class.</p>
+                    </div>
+                  ) : (
+                    <ul className="space-y-1.5">
+                      {isAssigning.assignments.map((a) => (
+                        <li
+                          key={a.id}
+                          className="group/item grid grid-cols-[auto_1fr_auto] items-center gap-3 px-3 py-2 rounded-lg bg-white/[0.02] border border-glass-border hover:border-brand-indigo/30 transition-colors"
+                        >
+                          <span className="inline-flex items-center justify-center w-9 h-7 rounded-md bg-brand-indigo/10 text-brand-indigo text-[11px] font-black tabular-nums">
+                            {a.school_class.display_name}
+                          </span>
+                          <span className="text-sm font-bold text-foreground truncate">
+                            {a.subject_ref.name}
+                          </span>
+                          <button
+                            onClick={() => handleDeleteAssignment(a.id)}
+                            className="p-1.5 text-rose-500/40 hover:text-rose-500 hover:bg-rose-500/10 rounded-md transition-all"
+                            title="Remove assignment"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
-              </div>
-            </motion.div>
+
+                {/* Sticky footer with close — guarantees the control stays visible */}
+                <div className="shrink-0 flex items-center justify-end gap-2 px-6 sm:px-7 py-3 border-t border-glass-border bg-[var(--bg-card)]/60">
+                  <button
+                    type="button"
+                    onClick={() => setIsAssigningId(null)}
+                    className="px-4 h-10 rounded-xl text-xs font-black uppercase tracking-widest text-text-secondary hover:text-foreground border border-glass-border transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
+              </motion.div>
             </div>
           </div>
         )}
@@ -639,7 +661,7 @@ export default function TeacherDirectory() {
       {/* ── Edit Teacher Modal ── */}
       <AnimatePresence>
         {editingTeacher && (
-          <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain">
+          <div className="fixed inset-0 z-50">
             <motion.button
               type="button"
               aria-label="Close"
@@ -649,47 +671,68 @@ export default function TeacherDirectory() {
               onClick={() => setEditingTeacher(null)}
               className="fixed inset-0 bg-slate-950/65 backdrop-blur-md cursor-default"
             />
-            <div className="relative min-h-full flex items-start sm:items-center justify-center p-4 sm:p-6 pointer-events-none">
+            <div className="fixed inset-0 flex items-center justify-center p-4 sm:p-6 pointer-events-none">
               <motion.div
                 initial={{ scale: 0.94, opacity: 0, y: 12 }}
                 animate={{ scale: 1, opacity: 1, y: 0 }}
                 exit={{ scale: 0.94, opacity: 0, y: 12 }}
                 transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
-                className="relative w-full max-w-md obsidian-card border-brand-indigo/30 p-6 sm:p-8 shadow-2xl my-4 sm:my-6 pointer-events-auto"
+                className="relative w-full max-w-lg max-h-[88vh] obsidian-card border-brand-indigo/30 shadow-2xl pointer-events-auto flex flex-col overflow-hidden"
               >
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h2 className="text-2xl font-black tracking-tight uppercase">Edit Teacher</h2>
+                {/* Sticky header */}
+                <div className="shrink-0 flex items-center justify-between gap-3 px-6 py-4 border-b border-glass-border">
+                  <div className="min-w-0">
+                    <h2 className="text-xl font-black tracking-tight uppercase truncate">Edit teacher</h2>
                     <p className="text-text-secondary text-xs mt-0.5">Update profile information</p>
                   </div>
-                  <button onClick={() => setEditingTeacher(null)} className="p-2 hover:bg-white/5 rounded-xl border border-glass-border transition-all">
-                    <X className="w-5 h-5 opacity-50" />
+                  <button onClick={() => setEditingTeacher(null)} className="p-2 hover:bg-white/5 rounded-xl border border-glass-border transition-all shrink-0" aria-label="Close">
+                    <X className="w-5 h-5 opacity-60" />
                   </button>
                 </div>
 
-                {editError && (
-                  <div className="mb-5 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold flex items-start gap-2">
-                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" /> {editError}
-                  </div>
-                )}
+                {/* Scrollable body */}
+                <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5">
+                  {editError && (
+                    <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" /> {editError}
+                    </div>
+                  )}
 
-                <form onSubmit={handleUpdate} className="space-y-4">
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Full Name</label>
-                    <input autoFocus className="input-obsidian" value={editingTeacher.name} onChange={e => setEditingTeacher({ ...editingTeacher, name: e.target.value })} required />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Email Address</label>
-                    <input type="email" className="input-obsidian" value={editingTeacher.email} onChange={e => setEditingTeacher({ ...editingTeacher, email: e.target.value })} required />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Phone Number</label>
-                    <input className="input-obsidian" value={editingTeacher.phone || ''} onChange={e => setEditingTeacher({ ...editingTeacher, phone: e.target.value })} />
-                  </div>
-                  <button type="submit" disabled={isSubmittingEdit} className={cn("indigo-glow-button w-full h-12 text-sm font-black uppercase tracking-wider mt-2", isSubmittingEdit && "opacity-50 cursor-wait")}>
-                    {isSubmittingEdit ? <Loader className="w-4 h-4 animate-spin mx-auto" /> : 'Save Changes'}
+                  <form id="edit-teacher-form" onSubmit={handleUpdate} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Full name</label>
+                      <input autoFocus className="input-obsidian h-11" value={editingTeacher.name} onChange={e => setEditingTeacher({ ...editingTeacher, name: e.target.value })} required />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Email address</label>
+                      <input type="email" className="input-obsidian h-11" value={editingTeacher.email} onChange={e => setEditingTeacher({ ...editingTeacher, email: e.target.value })} required />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Phone number</label>
+                      <input className="input-obsidian h-11" value={editingTeacher.phone || ''} onChange={e => setEditingTeacher({ ...editingTeacher, phone: e.target.value })} />
+                    </div>
+                  </form>
+                </div>
+
+                {/* Sticky footer */}
+                <div className="shrink-0 flex items-center justify-end gap-2 px-6 py-3 border-t border-glass-border bg-[var(--bg-card)]/60">
+                  <button
+                    type="button"
+                    onClick={() => setEditingTeacher(null)}
+                    disabled={isSubmittingEdit}
+                    className="px-4 h-10 rounded-xl text-xs font-black uppercase tracking-widest text-text-secondary hover:text-foreground border border-glass-border transition-colors disabled:opacity-40"
+                  >
+                    Cancel
                   </button>
-                </form>
+                  <button
+                    type="submit"
+                    form="edit-teacher-form"
+                    disabled={isSubmittingEdit}
+                    className={cn("indigo-glow-button h-10 px-5 text-xs font-black uppercase tracking-wider", isSubmittingEdit && "opacity-50 cursor-wait")}
+                  >
+                    {isSubmittingEdit ? <Loader className="w-3.5 h-3.5 animate-spin" /> : 'Save changes'}
+                  </button>
+                </div>
               </motion.div>
             </div>
           </div>

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, Loader2, X } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
@@ -15,6 +15,15 @@ interface ConfirmModalProps {
   isLoading?: boolean;
   /** Optional secondary content rendered between description and buttons. */
   children?: React.ReactNode;
+  /**
+   * When set, the user must type this exact string (case-sensitive)
+   * before the confirm button becomes enabled. Use for destructive,
+   * irreversible operations where an accidental click could destroy
+   * meaningful data.
+   */
+  requireConfirmText?: string;
+  /** Hint shown under the confirm-text input. */
+  requireConfirmHint?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -52,9 +61,22 @@ export default function ConfirmModal({
   tone = 'danger',
   isLoading,
   children,
+  requireConfirmText,
+  requireConfirmHint,
   onConfirm,
   onCancel,
 }: ConfirmModalProps) {
+  const [confirmInput, setConfirmInput] = useState('');
+  // React-recommended "reset state on prop change" pattern — track the
+  // previous `open`/`requireConfirmText` during render so we don't pay
+  // an extra effect commit just to wipe the input.
+  const [prevOpenKey, setPrevOpenKey] = useState<string>(`${open}|${requireConfirmText ?? ''}`);
+  const nextOpenKey = `${open}|${requireConfirmText ?? ''}`;
+  if (prevOpenKey !== nextOpenKey) {
+    setPrevOpenKey(nextOpenKey);
+    if (open) setConfirmInput('');
+  }
+
   // Lock body scroll while the dialog is open.
   useEffect(() => {
     if (!open) return;
@@ -74,6 +96,7 @@ export default function ConfirmModal({
   }, [open, isLoading, onCancel]);
 
   const t = TONE_STYLES[tone];
+  const confirmGated = !!requireConfirmText && confirmInput !== requireConfirmText;
 
   return (
     <AnimatePresence>
@@ -133,6 +156,36 @@ export default function ConfirmModal({
 
             {children && <div className="px-6 pb-4">{children}</div>}
 
+            {requireConfirmText && (
+              <div className="px-6 pb-4 space-y-2">
+                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300">
+                  Type <span className="font-mono text-rose-500">{requireConfirmText}</span> to confirm
+                </label>
+                <input
+                  type="text"
+                  value={confirmInput}
+                  onChange={e => setConfirmInput(e.target.value)}
+                  autoComplete="off"
+                  spellCheck={false}
+                  disabled={isLoading}
+                  className={cn(
+                    'w-full h-10 px-3 rounded-xl border bg-white dark:bg-slate-900 text-sm font-mono tracking-wide',
+                    'text-slate-900 dark:text-white placeholder:text-slate-400',
+                    confirmGated
+                      ? 'border-slate-300 dark:border-white/10 focus:border-rose-400 focus:ring-2 focus:ring-rose-200 dark:focus:ring-rose-500/30'
+                      : 'border-emerald-400 ring-2 ring-emerald-100 dark:ring-emerald-500/20',
+                    'outline-none transition-colors',
+                  )}
+                  placeholder={requireConfirmText}
+                />
+                {requireConfirmHint && (
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
+                    {requireConfirmHint}
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-glass-border bg-slate-50/60 dark:bg-white/[0.02] rounded-b-2xl">
               <button
                 type="button"
@@ -145,7 +198,8 @@ export default function ConfirmModal({
               <button
                 type="button"
                 onClick={onConfirm}
-                disabled={isLoading}
+                disabled={isLoading || confirmGated}
+                title={confirmGated ? `Type ${requireConfirmText} to enable` : undefined}
                 className={cn(
                   'inline-flex items-center gap-2 px-5 h-10 rounded-xl text-xs font-black uppercase tracking-widest transition-all disabled:opacity-60 disabled:cursor-not-allowed',
                   t.button,

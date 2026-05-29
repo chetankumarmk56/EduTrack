@@ -83,12 +83,17 @@ export const academicApi = {
   },
 
   /**
-   * Create many sections at once (A, B, C, D…). The backend skips any
-   * names that already exist in the class and reports them in `skipped`
-   * so the UI can show a partial-success message.
+   * Create many sections at once (A, B, C, D…). The backend returns a
+   * triage of created / skipped (with reason) / invalid (with reason)
+   * plus the active naming rule so the UI can show a precise summary.
    */
   deploySegmentsBulk: async (grade_id: number, names: string[]) => {
-    const response = await client.post<{ created: Section[]; skipped: string[] }>(
+    const response = await client.post<{
+      created: Section[];
+      skipped: { name: string; reason: 'already_exists' | 'duplicate_in_request' }[];
+      invalid: { name: string; reason: 'invalid_format' }[];
+      rule: string;
+    }>(
       'academic/sections/deploy-bulk',
       { grade_id, names },
     );
@@ -102,6 +107,8 @@ export const academicApi = {
       classrooms: number;
       students: number;
       teacher_assignments: number;
+      teachers: number;
+      timetable_slots: number;
     }>(`academic/classes/${grade_id}/dependents`);
     return response.data;
   },
