@@ -6,6 +6,9 @@ import { CheckCircle2, Save, AlertCircle, Check, ChevronDown, Hash, UserCircle, 
 import { cn } from '@/shared/lib/utils';
 import { attendanceApi } from '@/features/attendance/api';
 import { directoryApi } from '@/features/directory/api';
+import { getErrorMessage } from '@/shared/lib/errorHandler';
+import ConfirmModal from '@/shared/components/ui/ConfirmModal';
+import { useToast } from '@/shared/components/ui/Toast';
 import type { Student } from '@/shared/types';
 
 export default function TeacherAttendance() {
@@ -111,11 +114,17 @@ export default function TeacherAttendance() {
     if (saveStatus !== 'idle') setSaveStatus('idle');
   };
 
-  const saveAttendance = async () => {
-    if (!activeAssignment || filteredDB.length === 0) return;
-    
-    if (!window.confirm(`Commit attendance records for ${activeAssignment.subject_ref.name} on ${selectedDate}?`)) return;
+  const [showCommitConfirm, setShowCommitConfirm] = useState(false);
+  const toast = useToast();
 
+  const requestSaveAttendance = () => {
+    if (!activeAssignment || filteredDB.length === 0) return;
+    setShowCommitConfirm(true);
+  };
+
+  const performSaveAttendance = async () => {
+    if (!activeAssignment || filteredDB.length === 0) return;
+    setShowCommitConfirm(false);
     setIsSaving(true);
     setSaveStatus('idle');
 
@@ -135,10 +144,12 @@ export default function TeacherAttendance() {
       });
       setSaveStatus('success');
       fetchTeacherStats();
+      toast.success('Attendance saved', `${records.length} student${records.length === 1 ? '' : 's'} on ${selectedDate}.`);
       setTimeout(() => setSaveStatus('idle'), 3000);
     } catch (err) {
       console.error("Failed to save attendance batch", err);
       setSaveStatus('error');
+      toast.error('Could not save attendance', getErrorMessage(err).message || 'Please try again.');
     } finally {
       setIsSaving(false);
     }
@@ -226,7 +237,7 @@ export default function TeacherAttendance() {
           <motion.button 
             whileHover={{ scale: 1.02, translateY: -2 }}
             whileTap={{ scale: 0.98 }}
-            onClick={saveAttendance}
+            onClick={requestSaveAttendance}
             disabled={isSaving || filteredDB.length === 0}
             className={cn(
                "relative group overflow-hidden px-10 py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-2xl transition-all flex items-center gap-3",
@@ -387,6 +398,21 @@ export default function TeacherAttendance() {
           </table>
         </div>
       </div>
+
+      <ConfirmModal
+        open={showCommitConfirm}
+        title="Save attendance?"
+        description={
+          activeAssignment
+            ? `${activeAssignment.subject_ref.name} — ${selectedDate}. ${filteredDB.length} student${filteredDB.length === 1 ? '' : 's'} will be recorded.`
+            : 'Attendance records will be saved.'
+        }
+        confirmLabel="Save attendance"
+        tone="primary"
+        isLoading={isSaving}
+        onConfirm={performSaveAttendance}
+        onCancel={() => !isSaving && setShowCommitConfirm(false)}
+      />
     </div>
   );
 }

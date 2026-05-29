@@ -3,16 +3,20 @@ import { useSearchParams } from 'react-router-dom';
 import { useApp } from '@/shared/contexts/AppContext';
 import { useAuth } from '@/shared/contexts/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Save, Plus, Hash, User, 
-  Edit3, Trash2, ChevronDown, Check, 
-  AlertCircle, Clock, Users, BarChart3, 
-  PieChart, ClipboardCheck 
+import {
+  Save, Plus, Hash, User,
+  Edit3, Trash2, ChevronDown, Check,
+  AlertCircle, Clock, Users, BarChart3,
+  PieChart, ClipboardCheck, Loader2, ClipboardList,
 } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import { StaggerContainer, StaggerItem } from '@/shared/components/ui/PageWrapper';
 import { marksApi, type Exam } from '@/features/marks/api';
 import { directoryApi } from '@/features/directory/api';
+import { getErrorMessage } from '@/shared/lib/errorHandler';
+import ConfirmModal from '@/shared/components/ui/ConfirmModal';
+import ModalShell, { ModalHeader, ModalBody, ModalFooter } from '@/shared/components/ui/ModalShell';
+import { useToast } from '@/shared/components/ui/Toast';
 import type { Student } from '@/shared/types';
 
 interface ClassStudent {
@@ -77,7 +81,26 @@ export default function TeacherDashboard() {
   };
 
   const [activeMaxScore, setActiveMaxScore] = useState(100);
-  
+  /** Mirror string for the max-score input. Keeping the raw string while
+   *  the user is typing avoids the `0` + digit → `078` jitter that comes
+   *  from binding a `<number>` controlled input straight to a numeric state. */
+  const [maxScoreInput, setMaxScoreInput] = useState('100');
+  useEffect(() => { setMaxScoreInput(String(activeMaxScore)); }, [activeMaxScore]);
+
+  const toast = useToast();
+
+  // Native dialogs replaced with these state-driven modals.
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false);
+  const [pendingDeleteExamId, setPendingDeleteExamId] = useState<number | null>(null);
+  const [examDeletingBusy, setExamDeletingBusy] = useState(false);
+  const [examEditor, setExamEditor] = useState<
+    | { mode: 'create'; name: string }
+    | { mode: 'rename'; id: number; name: string }
+    | null
+  >(null);
+  const [examEditorBusy, setExamEditorBusy] = useState(false);
+  const [examEditorError, setExamEditorError] = useState<string | null>(null);
+
   const activeExam = useMemo(() => exams.find(e => e.id === activeExamId), [exams, activeExamId]);
 
   const fetchExams = async () => {
@@ -178,8 +201,9 @@ export default function TeacherDashboard() {
 
   const handleScoreChange = (studentId: number, newScore: number) => {
     if (!activeExamId) return;
+    // Hard-clamp on the way in so an over-cap value can never reach state.
     const validatedScore = Math.max(0, Math.min(newScore, activeMaxScore));
-    
+
     setStudents(prev => prev.map(s => {
       if (s.student_id === studentId) {
         const testIndex = s.marks.findIndex(m => m.test === activeExamId);
@@ -195,102 +219,156 @@ export default function TeacherDashboard() {
     }));
   };
 
-  const saveMarks = async () => {
+  /** Highest score across all current students for the active exam — the
+   *  floor for `activeMaxScore`. Lowering the cap below this would corrupt
+   *  the meaning of existing entries, so we block it. */
+  const highestStudentScore = useMemo(() => {
+    if (!activeExamId) return 0;
+    return students.reduce((max, s) => {
+      const score = s.marks.find(m => m.test === activeExamId)?.score ?? 0;
+      return score > max ? score : max;
+    }, 0);
+  }, [students, activeExamId]);
+
+  /** Commits an explicit max-score value from the cap input. Refuses anything
+   *  below the highest recorded student score (with a toast) so existing
+   *  evaluations stay valid. */
+  const commitMaxScore = (raw: string) => {
+    const next = Number(raw);
+    if (!Number.isFinite(next) || next <= 0) {
+      setMaxScoreInput(String(activeMaxScore));
+      toast.error('Invalid max marks', 'Enter a positive number.');
+      return;
+    }
+    if (next < highestStudentScore) {
+      setMaxScoreInput(String(activeMaxScore));
+      toast.error(
+        'Max marks too low',
+        `A student has already been awarded ${highestStudentScore}. Lower that score first.`,
+      );
+      return;
+    }
+    setActiveMaxScore(next);
+  };
+
+  const requestSaveMarks = () => {
     if (!activeAssignment || !activeExamId) return;
-    if (!window.confirm(`Synchronize marks for ${activeAssignment.subject_ref.name} (${activeExam?.name}) to the central ledger?`)) return;
+    setShowSaveConfirm(true);
+  };
+
+  const performSaveMarks = async () => {
+    if (!activeAssignment || !activeExamId) return;
+    setShowSaveConfirm(false);
 
     interface BatchMarkPayload {
-        student_id: number;
-        subject: string;
-        subject_id?: number;
-        test_name?: string;
-        exam_id: number;
-        score: number;
-        max_score: number;
+      student_id: number;
+      subject: string;
+      subject_id?: number;
+      test_name?: string;
+      exam_id: number;
+      score: number;
+      max_score: number;
     }
     const batchPayload: BatchMarkPayload[] = [];
     students.forEach(student => {
-        student.marks.forEach(mark => {
-            if (mark.test === activeExamId && mark.score !== undefined && mark.score !== null) {
-                batchPayload.push({
-                   student_id: student.student_id,
-                   subject: activeAssignment.subject_ref.name,
-                   subject_id: activeAssignment.subject_id || activeAssignment.subject_ref?.id,
-                   test_name: activeExam?.name,
-                   exam_id: activeExamId,
-                   score: mark.score,
-                   max_score: activeMaxScore
-                 });
-            }
-        });
+      student.marks.forEach(mark => {
+        if (mark.test === activeExamId && mark.score !== undefined && mark.score !== null) {
+          batchPayload.push({
+            student_id: student.student_id,
+            subject: activeAssignment.subject_ref.name,
+            subject_id: activeAssignment.subject_id || activeAssignment.subject_ref?.id,
+            test_name: activeExam?.name,
+            exam_id: activeExamId,
+            score: mark.score,
+            max_score: activeMaxScore,
+          });
+        }
+      });
     });
-    
+
     setSaveStatus('saving');
     try {
-        await marksApi.recordMarksBatch(batchPayload);
-        setSaveStatus('success');
-        fetchMarksForActiveExam();
-        fetchTeacherStats();
-        setTimeout(() => setSaveStatus('idle'), 3000);
-    } catch(err) {
-        console.error(err);
-        setSaveStatus('error');
-        setTimeout(() => setSaveStatus('idle'), 4000);
+      await marksApi.recordMarksBatch(batchPayload);
+      setSaveStatus('success');
+      fetchMarksForActiveExam();
+      fetchTeacherStats();
+      toast.success('Marks saved', `${batchPayload.length} record${batchPayload.length === 1 ? '' : 's'} synced to the ledger.`);
+      setTimeout(() => setSaveStatus('idle'), 3000);
+    } catch (err) {
+      console.error(err);
+      setSaveStatus('error');
+      toast.error('Could not save marks', getErrorMessage(err).message || 'Please try again.');
+      setTimeout(() => setSaveStatus('idle'), 4000);
     }
   };
 
-  const handleCreateExam = async () => {
+  const openCreateExam = () => {
     if (!activeAssignment) return;
-    const name = window.prompt("New Assessment Name (e.g., Mid-Term Exam):");
-    if (!name) return;
+    setExamEditorError(null);
+    setExamEditor({ mode: 'create', name: '' });
+  };
 
+  const openRenameExam = (id: number, currentName: string) => {
+    setExamEditorError(null);
+    setExamEditor({ mode: 'rename', id, name: currentName });
+  };
+
+  const submitExamEditor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!examEditor) return;
+    const name = examEditor.name.trim();
+    if (!name) {
+      setExamEditorError('Assessment name is required.');
+      return;
+    }
+    setExamEditorBusy(true);
+    setExamEditorError(null);
     try {
-      const newExam = await marksApi.createExam(
-        { name }, 
-        activeAssignment.school_class?.id, 
-        activeAssignment.subject_id || activeAssignment.subject_ref?.id
-      );
-      setExams(prev => [...prev, newExam]);
-      setActiveExamId(newExam.id);
-      
-      // Refresh marks list with the new exam context
-      if (students.length > 0) {
-        setStudents(prev => prev.map(s => ({
-          ...s,
-          marks: [...s.marks, { test: newExam.id, score: 0 }]
-        })));
+      if (examEditor.mode === 'create') {
+        if (!activeAssignment) return;
+        const newExam = await marksApi.createExam(
+          { name },
+          activeAssignment.school_class?.id,
+          activeAssignment.subject_id || activeAssignment.subject_ref?.id,
+        );
+        setExams(prev => [...prev, newExam]);
+        setActiveExamId(newExam.id);
+        if (students.length > 0) {
+          setStudents(prev => prev.map(s => ({
+            ...s,
+            marks: [...s.marks, { test: newExam.id, score: 0 }],
+          })));
+        }
+        toast.success('Assessment created', name);
+      } else {
+        const updated = await marksApi.updateExam(examEditor.id, name);
+        setExams(prev => prev.map(e => (e.id === examEditor.id ? updated : e)));
+        toast.success('Assessment renamed', name);
       }
+      setExamEditor(null);
     } catch (err) {
       console.error(err);
-      alert(`Ledger Error: ${err instanceof Error ? err.message : 'Could not synchronize assessment structure.'}`);
-    }
-  };
-  
-  const handleUpdateExam = async (examId: number, currentName: string) => {
-    const newName = window.prompt("Modify Assessment Designation:", currentName);
-    if (!newName || newName === currentName) return;
-
-    try {
-      const updated = await marksApi.updateExam(examId, newName);
-      setExams(prev => prev.map(e => e.id === examId ? updated : e));
-    } catch (err) {
-      console.error(err);
-      alert("Failed to update assessment designation.");
+      setExamEditorError(getErrorMessage(err).message || 'Could not save the assessment.');
+    } finally {
+      setExamEditorBusy(false);
     }
   };
 
-  const handleDeleteExam = async (examId: number) => {
-    if (!window.confirm("CRITICAL: Erasing this assessment will PERMANENTLY delete all student marks recorded under it. This action cannot be reversed. Continue?")) return;
-
+  const performDeleteExam = async () => {
+    const examId = pendingDeleteExamId;
+    if (examId == null) return;
+    setExamDeletingBusy(true);
     try {
       await marksApi.deleteExam(examId);
       setExams(prev => prev.filter(e => e.id !== examId));
-      if (activeExamId === examId) {
-        setActiveExamId(undefined);
-      }
+      if (activeExamId === examId) setActiveExamId(undefined);
+      setPendingDeleteExamId(null);
+      toast.success('Assessment removed');
     } catch (err) {
       console.error(err);
-      alert("Failed to decommission assessment.");
+      toast.error('Could not remove assessment', getErrorMessage(err).message || 'Please try again.');
+    } finally {
+      setExamDeletingBusy(false);
     }
   };
 
@@ -352,8 +430,8 @@ export default function TeacherDashboard() {
         <motion.button 
           whileHover={{ scale: 1.02, translateY: -2 }}
           whileTap={{ scale: 0.98 }}
-          onClick={saveMarks}
-          disabled={saveStatus === 'saving'}
+          onClick={requestSaveMarks}
+          disabled={saveStatus === 'saving' || !activeAssignment || !activeExamId}
           className={cn(
             "relative group overflow-hidden text-white px-10 py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-2xl flex items-center gap-3 transition-all",
             saveStatus === 'success' ? "bg-emerald-500 shadow-emerald-500/20" :
@@ -406,15 +484,17 @@ export default function TeacherDashboard() {
                     
                     {activeExamId === exam.id && (
                       <div className="relative z-10 flex items-center ml-2 pl-3 border-l border-white/20 gap-2">
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); handleUpdateExam(exam.id, exam.name); }}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openRenameExam(exam.id, exam.name); }}
                           className="hover:scale-125 transition-transform text-white/60 hover:text-white"
+                          title="Rename assessment"
                         >
                           <Edit3 className="w-3.5 h-3.5" />
                         </button>
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); handleDeleteExam(exam.id); }}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setPendingDeleteExamId(exam.id); }}
                           className="hover:scale-125 transition-transform text-white/40 hover:text-red-300"
+                          title="Delete assessment"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -424,20 +504,31 @@ export default function TeacherDashboard() {
                 ))}
               </AnimatePresence>
               
-              <button 
-                 onClick={handleCreateExam}
+              <button
+                 onClick={openCreateExam}
                  className="px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] border border-dashed border-primary/30 text-primary hover:bg-primary/5 hover:border-primary transition-all ml-2"
               >
                 <Plus className="w-4 h-4 mr-2" /> CREATE ASSESSMENT
               </button>
-              
+
               <div className="ml-auto flex items-center gap-8 pl-8 border-l border-white/5">
                 <div className="flex items-center gap-4">
                   <span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest opacity-60">Cap:</span>
-                  <input 
-                    type="number" 
-                    value={activeMaxScore} 
-                    onChange={(e) => setActiveMaxScore(Number(e.target.value))} 
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={Math.max(1, highestStudentScore)}
+                    value={maxScoreInput}
+                    onChange={(e) => {
+                      // Only digits — and strip any leading zeroes so
+                      // backspacing to "0" then typing "78" never produces "078".
+                      const digits = e.target.value.replace(/\D/g, '');
+                      const normalised = digits.replace(/^0+(?=\d)/, '');
+                      setMaxScoreInput(normalised);
+                    }}
+                    onBlur={() => commitMaxScore(maxScoreInput)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                    title={highestStudentScore > 0 ? `Cannot go below ${highestStudentScore} (highest awarded score)` : undefined}
                     className="w-20 h-10 text-sm font-black text-center rounded-xl bg-background/50 border border-white/10 text-primary focus:ring-2 focus:ring-primary/50 outline-none tabular-nums transition-all"
                   />
                 </div>
@@ -521,8 +612,18 @@ export default function TeacherDashboard() {
                                 <motion.div whileHover={{ scale: 1.05 }} className="relative">
                                   <input
                                     type="number"
+                                    inputMode="numeric"
+                                    min={0}
+                                    max={activeMaxScore}
+                                    placeholder="0"
                                     value={score || ''}
-                                    onChange={(e) => handleScoreChange(student.student_id, Number(e.target.value))}
+                                    onChange={(e) => {
+                                      // Digits only, never accept a leading zero in the typed string.
+                                      const digits = e.target.value.replace(/\D/g, '');
+                                      const normalised = digits.replace(/^0+(?=\d)/, '');
+                                      handleScoreChange(student.student_id, Number(normalised || 0));
+                                    }}
+                                    title={`Max ${activeMaxScore}`}
                                     className={cn(
                                       "w-28 h-14 rounded-2xl bg-black border border-white/10 px-5 text-right font-black text-xl focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all tabular-nums aurora-glow-focus hover:border-primary/40",
                                       score >= (activeMaxScore * 0.9) ? "text-primary glow-text" : "text-foreground"
@@ -545,6 +646,98 @@ export default function TeacherDashboard() {
           </div>
         </StaggerItem>
       </StaggerContainer>
+
+      {/* ── Save marks confirmation ───────────────────────────────────── */}
+      <ConfirmModal
+        open={showSaveConfirm}
+        title="Save these marks?"
+        description={
+          activeAssignment && activeExam
+            ? `${activeAssignment.subject_ref.name} — ${activeExam.name} will be written to the central ledger.`
+            : 'These marks will be written to the central ledger.'
+        }
+        confirmLabel="Save marks"
+        tone="primary"
+        isLoading={saveStatus === 'saving'}
+        onConfirm={performSaveMarks}
+        onCancel={() => setShowSaveConfirm(false)}
+      />
+
+      {/* ── Delete assessment confirmation ────────────────────────────── */}
+      <ConfirmModal
+        open={pendingDeleteExamId != null}
+        title="Delete this assessment?"
+        description="All student marks recorded under it will be permanently removed. This action cannot be undone."
+        confirmLabel="Delete assessment"
+        tone="danger"
+        isLoading={examDeletingBusy}
+        onConfirm={performDeleteExam}
+        onCancel={() => !examDeletingBusy && setPendingDeleteExamId(null)}
+      />
+
+      {/* ── Create / rename assessment ────────────────────────────────── */}
+      <ModalShell
+        open={!!examEditor}
+        onClose={() => !examEditorBusy && setExamEditor(null)}
+        size="md"
+        locked={examEditorBusy}
+        labelledBy="exam-editor-title"
+      >
+        {examEditor && (
+          <>
+            <ModalHeader
+              id="exam-editor-title"
+              icon={<ClipboardList className="w-4 h-4" />}
+              title={examEditor.mode === 'create' ? 'New assessment' : 'Rename assessment'}
+              subtitle={examEditor.mode === 'create'
+                ? 'Add a new assessment to this subject and start recording marks.'
+                : 'Give this assessment a clearer name.'}
+              onClose={() => !examEditorBusy && setExamEditor(null)}
+            />
+            <ModalBody>
+              {examEditorError && (
+                <div className="mb-4 px-3 py-2.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-500 dark:text-rose-400 text-xs font-medium flex items-start gap-2">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <span className="leading-snug">{examEditorError}</span>
+                </div>
+              )}
+              <form id="exam-editor-form" onSubmit={submitExamEditor} className="space-y-1">
+                <label className="block text-[11px] font-medium text-text-secondary">
+                  Assessment name <span className="text-rose-500 dark:text-rose-400">*</span>
+                </label>
+                <input
+                  autoFocus
+                  placeholder="e.g. Mid-term exam"
+                  className="input-modal"
+                  value={examEditor.name}
+                  maxLength={80}
+                  onChange={e => setExamEditor({ ...examEditor, name: e.target.value })}
+                  required
+                />
+              </form>
+            </ModalBody>
+            <ModalFooter>
+              <button
+                type="button"
+                onClick={() => setExamEditor(null)}
+                disabled={examEditorBusy}
+                className="modal-btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                form="exam-editor-form"
+                disabled={examEditorBusy || !examEditor.name.trim()}
+                className={cn('modal-btn-primary', (examEditorBusy || !examEditor.name.trim()) && 'opacity-50 cursor-not-allowed')}
+              >
+                {examEditorBusy && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {examEditor.mode === 'create' ? 'Create' : 'Save'}
+              </button>
+            </ModalFooter>
+          </>
+        )}
+      </ModalShell>
     </div>
   );
 }

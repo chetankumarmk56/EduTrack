@@ -8,6 +8,7 @@ import { cn } from '@/shared/lib/utils';
 import { getErrorMessage } from '@/shared/lib/errorHandler';
 import { teacherAttendanceApi, type TeacherAttendanceRecord, type TeacherLeaveRecord } from '@/features/teacher-attendance/api';
 import { SkeletonStatGrid, SkeletonTable, SkeletonList } from '@/shared/components/ui/Skeleton';
+import { useToast } from '@/shared/components/ui/Toast';
 
 type DisplayStatus = 'PRESENT' | 'ABSENT' | 'HALF_DAY' | 'ON_LEAVE';
 type StatusFilter = 'ALL' | DisplayStatus;
@@ -55,6 +56,7 @@ function parseLocalDate(iso: string): Date {
 
 export default function TeacherAttendanceLeave() {
   const [tab, setTab] = useState<Tab>('today');
+  const toast = useToast();
 
   // Today state
   const [todayRecord, setTodayRecord] = useState<TeacherAttendanceRecord | null | undefined>(undefined);
@@ -185,8 +187,9 @@ export default function TeacherAttendanceLeave() {
     try {
       await teacherAttendanceApi.cancelLeave(id);
       loadLeaves();
+      toast.success('Leave cancelled');
     } catch (e) {
-      alert(getErrorMessage(e).message || 'Failed to cancel leave');
+      toast.error('Could not cancel leave', getErrorMessage(e).message || 'Please try again.');
     }
   };
 

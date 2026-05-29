@@ -16,6 +16,8 @@ import type { TeacherAssignment } from '@/shared/types';
 import { getErrorMessage } from '@/shared/lib/errorHandler';
 import { cn } from '@/shared/lib/utils';
 import { SkeletonList } from '@/shared/components/ui/Skeleton';
+import ConfirmModal from '@/shared/components/ui/ConfirmModal';
+import { useToast } from '@/shared/components/ui/Toast';
 import { HomeworkFields } from '@/features/announcements/components/HomeworkFields';
 import { CategoryBadge } from '@/features/announcements/components/CategoryBadge';
 import { ANNOUNCEMENT_CATEGORIES } from '@/features/announcements/constants';
@@ -218,13 +220,27 @@ export default function TeacherAnnouncements() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Delete this announcement? This cannot be undone.')) return;
+  const toast = useToast();
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deletingBusy, setDeletingBusy] = useState(false);
+
+  const handleDelete = (id: string) => {
+    setPendingDeleteId(id);
+  };
+
+  const performDelete = async () => {
+    const id = pendingDeleteId;
+    if (!id) return;
+    setDeletingBusy(true);
     try {
       await announcementApi.deleteAnnouncement(id);
       setAnnouncements(prev => prev.filter(a => a.id !== id));
-    } catch {
-      alert('Failed to delete. Please try again.');
+      setPendingDeleteId(null);
+      toast.success('Announcement removed');
+    } catch (err) {
+      toast.error('Could not remove announcement', getErrorMessage(err).message || 'Please try again.');
+    } finally {
+      setDeletingBusy(false);
     }
   };
 
@@ -928,6 +944,17 @@ export default function TeacherAnnouncements() {
         </AnimatePresence>,
         document.body,
       )}
+
+      <ConfirmModal
+        open={!!pendingDeleteId}
+        title="Delete this announcement?"
+        description="Recipients who haven't seen it yet will no longer receive it. This cannot be undone."
+        confirmLabel="Delete"
+        tone="danger"
+        isLoading={deletingBusy}
+        onConfirm={performDelete}
+        onCancel={() => !deletingBusy && setPendingDeleteId(null)}
+      />
     </div>
   );
 }
