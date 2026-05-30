@@ -58,8 +58,7 @@ export const parentNavItems: NavItem[] = [
   { name: 'Teachers', path: '/parent/teachers', icon: Users },
   { name: 'Events', path: '/parent/events', icon: Bell },
   { name: 'Bus Tracking', path: '/parent/bus-tracking', icon: MapPin },
-  { name: 'Payments', path: '/parent/payments', icon: CreditCard },
-  { name: 'Pay Fees (UPI)', path: '/parent/fee-pay', icon: Wallet },
+  { name: 'Fees & Payments', path: '/parent/fee-pay', icon: Wallet },
 ];
 
 export const adminNavItems: NavItem[] = [

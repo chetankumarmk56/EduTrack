@@ -70,11 +70,6 @@ class Settings(BaseSettings):
     AWS_S3_BUCKET: Optional[str] = None
     AWS_S3_PRESIGN_TTL: int = 3600  # seconds (1 hour)
     
-    # Razorpay
-    RAZORPAY_KEY_ID: Optional[str] = "rzp_test_placeholder"
-    RAZORPAY_KEY_SECRET: Optional[str] = "placeholder_secret"
-    RAZORPAY_WEBHOOK_SECRET: Optional[str] = "placeholder_webhook_secret"
-    
     # Redis (rate limiting + future pub/sub for websockets / queues).
     # When unset, slowapi runs with an in-memory counter — fine for a
     # single-instance dev box, NOT fine for multi-replica prod.
@@ -143,7 +138,7 @@ class Settings(BaseSettings):
 
     # Fee Reminder Scheduler
     # Day-of-week / time gating happens in the configured timezone. Defaults
-    # to Asia/Kolkata since the product is India-first (Razorpay, INR copy).
+    # to Asia/Kolkata since the product is India-first (INR / UPI copy).
     FEE_REMINDER_TIMEZONE: str = "Asia/Kolkata"
     # "More than a week overdue" — anything strictly greater than this many
     # days is eligible for reminders. Stored as int days so it's easy to
@@ -182,20 +177,8 @@ class Settings(BaseSettings):
         if self.JWT_ALGORITHM:
             self.ALGORITHM = self.JWT_ALGORITHM
 
-        # Production hardening: fail fast if critical credentials are placeholders
+        # Production hardening
         if self.ENVIRONMENT == "prod":
-            placeholder_values = {
-                "RAZORPAY_KEY_ID": ("rzp_test_placeholder", self.RAZORPAY_KEY_ID),
-                "RAZORPAY_KEY_SECRET": ("placeholder_secret", self.RAZORPAY_KEY_SECRET),
-                "RAZORPAY_WEBHOOK_SECRET": ("placeholder_webhook_secret", self.RAZORPAY_WEBHOOK_SECRET),
-            }
-            unset = [name for name, (placeholder, value) in placeholder_values.items() if not value or value == placeholder]
-            if unset:
-                raise ValueError(
-                    f"Production startup blocked: the following Razorpay credentials are unset or use placeholder values: {unset}. "
-                    "Set them via environment variables before starting in production."
-                )
-
             # ── Production storage: S3 MUST be set ──
             # All four upload surfaces — teacher file library, announcement
             # attachments, payment QR images, parent payment screenshots,

@@ -23,7 +23,6 @@ slowapi>=0.1.9            # Rate limiting (Redis-backed when REDIS_URL set; in-m
 redis>=5.0.0              # Backing store for slowapi shared across replicas + pub/sub for websockets
 limits[redis]>=3.0.0      # slowapi's storage adapter for Redis
 sentry-sdk[fastapi]>=2.0  # Optional — only activated when SENTRY_DSN is set
-razorpay
 cloudinary
 openai>=1.40.0
 reportlab>=4.0.0

@@ -36,13 +36,6 @@ services:
       #    plans (Render Pro = 2+ vCPU) or down if memory is tight. ──
       - key: WEB_CONCURRENCY
         sync: false
-      # ── Razorpay (required in prod — startup fails if missing or placeholder) ──
-      - key: RAZORPAY_KEY_ID
-        sync: false
-      - key: RAZORPAY_KEY_SECRET
-        sync: false
-      - key: RAZORPAY_WEBHOOK_SECRET
-        sync: false
       # ── Twilio voice calls (optional — service degrades gracefully if absent) ──
       - key: TWILIO_ACCOUNT_SID
         sync: false

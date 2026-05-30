@@ -3,7 +3,9 @@ from sqlalchemy import select, func, case
 from typing import List
 
 from app.core.logger import logger
-from app.models.finance import Payment, StudentFee, StudentFeeStatus
+from app.models.finance import (
+    Payment, StudentFee, StudentFeeStatus, FinanceLedger, LedgerEntryType,
+)
 from app.models.directory import Student
 from app.models.academic import SchoolClass
 from app.schemas.finance import (
@@ -11,19 +13,42 @@ from app.schemas.finance import (
     CategoryTotal,
     DefaulterResponse,
 )
+from app.services.finance.ledger_helpers import (
+    backfill_missing_manual_ledger_entries,
+)
 
 
 class ReportingServiceMixin:
     async def get_finance_summary(
         self, db: AsyncSession, institution_id: int
     ) -> FinanceSummaryResponse:
-        """Institutional finance summary using optimised aggregations."""
-        collected_stmt = select(func.sum(Payment.amount)).where(
-            Payment.institution_id == institution_id,
-            Payment.status == "SUCCESS",
+        """
+        Institutional finance summary. Revenue is sourced from FinanceLedger
+        (the unified source of truth), so admin-recorded payments AND
+        approved manual UPI submissions both feed the "Total Collected" card.
+        Refunds are subtracted so the figure is true net revenue.
+
+        Heals before reading so any approved manual payment missing its
+        FinanceLedger mirror gets one created and counted in revenue.
+        """
+        await backfill_missing_manual_ledger_entries(db, institution_id)
+
+        collected_stmt = select(func.sum(FinanceLedger.amount)).where(
+            FinanceLedger.institution_id == institution_id,
+            FinanceLedger.payment_status == "SUCCESS",
+            FinanceLedger.entry_type == LedgerEntryType.PAYMENT,
         )
         collected_res = await db.execute(collected_stmt)
-        total_collected = collected_res.scalar() or 0.0
+        gross_collected = float(collected_res.scalar() or 0.0)
+
+        refund_stmt = select(func.sum(FinanceLedger.amount)).where(
+            FinanceLedger.institution_id == institution_id,
+            FinanceLedger.entry_type == LedgerEntryType.REFUND,
+        )
+        refund_res = await db.execute(refund_stmt)
+        total_refunded = float(refund_res.scalar() or 0.0)
+
+        total_collected = max(0.0, gross_collected - total_refunded)
 
         pending_stmt = select(func.sum(StudentFee.due_amount)).where(
             StudentFee.institution_id == institution_id

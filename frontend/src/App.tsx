@@ -21,7 +21,6 @@ const Events = lazy(() => import('@/features/events/pages/Events'));
 const Teachers = lazy(() => import('@/features/directory/pages/Teachers'));
 const Profile = lazy(() => import('@/features/account/pages/Profile'));
 const Login = lazy(() => import('@/features/auth/pages/Login'));
-const Payments = lazy(() => import('@/features/finance/pages/Payments'));
 const ParentManualPayment = lazy(() => import('@/features/manual-payments/pages/ParentManualPayment'));
 const BusTracking = lazy(() => import('@/features/transport/pages/BusTracking'));
 const ParentAnnouncements = lazy(() => import('@/features/announcements/pages/ParentAnnouncements'));
@@ -129,7 +128,9 @@ function App() {
               <Route path="attendance" element={<Attendance />} />
               <Route path="events" element={<Events />} />
               <Route path="teachers" element={<Teachers />} />
-              <Route path="payments" element={<Payments />} />
+              {/* Legacy /payments URL kept as a redirect so older bookmarks
+                  still resolve to the current UPI flow. */}
+              <Route path="payments" element={<Navigate to="/parent/fee-pay" replace />} />
               <Route path="fee-pay" element={<ParentManualPayment />} />
               <Route path="bus-tracking" element={<BusTracking />} />
               <Route path="announcements" element={<ParentAnnouncements />} />

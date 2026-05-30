@@ -15,7 +15,7 @@ A production-ready React Native + Expo Parent Portal mobile application for the 
 - **Teachers** - Faculty directory with contact info
 - **Events** - School calendar with event types
 - **Announcements** - News and updates with filtering
-- **Fees** - Payment management with Razorpay integration
+- **Fees** - Read-only dues view; UPI payment is submitted in the web portal and verified by the school admin
 - **Profile** - User settings and secure logout
 
 ### Technical Highlights
@@ -171,9 +171,9 @@ Sessions are stored securely using `expo-secure-store` and automatically restore
 ### Payments (`/fees`)
 - Fee summary: total due + student name
 - Category-level breakdown (Tuition, Transport, etc.)
-- Partial payment amount input with max capping
-- Razorpay order creation — auto-detects mock mode
-- Success / error status banners
+- "Open UPI Payment Portal" CTA that deep-links to the web parent portal
+  (`/parent/fee-pay`), where the parent submits the UTR / screenshot for
+  admin verification
 - "All Paid" celebration state
 
 ### Academics (`/marks`)
@@ -209,8 +209,6 @@ Sessions are stored securely using `expo-secure-store` and automatically restore
 | Announcements | `GET /announcements/my` |
 | Parent fees | `GET /parent/fees` |
 | Student dues | `GET /finance/students/:id/dues` |
-| Create order | `POST /finance/payments/create-order` |
-| Verify payment | `POST /finance/payments/verify` |
 | AI questions | `POST /ai/generate-questions` |
 
 All requests automatically include:
@@ -240,20 +238,6 @@ All requests automatically include:
 | `axios` | HTTP client with interceptors |
 | `react-native-safe-area-context` | Safe area insets |
 | `@react-navigation/bottom-tabs` | Tab navigator |
-
----
-
-## 🚧 Razorpay Integration Notes
-
-The backend auto-detects test vs production mode:
-- **Mock mode:** `order.is_mock === true` — payment is simulated instantly without opening any UI
-- **Production:** Pass `order.checkout_url` or use the official `react-native-razorpay` package
-
-To add native Razorpay checkout:
-```bash
-npx expo install react-native-razorpay
-```
-Then in `payments.tsx`, replace the `Linking.openURL` block with the `RazorpayCheckout.open()` call.
 
 ---
 

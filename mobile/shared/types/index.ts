@@ -162,7 +162,6 @@ export interface Payment {
   due_date: string;
   paid_date?: string;
   status: 'pending' | 'paid' | 'overdue';
-  razorpay_order_id?: string;
   total_amount: number;
   paid_amount: number;
   due_amount: number;

@@ -38,7 +38,7 @@ A single platform that covers the day-to-day workflows a school actually runs on
 
 ## What makes it different
 
-- **Both online and offline fees.** Razorpay for instant online payments **and** an upload-screenshot flow for parents who pay by UPI directly to the school's account. Admins approve in one tap; everything posts to the same finance ledger.
+- **UPI-first fee collection with admin verification.** Parents pay into the school's UPI ID or bank account using their own banking app, then submit the UTR (and optional screenshot) in the portal. Admins approve in one tap; admin-recorded cash entries and approved UPI submissions post to the same finance ledger.
 - **Real multi-tenancy from day one.** Every query is scoped by institution at the JWT layer — schools share infrastructure but never see each other's data. Onboarding a new school is a 5-minute admin task, not a deployment.
 - **AI where it matters.** Teachers generate lesson plans and question banks in seconds (Google Gemini + OpenAI). Not a chatbot gimmick — output is editable, exportable to PDF/PPTX/DOCX, and graded against the school's existing rubric.
 - **Built like production software, not a college project.** 100+ automated tests on the backend. CI on every PR. JWT + HttpOnly cookies + bcrypt + rate limiting + structured logs + Sentry. The kind of plumbing that should be invisible but usually isn't.

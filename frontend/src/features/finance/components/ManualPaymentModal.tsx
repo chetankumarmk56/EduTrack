@@ -72,8 +72,8 @@ export default function ManualPaymentModal({ isOpen, onClose, initialStudentId, 
               <div className="h-14 w-14 rounded-2xl bg-primary text-white flex items-center justify-center shadow-xl shadow-primary/20">
                 <Plus className="w-8 h-8" />
               </div>
-              <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-foreground tracking-tighter">Manual <span className="text-primary italic">Entry</span></h2>
-              <p className="text-muted-foreground font-medium italic">Record physical currency or external UPI transfers safely into the ledger.</p>
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-foreground tracking-tighter">Record <span className="text-primary italic">Payment</span></h2>
+              <p className="text-muted-foreground font-medium italic">Log a cash or manual UPI receipt directly into the finance ledger.</p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">

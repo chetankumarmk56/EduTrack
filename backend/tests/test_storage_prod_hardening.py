@@ -36,9 +36,6 @@ _BASE_PROD_KWARGS = dict(
     SECRET_KEY="x" * 32,
     DATABASE_URL="postgresql://u:p@h/d",
     FRONTEND_URL="https://app.example.com",
-    RAZORPAY_KEY_ID="rzp_live_xxxxxxxx",
-    RAZORPAY_KEY_SECRET="some_real_secret",
-    RAZORPAY_WEBHOOK_SECRET="some_real_webhook",
     # NOTE: must override the host .env, which may have real creds. Pydantic
     # kwargs win over .env values, so passing None explicitly is the only
     # way to simulate "operator forgot to set this in prod".

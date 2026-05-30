@@ -42,22 +42,20 @@ const downloadBlob = (blob: Blob, filename: string) => {
   URL.revokeObjectURL(url);
 };
 
-// Canonical status → badge palette mapping. Any unknown status falls back
-// to a neutral slate badge so the UI degrades cleanly for new gateway states.
+// Canonical status → badge palette mapping. Unknown statuses fall back to
+// a neutral slate badge so the UI degrades cleanly.
 const statusStyles: Record<string, string> = {
   SUCCESS: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
   FAILED: 'bg-rose-500/10 text-rose-600 border-rose-500/20',
   PENDING: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
-  PROCESSING: 'bg-sky-500/10 text-sky-600 border-sky-500/20',
   REFUNDED: 'bg-blue-500/10 text-blue-600 border-blue-500/20',
   PARTIALLY_REFUNDED: 'bg-violet-500/10 text-violet-600 border-violet-500/20',
   CANCELLED: 'bg-slate-500/10 text-slate-600 border-slate-500/20',
-  EXPIRED: 'bg-zinc-500/10 text-zinc-600 border-zinc-500/20',
 };
 
 const FALLBACK_STATUS_OPTIONS: string[] = [
   'SUCCESS', 'PENDING', 'FAILED', 'CANCELLED',
-  'REFUNDED', 'PARTIALLY_REFUNDED', 'PROCESSING', 'EXPIRED',
+  'REFUNDED', 'PARTIALLY_REFUNDED',
 ];
 
 const SORT_OPTIONS = [
@@ -316,7 +314,7 @@ export default function PaymentLedger() {
     : FALLBACK_STATUS_OPTIONS;
   const methodOptions = facets?.methods?.length
     ? facets.methods
-    : ['UPI', 'CARD', 'NETBANKING', 'CASH', 'MANUAL_UPI'];
+    : ['UPI', 'CASH', 'MANUAL_UPI'];
   const feeTypeOptions = facets?.fee_types ?? [];
   const yearOptions = facets?.academic_years ?? [];
   const classOptions = facets?.classes ?? [];
@@ -467,7 +465,7 @@ export default function PaymentLedger() {
             </label>
             <input
               type="text"
-              placeholder="Name, receipt #, Razorpay ID..."
+              placeholder="Name, receipt #, UTR..."
               value={filters.search || ''}
               onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
               className="px-3 py-2 bg-slate-900/40 rounded-lg border border-white/10 text-sm font-semibold text-foreground outline-none focus:ring-2 focus:ring-primary/30"

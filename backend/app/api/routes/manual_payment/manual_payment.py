@@ -12,9 +12,8 @@ Routes:
   POST   /api/manual-payments/{id}/notes      — admin appends an internal note
   GET    /api/manual-payments/{id}/receipt    — stream / regenerate receipt PDF
 
-These endpoints DO NOT touch the existing Razorpay payment routes — the
-new workflow is fully parallel and may be removed by deleting this folder
-plus the migration without disturbing any other code path.
+Parent-submitted UPI payments only. Admin-side cash / manual UPI recording
+lives in /api/finance/payments/manual.
 """
 from __future__ import annotations
 

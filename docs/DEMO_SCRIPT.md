@@ -86,7 +86,7 @@
 
 **[Cut to]** Parent mobile app → Fees tab.
 
-> "The payment now shows up on the parent's app, posted to the same ledger as Razorpay online payments. The parent gets a receipt PDF. The admin gets reconciliation. Zero manual spreadsheet work."
+> "The payment now shows up on the parent's app, posted to the same finance ledger as admin-recorded cash entries. The parent gets a receipt PDF. The admin gets reconciliation. Zero manual spreadsheet work."
 
 ---
 

@@ -2,7 +2,7 @@
 
 A multi-tenant school management SaaS — admin web portal, parent/teacher web portal, and a React Native mobile app — backed by a single FastAPI service.
 
-EduTrack covers the day-to-day workflows a 50–2,000 student school actually runs on: attendance, marks, announcements with homework confirmation, fee collection (Razorpay + manual offline payments), transport tracking, timetables, parent communication (push + voice), and AI-assisted lesson planning / question generation.
+EduTrack covers the day-to-day workflows a 50–2,000 student school actually runs on: attendance, marks, announcements with homework confirmation, fee collection (parent UPI with admin verification + admin-recorded cash/manual UPI), transport tracking, timetables, parent communication (push + voice), and AI-assisted lesson planning / question generation.
 
 - **Backend:** Python 3.11 / FastAPI / SQLAlchemy 2 (async) / Alembic / PostgreSQL / Redis
 - **Web frontend:** React 19 / Vite / TypeScript / Tailwind v4
@@ -95,9 +95,10 @@ SCHOOL/
                 │             │   │ + WS fanout │    │ URLs (1h)    │
                 └─────────────┘   └─────────────┘    └──────────────┘
 
-External integrations: Razorpay (payments), Twilio (voice calls),
-Expo Push (mobile notifications), Google Gemini + OpenAI (AI lesson plans
-and question bank), Sentry (error tracking).
+External integrations: Twilio (voice calls), Expo Push (mobile notifications),
+Google Gemini + OpenAI (AI lesson plans and question bank), Sentry
+(error tracking). Fee payments are UPI-only — parents pay into the school's
+UPI/bank account out-of-band and submit the UTR for admin verification.
 ```
 
 **Multi-tenancy.** Every authenticated request carries an `X-Institution-Id` header that the backend resolves (slug or numeric PK) against the `institutions` table. The institution id is also embedded in the JWT so a tenant claim is always available even if the header is spoofed. Super-admin is the only role that crosses tenants.
@@ -128,7 +129,6 @@ cp backend/.env.example backend/.env
 # Edit backend/.env — at minimum, set:
 #   SECRET_KEY (32+ random chars)
 #   DATABASE_URL (leave default to use the compose-managed Postgres)
-#   RAZORPAY_KEY_ID / SECRET (test keys are fine for dev)
 
 docker compose up --build
 ```
@@ -258,7 +258,6 @@ The full list with descriptions lives in [`backend/app/core/config.py`](backend/
 | `FRONTEND_URL` | The Vercel URL — used for CORS allow-list and email links. |
 | `ENVIRONMENT` | `prod` enables HSTS, secure cookies, and strict storage/credential checks. |
 | `AWS_S3_BUCKET` + `AWS_S3_REGION` + `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` | S3 is the only supported storage backend in prod. Startup hard-fails if these are unset. |
-| `RAZORPAY_KEY_ID` + `RAZORPAY_KEY_SECRET` + `RAZORPAY_WEBHOOK_SECRET` | Online payments. Placeholder values are rejected in prod. |
 | `CRON_SECRET` | Shared secret for the fee-reminder cron job. |
 
 Optional but recommended:

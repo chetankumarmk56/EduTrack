@@ -1,7 +1,7 @@
 from pydantic import BaseModel
-from typing import Optional, List, Dict
+from typing import Optional, List
 from datetime import datetime, date
-from app.models.finance import PaymentMode, PaymentStatus, FeeType, StudentFeeStatus
+from app.models.finance import StudentFeeStatus
 
 # --- Student Fee (Granular) Schemas ---
 
@@ -71,9 +71,7 @@ class PaymentAllocationResponse(PaymentAllocationBase):
 class PaymentBase(BaseModel):
     student_id: int
     amount: float
-    payment_mode: str # UPI, CARD, NETBANKING, CASH, MANUAL_UPI
-    razorpay_order_id: Optional[str] = None
-    razorpay_payment_id: Optional[str] = None
+    payment_mode: str  # UPI, CASH, MANUAL_UPI
     note: Optional[str] = None
 
 class PaymentCreate(PaymentBase):
@@ -89,37 +87,11 @@ class PaymentResponse(PaymentBase):
     class Config:
         from_attributes = True
 
-# --- Specialized Response Schemas ---
-
-class OrderCreate(BaseModel):
-    student_id: int
-    amount: float
-
-class OrderResponse(BaseModel):
-    order_id: str
-    amount: int
-    key_id: str
-    currency: str
-    is_mock: bool = False
-
-class PaymentVerify(BaseModel):
-    razorpay_order_id: str
-    razorpay_payment_id: str
-    razorpay_signature: str
-
-class PaymentVerifyResponse(BaseModel):
-    status: str
-    message: str
-    payment_id: Optional[int] = None
-
-class PaymentCancel(BaseModel):
-    razorpay_order_id: str
-    student_id: int
 
 class ManualPaymentCreate(BaseModel):
     student_id: int
     amount: float
-    mode: str # CASH, MANUAL_UPI
+    mode: str  # CASH, MANUAL_UPI
     note: Optional[str] = None
 
 class ManualPaymentResponse(BaseModel):
@@ -168,16 +140,16 @@ class PaginatedPaymentResponse(BaseModel):
 
 class ClassFinanceRow(BaseModel):
     class_id: int
-    class_name: str         # e.g. "10-A"
-    fee_per_student: float  # total_fee on the SchoolClass
-    total_students: int     # enrolled active students
-    paid_count: int         # students with status=PAID
-    partial_count: int      # students with status=PARTIAL
-    unpaid_count: int       # students with status=UNPAID
-    no_record_count: int    # students with NO StudentFee record at all
-    total_expected: float   # fee_per_student × total_students
-    total_collected: float  # sum of amount_paid across StudentFee records
-    total_pending: float    # sum of due_amount across StudentFee records
+    class_name: str
+    fee_per_student: float
+    total_students: int
+    paid_count: int
+    partial_count: int
+    unpaid_count: int
+    no_record_count: int
+    total_expected: float
+    total_collected: float
+    total_pending: float
 
 class ClassFinanceBreakdownResponse(BaseModel):
     rows: List[ClassFinanceRow]
@@ -215,8 +187,6 @@ class LedgerEntryResponse(BaseModel):
     admission_number: Optional[str] = None
     fee_type: Optional[str] = None
     academic_year: str
-    razorpay_order_id: Optional[str] = None
-    razorpay_payment_id: Optional[str] = None
     amount: float
     gateway_fee: Optional[float] = 0.0
     net_amount: Optional[float] = None
@@ -224,20 +194,14 @@ class LedgerEntryResponse(BaseModel):
     payment_status: str
     payment_date: datetime
     notes: Optional[str] = None
-    # Convenience: the user-facing transaction reference (Razorpay payment id
-    # if captured, else the order id, else None for cash).
+    # External reference: UTR for manual UPI, internal id for cash. None for
+    # admin-recorded entries that did not capture a reference.
     transaction_id: Optional[str] = None
-    # Set when a payment has one or more REFUND ledger entries linked to it.
-    # `None` for payments with no refund activity.
     refund_status: Optional[str] = None
     refunded_amount: Optional[float] = None
-    # Surfaced for FAILED / CANCELLED rows so the UI can show why.
     error_message: Optional[str] = None
-    # True when a PDF receipt can be streamed for this entry — i.e. status
-    # is SUCCESS and the row was either mirrored from manual_payment or
-    # carries a real ledger id we can render an on-the-fly PDF from.
     has_receipt: bool = False
-    # When non-null, the ledger row was mirrored from this manual payment.
+    # Non-null when the row was mirrored from a parent manual-payment submission.
     manual_payment_request_id: Optional[int] = None
 
     class Config:
@@ -250,8 +214,6 @@ class LedgerSummary(BaseModel):
     total_failed: float = 0.0
     total_refunded: float = 0.0
     total_cancelled: float = 0.0
-    # Net revenue = total_collected − total_refunded. Failed/cancelled/pending
-    # never inflate or deflate this figure.
     net_revenue: float = 0.0
     transaction_count: int = 0
 

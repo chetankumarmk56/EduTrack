@@ -142,15 +142,16 @@ export default function ParentManualPayment() {
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 text-emerald-600 text-[10px] font-black uppercase tracking-[0.3em] bg-emerald-500/10 px-3 py-1.5 rounded-full border border-emerald-500/20">
-              <Sparkles className="w-3.5 h-3.5" /> New · Direct UPI / Bank Pay
+              <Sparkles className="w-3.5 h-3.5" /> UPI Payment · Admin Verified
             </div>
             <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tighter text-slate-900 dark:text-white leading-[0.95]">
-              Pay Fees <span className="text-emerald-600 italic">Directly</span>
+              Pay Fees via <span className="text-emerald-600 italic">UPI</span>
             </h1>
             <p className="text-sm text-slate-500 dark:text-slate-400 max-w-xl">
-              Pay into the school's UPI or bank account using your own bank app, then
-              submit the transaction details below. The school office will verify and
-              issue an official receipt after confirmation.
+              Pay into the school's UPI ID or bank account using your own UPI / banking app,
+              then submit the transaction reference (UTR) and an optional screenshot below.
+              The school office manually verifies every payment and issues an official receipt
+              once approved.
             </p>
           </div>
           <button

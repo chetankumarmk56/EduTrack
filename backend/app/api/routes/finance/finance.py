@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Request, Header
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from datetime import datetime, date
@@ -10,9 +10,8 @@ from app.core.database import get_db
 from app.core.dependencies import get_current_user, require_payment_admin, require_cron_or_admin, UserContext
 from app.schemas.finance import (
     StudentDuesResponse, PaymentResponse, PaginatedPaymentResponse,
-    PaymentCreate, OrderCreate, OrderResponse, PaymentVerify, PaymentVerifyResponse,
     ManualPaymentCreate, ManualPaymentResponse, FinanceSummaryResponse, DefaulterResponse,
-    ParentFeeResponse, ClassFinanceBreakdownResponse, PaymentCancel,
+    ClassFinanceBreakdownResponse,
     LedgerEntryResponse, PaginatedLedgerResponse, LedgerSummary,
 )
 from app.services.finance import finance_service
@@ -23,43 +22,35 @@ from app.models.directory import Student, Parent
 
 router = APIRouter(prefix="/api/finance", tags=["Finance & Payments"])
 
+
 async def ensure_student_access(user: UserContext, student_id: int, db: AsyncSession):
     """
-    Helper to ensure the current user (Student or Parent) has access to a specific student record.
+    Ensure the current user (Student or Parent) has access to a specific student.
     Admins and Finance roles bypass this check.
     """
     if user.role in ["super_admin", "admin", "finance"]:
         return True
-    
-    # Identity-based and Relationship-based access
-    from app.models.directory import Student, Parent
-    
-    # Check 1: User is the student (direct account or shared with parent)
+
     auth_stmt = select(Student).where(Student.user_id == user.id, Student.id == student_id)
     auth_res = await db.execute(auth_stmt)
     if auth_res.scalars().first():
         return True
-        
-    # Check 2: User is a parent linked to this student
+
     if user.role == "parent":
-        # Find if this user_id belongs to a parent record
         p_stmt = select(Parent).where(Parent.user_id == user.id)
         p_res = await db.execute(p_stmt)
         parent = p_res.scalars().first()
-        
         if parent:
-            # Check if student is a ward of this parent
             s_stmt = select(Student).where(Student.id == student_id, Student.parent_id == parent.id)
             s_res = await db.execute(s_stmt)
             if s_res.scalars().first():
                 return True
-                
+
     raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN, 
+        status_code=status.HTTP_403_FORBIDDEN,
         detail="Access denied to student records. You must be the student or their registered parent."
     )
-    
-    return True
+
 
 @router.get("/my-dues")
 async def get_my_dues(
@@ -68,20 +59,17 @@ async def get_my_dues(
 ):
     """
     Auto-resolves the current user's dues.
-    Handles three cases:
       1. role='student': direct student lookup by user_id
       2. role='parent' + Parent record exists: show all children's dues
-      3. role='parent' + No Parent record (student using family portal): fall back to student lookup
+      3. role='parent' + No Parent record (family-portal): fall back to student lookup
     """
     if user.role == "parent":
-        # Try to find an actual parent profile first
         parent_res = await db.execute(
             select(Parent).where(Parent.user_id == user.id, Parent.institution_id == user.institution_id)
         )
         parent = parent_res.scalars().first()
 
         if parent:
-            # Real parent user — return all children's dues
             children_res = await db.execute(
                 select(Student).where(
                     Student.parent_id == parent.id,
@@ -94,7 +82,6 @@ async def get_my_dues(
                 db, user.institution_id, child_ids
             )
 
-    # Student path (role='student' OR role='parent' with no Parent record)
     student_res = await db.execute(
         select(Student).where(
             Student.user_id == user.id,
@@ -104,7 +91,6 @@ async def get_my_dues(
     student = student_res.scalars().first()
 
     if not student:
-        # Last resort: sub might be student.id instead of user_id
         student_res2 = await db.execute(
             select(Student).where(
                 Student.id == user.id,
@@ -126,12 +112,8 @@ async def get_student_dues(
     db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(get_current_user)
 ):
-    """
-    View total and category-wise dues for a student.
-    Accessible by Admin/Finance or the Student/Parent themselves.
-    """
+    """View total and category-wise dues for a student."""
     await ensure_student_access(user, student_id, db)
-    
     dues = await finance_service.get_student_dues(db, user.institution_id, student_id)
     if not dues:
         raise HTTPException(status_code=404, detail="Student dues record not found.")
@@ -146,13 +128,10 @@ async def get_student_payments(
     db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(get_current_user)
 ):
-    """
-    List historical payments for a specific student.
-    Accessible by Admin/Finance or the Student/Parent themselves.
-    """
+    """List historical payments for a specific student."""
     await ensure_student_access(user, student_id, db)
-    
     return await finance_service.get_student_payments(db, user.institution_id, student_id, skip, limit)
+
 
 @router.get("/payments", response_model=PaginatedPaymentResponse)
 async def get_all_payments(
@@ -165,116 +144,40 @@ async def get_all_payments(
     db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(require_payment_admin)
 ):
-    """
-    Institutional payment list with advanced filtering.
-    Restricted to Admin and Finance roles.
-    """
+    """Institutional payment list with filtering. Admin / Finance only."""
     items, total = await finance_service.get_all_payments(
         db, user.institution_id, date_from, date_to, mode, status, skip, limit
     )
-    
-    # Enrich with student names
+
     student_ids = list({p.student_id for p in items})
     names_map = {}
     if student_ids:
         names_res = await db.execute(select(Student.id, Student.name).where(Student.id.in_(student_ids)))
         names_map = {row[0]: row[1] for row in names_res.all()}
-    
-    # Attach student_name to each item as a dict (since PaymentResponse doesn't have it)
+
     enriched = []
     for p in items:
-        p_dict = {
+        enriched.append({
             "id": p.id,
             "student_id": p.student_id,
             "student_name": names_map.get(p.student_id, f"Scholar #{p.student_id}"),
             "amount": p.amount,
             "payment_mode": p.payment_mode,
             "status": p.status,
-            "razorpay_order_id": p.razorpay_order_id,
             "note": p.note,
             "created_at": p.created_at.isoformat() if p.created_at else None,
             "created_by_id": p.created_by_id,
-            "allocations": [{"id": a.id, "payment_id": a.payment_id, "fee_type": a.fee_type, "allocated_amount": a.allocated_amount} for a in (p.allocations or [])]
-        }
-        enriched.append(p_dict)
-    
-    return {
-        "total": total,
-        "offset": skip,
-        "limit": limit,
-        "items": enriched
-    }
+            "allocations": [
+                {
+                    "id": a.id, "payment_id": a.payment_id,
+                    "fee_type": a.fee_type, "allocated_amount": a.allocated_amount,
+                }
+                for a in (p.allocations or [])
+            ],
+        })
 
+    return {"total": total, "offset": skip, "limit": limit, "items": enriched}
 
-@router.post("/payments/create-order", response_model=OrderResponse)
-async def create_payment_order(
-    order_in: OrderCreate,
-    db: AsyncSession = Depends(get_db),
-    user: UserContext = Depends(get_current_user)
-):
-    """
-    Initialize an online payment by creating a Razorpay order.
-    The payment will be saved in PENDING state.
-    """
-    await ensure_student_access(user, order_in.student_id, db)
-    
-    try:
-        order_data = await finance_service.create_razorpay_order(
-            db, user.institution_id, order_in.student_id, order_in.amount, user.id
-        )
-        return order_data
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
-
-@router.post("/payments/verify", response_model=PaymentVerifyResponse)
-async def verify_payment(
-    verify_in: PaymentVerify,
-    db: AsyncSession = Depends(get_db),
-    user: UserContext = Depends(get_current_user)
-):
-    """
-    Verify a Razorpay payment signature and update transaction status.
-    """
-    success = await finance_service.verify_razorpay_payment(
-        db, user.institution_id, 
-        verify_in.razorpay_order_id, 
-        verify_in.razorpay_payment_id, 
-        verify_in.razorpay_signature
-    )
-    
-    if success:
-        return {
-            "status": "SUCCESS",
-            "message": "Payment verified and recorded."
-        }
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Payment verification failed. Invalid signature."
-        )
-
-@router.post("/payments/cancel")
-async def cancel_payment(
-    cancel_in: PaymentCancel,
-    db: AsyncSession = Depends(get_db),
-    user: UserContext = Depends(get_current_user)
-):
-    """
-    Mark a pending payment as CANCELLED.
-    """
-    success = await finance_service.cancel_razorpay_order(
-        db, user.institution_id, 
-        cancel_in.razorpay_order_id,
-        cancel_in.student_id
-    )
-    
-    if success:
-        return {"status": "CANCELLED", "message": "Payment cancelled."}
-    else:
-        return {"status": "ERROR", "message": "Could not cancel payment."}
 
 @router.post("/payments/manual", response_model=ManualPaymentResponse)
 async def create_manual_payment(
@@ -283,54 +186,43 @@ async def create_manual_payment(
     admin: UserContext = Depends(require_payment_admin)
 ):
     """
-    Record a manual (Cash/Manual UPI) payment.
-    Restricted to Finance and Admin roles.
+    Record an admin-side manual payment (Cash / Manual UPI) directly into the
+    finance ledger. Used by the Finance dashboard "Record Payment" action.
+    Parents submit their own UPI payments through /api/manual-payments.
     """
     try:
-        # Record and allocate
         payment = await finance_service.record_manual_payment(
-            db, 
-            admin.institution_id, 
-            payment_in.student_id, 
-            payment_in.amount, 
-            payment_in.mode, 
-            payment_in.note, 
+            db,
+            admin.institution_id,
+            payment_in.student_id,
+            payment_in.amount,
+            payment_in.mode,
+            payment_in.note,
             admin.id
         )
-        
-        return {
-            "payment": payment,
-            "allocations": payment.allocations
-        }
+        return {"payment": payment, "allocations": payment.allocations}
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
 
+
 @router.get("/summary", response_model=FinanceSummaryResponse)
 async def get_finance_dashboard_summary(
     db: AsyncSession = Depends(get_db),
     admin: UserContext = Depends(require_payment_admin)
 ):
-    """
-    Get high-level institutional finance summary.
-    """
+    """High-level institutional finance summary."""
     return await finance_service.get_finance_summary(db, admin.institution_id)
+
 
 @router.get("/class-breakdown", response_model=ClassFinanceBreakdownResponse)
 async def get_class_finance_breakdown(
     db: AsyncSession = Depends(get_db),
     admin: UserContext = Depends(require_payment_admin)
 ):
-    """
-    Per-class financial breakdown showing:
-    - Fee per student for each class
-    - Total students enrolled
-    - Counts of PAID / PARTIAL / UNPAID / NO-RECORD students
-    - Total expected, collected, and pending amounts per class
-    - Grand totals across all classes
-    """
+    """Per-class financial breakdown."""
     return await finance_service.get_class_finance_breakdown(db, admin.institution_id)
 
 
@@ -339,41 +231,9 @@ async def get_institutional_defaulters(
     db: AsyncSession = Depends(get_db),
     admin: UserContext = Depends(require_payment_admin)
 ):
-    """
-    Get an optimized list of students with outstanding dues.
-    """
+    """Optimized list of students with outstanding dues."""
     return await finance_service.get_defaulters(db, admin.institution_id)
 
-@router.post("/payments/webhook")
-async def razorpay_webhook(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    x_razorpay_signature: str = Header(None)
-):
-    """
-    Public webhook endpoint for Razorpay notifications.
-    Uses signature verification instead of standard JWT auth.
-    """
-    if not x_razorpay_signature:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Missing Razorpay signature header."
-        )
-
-    # Capture raw body for signature verification
-    raw_body = await request.body()
-    
-    success = await finance_service.handle_razorpay_webhook(
-        db, raw_body, x_razorpay_signature
-    )
-    
-    if success:
-        return {"status": "ok"}
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Webhook processing failed or invalid signature."
-        )
 
 @router.post("/backfill-fees", status_code=200)
 async def backfill_student_fees(
@@ -382,17 +242,11 @@ async def backfill_student_fees(
 ):
     """
     Admin action: Re-sync StudentFee records for ALL active students in the institution.
-    
-    Fixes students who:
-    - Were enrolled when their class had fee = 0 (StudentFee exists but total_amount = 0)
-    - Were enrolled before _sync_student_fee was implemented (no StudentFee record at all)
-    
     Safe to run multiple times (idempotent).
     """
     from app.models.directory import Student
     from app.models.academic import SchoolClass, Grade
 
-    # Fetch all active students
     students_res = await db.execute(
         select(Student).where(
             Student.institution_id == admin.institution_id,
@@ -407,7 +261,6 @@ async def backfill_student_fees(
     skipped = 0
 
     for student in students:
-        # Resolve fee amount (3-layer fallback, same as _sync_student_fee)
         class_res = await db.execute(select(SchoolClass).where(SchoolClass.id == student.school_class_id))
         school_class = class_res.scalars().first()
         if not school_class:
@@ -432,7 +285,6 @@ async def backfill_student_fees(
             skipped += 1
             continue
 
-        # Check existing
         from app.models.finance import StudentFee, StudentFeeStatus
         from datetime import date as date_type
         existing_res = await db.execute(
@@ -485,15 +337,11 @@ async def backfill_student_fees(
 
 # --- Finance Ledger Endpoints (Admin / Finance only) ---
 
-# Keep these in sync with the model — restricting query params here protects
-# the SQL query from arbitrary filter injection via query strings.
-# PROCESSING / EXPIRED / PARTIALLY_REFUNDED are reserved for future gateway
-# state mappings; the system tolerates them throughout the stack.
 _VALID_STATUSES = {
     "SUCCESS", "FAILED", "PENDING", "REFUNDED", "CANCELLED",
-    "PARTIALLY_REFUNDED", "PROCESSING", "EXPIRED",
+    "PARTIALLY_REFUNDED",
 }
-_VALID_METHODS = {"UPI", "CARD", "NETBANKING", "CASH", "MANUAL_UPI", "WALLET", "EMI"}
+_VALID_METHODS = {"UPI", "CASH", "MANUAL_UPI"}
 _VALID_FEE_TYPES = {"TUITION", "SPORTS", "TRANSPORT"}
 
 
@@ -502,7 +350,6 @@ def _parse_filters(
     payment_method: Optional[str],
     fee_type: Optional[str],
 ) -> dict:
-    """Validate enum-like filters; raise 400 on unknown values."""
     if payment_status and payment_status.upper() not in _VALID_STATUSES:
         raise HTTPException(
             status_code=400,
@@ -537,16 +384,13 @@ async def list_ledger(
     academic_year: Optional[str] = None,
     min_amount: Optional[float] = None,
     max_amount: Optional[float] = None,
-    search: Optional[str] = Query(None, description="Match student name, receipt #, or Razorpay IDs"),
+    search: Optional[str] = Query(None, description="Match student name, receipt #, or UTR"),
     skip: int = 0,
     limit: int = Query(50, le=200),
     db: AsyncSession = Depends(get_db),
     admin: UserContext = Depends(require_payment_admin),
 ):
-    """
-    Paginated list of finance ledger entries with filters + summary cards.
-    Restricted to Admin / Finance / Super-Admin.
-    """
+    """Paginated finance ledger entries with filters + summary cards."""
     filters = _parse_filters(payment_status, payment_method, fee_type)
 
     df_dt = datetime.combine(date_from, datetime.min.time()) if date_from else None
@@ -573,8 +417,6 @@ async def list_ledger(
         db, admin.institution_id, **base_filters
     )
 
-    # `items` is a list of dicts — both real ledger rows and synthesised
-    # rows from orphan Payments are shaped identically by the service.
     rows = [
         LedgerEntryResponse(
             **e,
@@ -617,13 +459,36 @@ async def get_ledger_filter_options(
     db: AsyncSession = Depends(get_db),
     admin: UserContext = Depends(require_payment_admin),
 ):
-    """
-    Dynamic filter options for the admin ledger UI: distinct statuses,
-    methods, fee types, academic years actually present in the ledger,
-    plus the master class list and earliest/latest payment dates.
-    Used to populate dropdowns without hardcoded enums on the frontend.
-    """
+    """Dynamic filter options for the admin ledger UI."""
     return await finance_service.get_ledger_facets(db, admin.institution_id)
+
+
+@router.post("/ledger/sync-manual-payments")
+async def sync_manual_payments_to_ledger(
+    db: AsyncSession = Depends(get_db),
+    admin: UserContext = Depends(require_payment_admin),
+):
+    """
+    Force-reconcile FinanceLedger with manual_payment_requests.
+
+    Manually fires the same backfill that runs automatically on every
+    ledger / summary read. Useful for ops verification and for one-off
+    repairs without waiting for the next dashboard load.
+    """
+    from app.services.finance.ledger_helpers import (
+        backfill_missing_manual_ledger_entries,
+    )
+    backfilled = await backfill_missing_manual_ledger_entries(
+        db, admin.institution_id,
+    )
+    return {
+        "status": "ok",
+        "backfilled": backfilled,
+        "message": (
+            f"Created {backfilled} missing finance-ledger row(s) "
+            "from approved manual payments."
+        ),
+    }
 
 
 @router.get("/ledger/{ledger_id}/receipt")
@@ -639,18 +504,14 @@ async def download_ledger_receipt(
       * Entries mirrored from the manual-payment workflow render the same
         receipt the parent sees (richer template, includes UTR + payer
         details).
-      * Other SUCCESS entries (Razorpay / cash) get a compact on-the-fly
-        receipt built from the ledger row itself.
-
-    FAILED / PENDING / CANCELLED / REFUNDED entries return 409 — there's
-    nothing to receipt for them.
+      * Other SUCCESS entries (admin-recorded cash / manual UPI) get a
+        compact on-the-fly receipt built from the ledger row itself.
     """
     from app.models.finance import FinanceLedger
     from app.models.core import Institution
     from app.models.manual_payment import ManualPaymentRequest
     from app.services.manual_payment.receipt import generate_receipt_pdf_bytes
     from app.services.manual_payment.service import manual_payment_service
-    from app.services.finance.ledger_helpers import _estimate_gateway_fee  # noqa: F401
 
     res = await db.execute(
         select(FinanceLedger).where(
@@ -672,7 +533,6 @@ async def download_ledger_receipt(
     )
     school_name = inst_res.scalar() or "Your School"
 
-    # Manual-payment path: render the same receipt the parent gets.
     if entry.manual_payment_request_id:
         mp_res = await db.execute(
             select(ManualPaymentRequest).where(
@@ -702,8 +562,6 @@ async def download_ledger_receipt(
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
-    # Gateway/cash path: synthesise a ManualPaymentRequest-shaped object so we
-    # can reuse the same receipt template without duplicating the renderer.
     class _LedgerReceiptStub:
         pass
 
@@ -719,7 +577,7 @@ async def download_ledger_receipt(
     stub.installment_label = None
     stub.amount = float(entry.amount or 0.0)
     stub.approved_amount = float(entry.amount or 0.0)
-    stub.transaction_reference = entry.razorpay_payment_id or entry.razorpay_order_id or "—"
+    stub.transaction_reference = entry.external_reference or "—"
     stub.transaction_at = entry.payment_date
     stub.payer_name = None
     stub.payer_upi = None
@@ -755,12 +613,7 @@ async def export_ledger(
     db: AsyncSession = Depends(get_db),
     admin: UserContext = Depends(require_payment_admin),
 ):
-    """
-    Export the finance ledger for an inclusive date range to PDF, Excel, or CSV.
-
-    The exported file is named with the date range and includes a totals row.
-    Max range: 24 months (defensive cap to keep payloads sane).
-    """
+    """Export the finance ledger for an inclusive date range."""
     try:
         start_dt, end_dt = normalise_date_range(date_from, date_to)
     except ValueError as e:
@@ -806,7 +659,6 @@ async def export_ledger(
             headers={"Content-Disposition": f'attachment; filename="{fname_base}.pdf"'},
         )
 
-    # default: excel
     try:
         payload = export_excel(entries, date_from, date_to)
     except RuntimeError as e:
@@ -819,17 +671,6 @@ async def export_ledger(
 
 
 # ─── Fee reminder dispatcher ─────────────────────────────────────────────────
-# Manually trigger the weekly fee-due push notifications. Designed for an
-# external cron (Render Cron Job, EventBridge, GitHub Actions) hitting it
-# every Wednesday at 9 AM local time. The service itself enforces the day
-# guard, so a misfired trigger on Tuesday no-ops cleanly.
-#
-# Auth: either an X-Cron-Secret header matching settings.CRON_SECRET, OR a
-# Bearer token for an admin/finance user (for ad-hoc browser runs). The
-# distributed cron_locks mutex prevents two replicas racing here.
-#
-# `force=true` skips the day guard — useful for back-filling a missed
-# week or seeding a test in staging.
 
 @router.post("/fee-reminders/dispatch")
 async def dispatch_fee_reminders(
@@ -838,10 +679,7 @@ async def dispatch_fee_reminders(
     db: AsyncSession = Depends(get_db),
     caller: str = Depends(require_cron_or_admin),
 ):
-    """
-    Run the weekly fee-reminder push. Returns a summary dict the cron job
-    can log to confirm what was actually sent.
-    """
+    """Run the weekly fee-reminder push."""
     from app.services.finance.fee_reminder_service import fee_reminder_service
     from app.core.logger import logger
 
@@ -853,4 +691,3 @@ async def dispatch_fee_reminders(
         dry_run=dry_run,
     )
     return summary.as_dict()
-

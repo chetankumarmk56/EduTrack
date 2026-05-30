@@ -117,7 +117,7 @@ docker --version
 #    This guide uses raw CLI + console so you understand each piece.
 ```
 
-Pick a region close to your users. For an India-first product (Razorpay, Asia/Kolkata schedulers), use **`ap-south-1` (Mumbai)**. The commands below use `us-east-1` — replace as needed.
+Pick a region close to your users. For an India-first product (UPI / INR, Asia/Kolkata schedulers), use **`ap-south-1` (Mumbai)**. The commands below use `us-east-1` — replace as needed.
 
 ```bash
 export AWS_REGION=ap-south-1
@@ -300,9 +300,6 @@ Never bake secrets into the Docker image or task definition's `environment` bloc
 aws secretsmanager create-secret --name edutrack/DATABASE_URL --secret-string "$DATABASE_URL"
 aws secretsmanager create-secret --name edutrack/REDIS_URL    --secret-string "$REDIS_URL"
 aws secretsmanager create-secret --name edutrack/SECRET_KEY   --secret-string "$(python3 -c 'import secrets;print(secrets.token_urlsafe(48))')"
-aws secretsmanager create-secret --name edutrack/RAZORPAY_KEY_ID --secret-string "rzp_live_xxx"
-aws secretsmanager create-secret --name edutrack/RAZORPAY_KEY_SECRET --secret-string "xxx"
-aws secretsmanager create-secret --name edutrack/RAZORPAY_WEBHOOK_SECRET --secret-string "xxx"
 aws secretsmanager create-secret --name edutrack/GOOGLE_API_KEY --secret-string "xxx"
 aws secretsmanager create-secret --name edutrack/TWILIO_ACCOUNT_SID --secret-string "ACxxx"
 aws secretsmanager create-secret --name edutrack/TWILIO_AUTH_TOKEN --secret-string "xxx"
@@ -453,9 +450,6 @@ Save as `/tmp/edutrack-web-taskdef.json` (replace ARNs as needed):
       {"name":"DATABASE_URL",            "valueFrom":"arn:aws:secretsmanager:REGION:ACCOUNT:secret:edutrack/DATABASE_URL"},
       {"name":"REDIS_URL",               "valueFrom":"arn:aws:secretsmanager:REGION:ACCOUNT:secret:edutrack/REDIS_URL"},
       {"name":"SECRET_KEY",              "valueFrom":"arn:aws:secretsmanager:REGION:ACCOUNT:secret:edutrack/SECRET_KEY"},
-      {"name":"RAZORPAY_KEY_ID",         "valueFrom":"arn:aws:secretsmanager:REGION:ACCOUNT:secret:edutrack/RAZORPAY_KEY_ID"},
-      {"name":"RAZORPAY_KEY_SECRET",     "valueFrom":"arn:aws:secretsmanager:REGION:ACCOUNT:secret:edutrack/RAZORPAY_KEY_SECRET"},
-      {"name":"RAZORPAY_WEBHOOK_SECRET", "valueFrom":"arn:aws:secretsmanager:REGION:ACCOUNT:secret:edutrack/RAZORPAY_WEBHOOK_SECRET"},
       {"name":"GOOGLE_API_KEY",          "valueFrom":"arn:aws:secretsmanager:REGION:ACCOUNT:secret:edutrack/GOOGLE_API_KEY"},
       {"name":"TWILIO_ACCOUNT_SID",      "valueFrom":"arn:aws:secretsmanager:REGION:ACCOUNT:secret:edutrack/TWILIO_ACCOUNT_SID"},
       {"name":"TWILIO_AUTH_TOKEN",       "valueFrom":"arn:aws:secretsmanager:REGION:ACCOUNT:secret:edutrack/TWILIO_AUTH_TOKEN"},
@@ -738,7 +732,7 @@ You can wire this into a **GitHub Action** later — `aws-actions/configure-aws-
 - [ ] Frontend on Vercel can log in, fetch a dashboard, upload a file
 - [ ] Mobile app (Expo) can log in (CORS + push tokens still flowing)
 - [ ] CloudWatch logs show structured JSON, no `ERROR` entries on idle
-- [ ] Razorpay test payment end-to-end (webhook reaches `/api/payments/webhook`)
+- [ ] Parent UPI submission end-to-end: parent submits a UTR, admin sees the row in Manual Payments, approves, and the entry shows up in the Finance ledger + summary cards
 - [ ] Trigger fee-reminder dispatch manually: `curl -X POST -H "X-Cron-Secret: $CRON_SECRET" https://api.yourdomain.com/api/finance/fee-reminders/dispatch`
 - [ ] Force-stop one web task → ECS replaces it within 60s, no client errors
 - [ ] Pause for 48h → traffic stable, no errors, then **delete** Render + Neon
@@ -792,7 +786,6 @@ Update local `.env` files / CI secrets:
 | `AWS_S3_REGION` | task def | same as region |
 | `FEE_REMINDER_SCHEDULER_ENABLED` | task def | `false` on web, `true` on worker |
 | `CRON_SECRET` | Secrets Manager | if you use EventBridge HTTP cron |
-| `RAZORPAY_*` | Secrets Manager | live keys in prod |
 | `TWILIO_*` | Secrets Manager | optional |
 | `GOOGLE_API_KEY` | Secrets Manager | optional, Question Bank AI |
 | `EXPO_ACCESS_TOKEN` | Secrets Manager | push security |

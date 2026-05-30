@@ -1,15 +1,12 @@
 """
 Helpers for the FinanceLedger: academic-year resolution, receipt-number
-generation, and a single ledger-write entry point used by the verify,
-webhook, and manual-payment flows.
+generation, and the single ledger-write entry point used by the
+admin-records-payment and manual-payment-approval flows.
 
-Idempotency strategy — a ledger row is keyed by *both*:
-  1. razorpay_payment_id  (gateway-side dedupe; NULL for manual entries)
-  2. receipt_number       (human-facing unique receipt)
-
-So if both the frontend verify call and the webhook arrive, only one row
-survives the unique constraints; the second insert is detected and the
-existing row is returned instead.
+Idempotency: ledger rows are keyed by `receipt_number` (unique) plus,
+where applicable, `payment_id` (for admin-recorded payments) and
+`manual_payment_request_id` (for parent-submitted UPI). Duplicate writes
+fall through to a refetch instead of raising.
 """
 from __future__ import annotations
 
@@ -28,12 +25,14 @@ from app.models.finance import (
 )
 from app.models.directory import Student
 from app.models.academic import SchoolClass
-from app.models.manual_payment import ManualPaymentRequest
+from app.models.manual_payment import ManualPaymentRequest, ManualPaymentStatus
 
 
-# Razorpay charges (rough): 2% on UPI/cards. Used only when the gateway
-# does not include a fee in the webhook payload. We never block on this.
-DEFAULT_GATEWAY_FEE_RATE = 0.02
+# Statuses that should always have a FinanceLedger mirror row.
+_MIRRORED_STATUSES = (
+    ManualPaymentStatus.APPROVED.value,
+    ManualPaymentStatus.PARTIAL_PAYMENT.value,
+)
 
 
 def resolve_academic_year(today: Optional[date] = None) -> str:
@@ -51,8 +50,7 @@ async def generate_receipt_number(
 ) -> str:
     """
     Format: RCPT-{INST}-{YYYYMM}-{SEQ}
-    SEQ is per (institution, year-month), zero-padded. Reads MAX from existing
-    rows so it stays monotonic even after manual entries.
+    SEQ is per (institution, year-month), zero-padded.
     """
     pd = payment_date or datetime.utcnow()
     yyyymm = pd.strftime("%Y%m")
@@ -66,17 +64,6 @@ async def generate_receipt_number(
     )
     count = res.scalar() or 0
     return f"{prefix}{count + 1:05d}"
-
-
-def _estimate_gateway_fee(amount: float, payment_method: str) -> tuple[float, float]:
-    """
-    Rough cost estimate when the gateway didn't supply a `fee` field.
-    Returns (gateway_fee, net_amount). Manual/cash payments incur no fee.
-    """
-    if payment_method in {"CASH", "MANUAL_UPI"}:
-        return 0.0, amount
-    fee = round(amount * DEFAULT_GATEWAY_FEE_RATE, 2)
-    return fee, max(0.0, amount - fee)
 
 
 async def write_ledger_entry(
@@ -95,29 +82,9 @@ async def write_ledger_entry(
     """
     Idempotently insert (or fetch) a single ledger row for a confirmed payment.
 
-    Look-up order:
-      1. razorpay_payment_id (if present) — catches webhook-vs-verify races.
-      2. payment_id           — catches manual-payment double-clicks.
-
-    Returns the existing row when a duplicate is detected; never raises on
-    legitimate dedupe.
+    Dedupes on `payment_id` — if a row already exists for this Payment, the
+    existing row is returned.
     """
-    # 1) Dedupe by gateway payment id when available
-    if payment.razorpay_payment_id:
-        existing_res = await db.execute(
-            select(FinanceLedger).where(
-                FinanceLedger.razorpay_payment_id == payment.razorpay_payment_id
-            )
-        )
-        existing = existing_res.scalars().first()
-        if existing:
-            logger.info(
-                f"LEDGER IDEMPOTENT: Existing row {existing.id} for "
-                f"payment_id={payment.razorpay_payment_id}, returning."
-            )
-            return existing
-
-    # 2) Dedupe by internal payment.id
     pid_existing_res = await db.execute(
         select(FinanceLedger).where(FinanceLedger.payment_id == payment.id)
     )
@@ -129,7 +96,6 @@ async def write_ledger_entry(
         )
         return pid_existing
 
-    # Resolve denormalised fields
     class_name: Optional[str] = None
     class_id: Optional[int] = student.school_class_id
     if class_id:
@@ -141,11 +107,8 @@ async def write_ledger_entry(
             class_name = sc.display_name or f"Grade {sc.grade_id}"
 
     payment_date = payment.created_at or datetime.utcnow()
-    if gateway_fee is None:
-        fee, net = _estimate_gateway_fee(payment.amount, payment_method)
-    else:
-        fee = max(0.0, gateway_fee)
-        net = max(0.0, payment.amount - fee)
+    fee = max(0.0, gateway_fee or 0.0)
+    net = max(0.0, payment.amount - fee)
 
     receipt_number = await generate_receipt_number(db, institution_id, payment_date)
 
@@ -160,8 +123,7 @@ async def write_ledger_entry(
         class_name=class_name,
         fee_type="TUITION",
         academic_year=resolve_academic_year(payment_date.date()),
-        razorpay_order_id=payment.razorpay_order_id,
-        razorpay_payment_id=payment.razorpay_payment_id,
+        external_reference=None,
         amount=payment.amount,
         gateway_fee=fee,
         net_amount=net,
@@ -180,22 +142,11 @@ async def write_ledger_entry(
         )
         return entry
     except IntegrityError as e:
-        # Race: another concurrent write inserted the row between our SELECT
-        # and INSERT. Roll the savepoint and re-fetch.
         logger.warning(
             f"LEDGER RACE: IntegrityError on insert for payment {payment.id} — "
             f"refetching. Detail: {e}"
         )
         await db.rollback()
-        if payment.razorpay_payment_id:
-            existing_res = await db.execute(
-                select(FinanceLedger).where(
-                    FinanceLedger.razorpay_payment_id == payment.razorpay_payment_id
-                )
-            )
-            row = existing_res.scalars().first()
-            if row:
-                return row
         pid_existing_res = await db.execute(
             select(FinanceLedger).where(FinanceLedger.payment_id == payment.id)
         )
@@ -212,11 +163,12 @@ async def write_manual_payment_ledger_entry(
 ) -> FinanceLedger:
     """
     Mirror an approved/partial ManualPaymentRequest into FinanceLedger so it
-    surfaces alongside Razorpay payments on the admin finance page.
+    surfaces alongside admin-recorded payments on the finance dashboard.
 
-    Idempotent: looks up an existing row by manual_payment_request_id first
-    and returns it unchanged if found (so a re-approval or backfill never
-    duplicates the entry).
+    Idempotent on `manual_payment_request_id`. A re-approval or backfill
+    never duplicates the entry. The flush below is wrapped in a nested
+    transaction so an IntegrityError race does not roll back the surrounding
+    apply_decision transaction — only the duplicate insert is rolled back.
     """
     existing_res = await db.execute(
         select(FinanceLedger).where(
@@ -231,7 +183,6 @@ async def write_manual_payment_ledger_entry(
         )
         return existing
 
-    # Resolve denormalised class name (if not already on the request snapshot)
     class_name: Optional[str] = request.class_name
     class_id: Optional[int] = student.school_class_id
     if class_id and not class_name:
@@ -245,9 +196,8 @@ async def write_manual_payment_ledger_entry(
     amount = float(request.approved_amount or request.amount or 0.0)
     payment_date = request.reviewed_at or datetime.utcnow()
 
-    # Prefer the manual-payment receipt number as the ledger receipt number
-    # so the same identifier appears on the PDF, the parent's history, and
-    # the admin's finance ledger.
+    # Prefer the manual-payment receipt number so the same identifier appears
+    # on the PDF, the parent's history, and the finance ledger.
     receipt_number = request.receipt_number or await generate_receipt_number(
         db, institution_id, payment_date
     )
@@ -264,8 +214,7 @@ async def write_manual_payment_ledger_entry(
         class_name=class_name,
         fee_type=request.fee_type or "TUITION",
         academic_year=resolve_academic_year(payment_date.date()),
-        razorpay_order_id=None,
-        razorpay_payment_id=None,
+        external_reference=request.transaction_reference,
         amount=amount,
         gateway_fee=0.0,
         net_amount=amount,
@@ -280,7 +229,10 @@ async def write_manual_payment_ledger_entry(
     )
     db.add(entry)
     try:
-        await db.flush()
+        # Use a savepoint so a race here doesn't blow away the caller's
+        # in-progress transaction (status flip, dues reduction, audit).
+        async with db.begin_nested():
+            await db.flush()
         logger.info(
             f"LEDGER WRITE (manual): receipt={receipt_number} "
             f"manual_payment_request_id={request.id} amount=₹{amount}"
@@ -291,10 +243,91 @@ async def write_manual_payment_ledger_entry(
             f"LEDGER RACE (manual): IntegrityError for request {request.id} — "
             f"refetching. Detail: {e}"
         )
-        await db.rollback()
         existing_res = await db.execute(
             select(FinanceLedger).where(
                 FinanceLedger.manual_payment_request_id == request.id
             )
         )
         return existing_res.scalars().first()
+
+
+async def backfill_missing_manual_ledger_entries(
+    db: AsyncSession,
+    institution_id: int,
+) -> int:
+    """
+    Reconcile FinanceLedger with manual_payment_requests.
+
+    Finds every APPROVED / PARTIAL_PAYMENT ManualPaymentRequest for this
+    institution that has no matching FinanceLedger row, and creates one.
+    Returns the number of rows backfilled.
+
+    This is the safety net that guarantees the finance ledger is the
+    source of truth even when an apply_decision mirror call fails
+    silently (network blip, transient DB error, code regression, etc.).
+    Runs cheaply: an OUTER JOIN + LIMIT-bounded write loop. The whole
+    function is idempotent — re-running it on a healthy DB is a no-op.
+    """
+    from sqlalchemy.orm import aliased  # noqa: F401  (kept for future joins)
+
+    # LEFT JOIN finance_ledger on manual_payment_request_id and keep only
+    # the rows where the ledger side is NULL — i.e. the missing mirrors.
+    stmt = (
+        select(ManualPaymentRequest)
+        .outerjoin(
+            FinanceLedger,
+            FinanceLedger.manual_payment_request_id == ManualPaymentRequest.id,
+        )
+        .where(
+            ManualPaymentRequest.institution_id == institution_id,
+            ManualPaymentRequest.status.in_(_MIRRORED_STATUSES),
+            FinanceLedger.id.is_(None),
+        )
+    )
+    res = await db.execute(stmt)
+    missing = list(res.scalars().unique().all())
+
+    if not missing:
+        return 0
+
+    logger.info(
+        "LEDGER BACKFILL: found %d approved manual payments without a ledger "
+        "row for institution %s. Repairing now.",
+        len(missing), institution_id,
+    )
+
+    backfilled = 0
+    for request in missing:
+        student_res = await db.execute(
+            select(Student).where(Student.id == request.student_id)
+        )
+        student = student_res.scalars().first()
+        if not student:
+            logger.warning(
+                "LEDGER BACKFILL: skipping manual request %s — student %s "
+                "no longer exists.",
+                request.id, request.student_id,
+            )
+            continue
+        try:
+            await write_manual_payment_ledger_entry(
+                db,
+                institution_id=institution_id,
+                request=request,
+                student=student,
+                recorded_by_id=request.reviewed_by_user_id,
+            )
+            backfilled += 1
+        except Exception as e:  # noqa: BLE001 — log and continue, don't break the read path
+            logger.exception(
+                "LEDGER BACKFILL: failed to mirror manual request %s: %s",
+                request.id, e,
+            )
+
+    if backfilled:
+        # Commit the backfilled rows in their own transaction boundary so a
+        # downstream filter/list query sees them. Safe because we only INSERT
+        # new rows — no mutation to caller-owned state.
+        await db.commit()
+
+    return backfilled

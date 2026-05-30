@@ -1,17 +1,16 @@
 """
-Manual UPI/Bank payment workflow.
+Parent-submitted UPI / bank payment workflow.
 
-This is an isolated, parallel flow to the existing Razorpay-gated `Payment`
-table. A parent pays directly into the school's UPI/bank account out-of-band,
-then submits the transaction details (UTR + screenshot optional) through
+A parent pays into the school's UPI/bank account using their own bank app,
+then submits the transaction details (UTR + optional screenshot) through
 this table. The admin manually verifies the receipt against the school's
 real account before approving — only then do we update StudentFee dues
 and generate a receipt.
 
 On approval the service additively mirrors the row into FinanceLedger
-(linked via FinanceLedger.manual_payment_request_id) so the unified finance
-page reflects manual collections too. The mirror is idempotent and never
-touches the `payments` table.
+(linked via FinanceLedger.manual_payment_request_id) so the finance
+dashboard / ledger reflects every manual collection too. The mirror is
+idempotent.
 """
 from sqlalchemy import (
     Column, Integer, String, Float, DateTime, ForeignKey, Text, Index,

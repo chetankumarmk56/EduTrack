@@ -6,15 +6,11 @@ export interface PaymentRecord {
   student_id: number;
   amount: number;
   status: string;
-  source?: string;             // 'razorpay' | 'manual' | etc.
+  source?: string;
   fee_type?: string | null;
   note?: string | null;
   paid_at?: string | null;
   created_at: string;
-  razorpay_payment_id?: string | null;
-  razorpay_order_id?: string | null;
-  // Legacy field — some older endpoints / payment rows expose the
-  // payment channel under this name ("ONLINE", "CASH", "UPI", ...).
   payment_mode?: string | null;
 }
 
@@ -58,8 +54,6 @@ export interface ClassFinanceBreakdownResponse {
   total_students: number;
 }
 
-
-
 export interface FinanceSummaryResponse {
   total_collected: number;
   total_pending: number;
@@ -77,14 +71,6 @@ export interface DefaulterResponse {
   grade_id?: number;
 }
 
-export interface OrderResponse {
-  order_id: string;
-  amount: number;
-  key_id: string;
-  currency: string;
-  is_mock?: boolean;
-}
-
 export interface PaymentDetails {
   id: number;
   student_id: number;
@@ -93,7 +79,6 @@ export interface PaymentDetails {
   status: string;
   payment_mode: string;
   created_at: string;
-  razorpay_order_id?: string;
   note?: string;
 }
 
@@ -104,13 +89,6 @@ export const financeApi = {
     return response.data;
   },
 
-  // Parent Methods
-  // Unused — getMyDues() is used instead; nothing calls this in the frontend.
-  // getStudentDues: async (studentId: number) => {
-  //   const response = await client.get<StudentDuesResponse>(`finance/students/${studentId}/dues`);
-  //   return response.data;
-  // },
-
   getParentFees: async () => {
     const response = await client.get<ParentFeeItem[]>('parent/fees');
     return response.data;
@@ -118,31 +96,6 @@ export const financeApi = {
 
   getStudentPayments: async (studentId: number) => {
     const response = await client.get<PaymentRecord[]>(`finance/payments/student/${studentId}`);
-    return response.data;
-  },
-
-  createOrder: async (studentId: number, amount: number): Promise<OrderResponse> => {
-    const response = await client.post<OrderResponse>('finance/payments/create-order', {
-      student_id: studentId,
-      amount
-    });
-    return response.data;
-  },
-
-  verifyPayment: async (data: {
-    razorpay_order_id: string;
-    razorpay_payment_id: string;
-    razorpay_signature: string;
-  }) => {
-    const response = await client.post('finance/payments/verify', data);
-    return response.data;
-  },
-
-  cancelPayment: async (data: {
-    razorpay_order_id: string;
-    student_id: number;
-  }) => {
-    const response = await client.post('finance/payments/cancel', data);
     return response.data;
   },
 
@@ -156,17 +109,6 @@ export const financeApi = {
     const response = await client.get<ClassFinanceBreakdownResponse>('finance/class-breakdown');
     return response.data;
   },
-
-  // Unused — not called anywhere in the frontend (getLedger is used instead).
-  // getAllPayments: async (params?: {
-  //   mode?: string;
-  //   status?: string;
-  //   skip?: number;
-  //   limit?: number;
-  // }) => {
-  //   const response = await client.get('finance/payments', { params });
-  //   return response.data;
-  // },
 
   getDefaulters: async () => {
     const response = await client.get<DefaulterResponse[]>('finance/defaulters');
@@ -200,12 +142,6 @@ export const financeApi = {
     return response.data;
   },
 
-  // Unused — not called anywhere in the frontend (summary is part of PaginatedLedgerResponse).
-  // getLedgerSummary: async (params: { date_from?: string; date_to?: string; academic_year?: string } = {}) => {
-  //   const response = await client.get<LedgerSummary>('finance/ledger/summary', { params });
-  //   return response.data;
-  // },
-
   exportLedger: async (params: LedgerExportParams) => {
     const response = await client.get('finance/ledger/export', {
       params,
@@ -229,20 +165,13 @@ export const financeApi = {
 
 // --- Ledger types ---
 
-/**
- * The full set of payment states surfaced by the API. PROCESSING / EXPIRED /
- * PARTIALLY_REFUNDED are reserved for future gateway-state mappings — the
- * UI tolerates them throughout (badges, filters, sorting).
- */
 export type LedgerPaymentStatus =
   | 'SUCCESS'
   | 'PENDING'
   | 'FAILED'
   | 'CANCELLED'
   | 'REFUNDED'
-  | 'PARTIALLY_REFUNDED'
-  | 'PROCESSING'
-  | 'EXPIRED';
+  | 'PARTIALLY_REFUNDED';
 
 export interface LedgerEntry {
   id: number;
@@ -256,8 +185,6 @@ export interface LedgerEntry {
   admission_number: string | null;
   fee_type: string | null;
   academic_year: string;
-  razorpay_order_id: string | null;
-  razorpay_payment_id: string | null;
   amount: number;
   gateway_fee: number;
   net_amount: number;
@@ -265,16 +192,12 @@ export interface LedgerEntry {
   payment_status: LedgerPaymentStatus | string;
   payment_date: string;
   notes: string | null;
-  // Convenience: razorpay_payment_id or razorpay_order_id (or null for cash).
+  // External reference: UTR for UPI, internal id for cash; null otherwise.
   transaction_id: string | null;
-  // 'REFUNDED' / 'PARTIALLY_REFUNDED' / null
   refund_status: string | null;
   refunded_amount: number | null;
-  // For FAILED / CANCELLED entries: the human-readable reason.
   error_message: string | null;
-  // True when a PDF receipt can be downloaded for this entry.
   has_receipt: boolean;
-  // Non-null when the ledger row was mirrored from a manual payment.
   manual_payment_request_id: number | null;
 }
 
@@ -297,8 +220,8 @@ export interface PaginatedLedgerResponse {
 }
 
 export interface LedgerListParams {
-  date_from?: string;       // YYYY-MM-DD
-  date_to?: string;         // YYYY-MM-DD
+  date_from?: string;
+  date_to?: string;
   student_id?: number;
   class_id?: number;
   fee_type?: string;
@@ -313,8 +236,8 @@ export interface LedgerListParams {
 }
 
 export interface LedgerExportParams {
-  date_from: string;        // YYYY-MM-DD (required)
-  date_to: string;          // YYYY-MM-DD (required)
+  date_from: string;
+  date_to: string;
   format: 'excel' | 'csv' | 'pdf';
   student_id?: number;
   class_id?: number;
@@ -338,4 +261,3 @@ export interface LedgerFilterOptions {
   earliest_payment_date: string | null;
   latest_payment_date: string | null;
 }
-

@@ -1,137 +1,30 @@
+"""
+Admin-side manual payment recording.
+
+The only entry point here is `record_manual_payment` — used by the Finance
+dashboard's "Record Payment" button so an admin can log a Cash or Manual
+UPI entry directly from the office (e.g. when a parent pays in person
+without going through the parent portal).
+
+Parent-initiated UPI payments live in `app.services.manual_payment.*`
+(the verification workflow). This module never touches that flow.
+"""
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.core.logger import logger
-from app.models.finance import Payment, StudentFee, PaymentAllocation, PaymentTransaction
+from app.models.finance import Payment, StudentFee, PaymentAllocation
 from app.services.finance.ledger_helpers import write_ledger_entry
 
 
 class PaymentServiceMixin:
-    async def verify_razorpay_payment(
-        self,
-        db: AsyncSession,
-        institution_id: int,
-        razorpay_order_id: str,
-        razorpay_payment_id: str,
-        razorpay_signature: str,
-    ) -> bool:
-        """
-        Verify authenticity of a Razorpay payment and trigger allocation.
-
-        CRITICAL call order: signature verify → prerequisite check → mark SUCCESS
-        → allocate_payment → _update_student_fee → commit.
-        Never reorder these steps; doing so can produce charged-but-unrecorded payments.
-        """
-        stmt = select(Payment).where(
-            Payment.razorpay_order_id == razorpay_order_id,
-            Payment.institution_id == institution_id,
-        )
-        result = await db.execute(stmt)
-        payment = result.scalars().first()
-
-        if not payment:
-            raise Exception("Payment record not found for this order ID.")
-
-        if payment.status == "SUCCESS":
-            logger.info(
-                f"Payment {payment.id} already marked SUCCESS. Returning cached result."
-            )
-            return True
-
-        validation_result = await self._validate_payment_prerequisites(
-            db, payment.student_id
-        )
-        if not validation_result["valid"]:
-            logger.error(
-                f"CRITICAL: Payment {payment.id} cannot be allocated: "
-                f"{validation_result['reason']}"
-            )
-            payment.status = "FAILED"
-            await db.commit()
-            raise Exception(f"Cannot allocate payment: {validation_result['reason']}")
-
-        params_dict = {
-            "razorpay_order_id": razorpay_order_id,
-            "razorpay_payment_id": razorpay_payment_id,
-            "razorpay_signature": razorpay_signature,
-        }
-
-        try:
-            if razorpay_order_id.startswith("order_mock_") or \
-               razorpay_payment_id == "pay_mock_success":
-                logger.info(
-                    f"Simulated Payment Mode: Bypassing signature verification "
-                    f"for order {razorpay_order_id}"
-                )
-            else:
-                self.razorpay_client.utility.verify_payment_signature(params_dict)
-
-            payment.status = "SUCCESS"
-            payment.razorpay_payment_id = razorpay_payment_id
-            await db.flush()
-
-            logger.info(
-                f"Payment {payment.id} verified for order {razorpay_order_id}. "
-                f"Initializing allocation..."
-            )
-
-            await self.allocate_payment(db, payment.id)
-            await self._update_student_fee(
-                db, payment.student_id, payment.amount, institution_id
-            )
-
-            from app.models.directory import Student as _Student
-            student_res = await db.execute(
-                select(_Student).where(_Student.id == payment.student_id)
-            )
-            student = student_res.scalars().first()
-            if student:
-                await write_ledger_entry(
-                    db,
-                    institution_id=institution_id,
-                    payment=payment,
-                    student=student,
-                    payment_method=payment.payment_mode or "UPI",
-                    payment_status="SUCCESS",
-                )
-
-            await db.commit()
-            logger.info(
-                f"Processed verification and allocation for payment {payment.id}."
-            )
-            return True
-
-        except Exception as e:
-            logger.error(
-                f"Verification/Allocation Failed for Order {razorpay_order_id}: {str(e)}"
-            )
-            await db.rollback()
-
-            try:
-                stmt = select(Payment).where(Payment.id == payment.id)
-                res = await db.execute(stmt)
-                payment_to_mark = res.scalars().first()
-                if payment_to_mark and payment_to_mark.status != "FAILED":
-                    payment_to_mark.status = "FAILED"
-                    await db.commit()
-                    logger.info(
-                        f"Payment {payment.id} marked FAILED after rollback."
-                    )
-            except Exception as rollback_err:
-                logger.critical(
-                    f"FATAL: Failed to mark payment {payment.id} as FAILED: {rollback_err}"
-                )
-
-            return False
-
     async def allocate_payment(self, db: AsyncSession, payment_id: int):
         """
-        Create PaymentAllocation audit records and a PaymentTransaction idempotency
-        record for a successful payment.
+        Create PaymentAllocation rows describing how a successful payment is
+        distributed across the student's StudentFee records.
 
-        Works against StudentFee (live source of truth). Does NOT update StudentFee —
-        that is the sole responsibility of _update_student_fee, called separately.
+        Does not mutate StudentFee — that is `_update_student_fee`'s job.
         """
         stmt = select(Payment).where(Payment.id == payment_id)
         result = await db.execute(stmt)
@@ -172,10 +65,6 @@ class PaymentServiceMixin:
                 db.add(allocation)
                 remaining_payment -= allocation_amount
                 allocated_count += 1
-                logger.debug(
-                    f"ALLOCATION: ₹{allocation_amount} mapped to StudentFee {sf.id}. "
-                    f"Remaining: ₹{remaining_payment}"
-                )
         else:
             logger.warning(
                 f"ALLOCATION: No StudentFee records for Student {payment.student_id}. "
@@ -189,21 +78,6 @@ class PaymentServiceMixin:
             )
             db.add(allocation)
             allocated_count = 1
-
-        razorpay_pid = payment.razorpay_payment_id or f"manual_{payment.id}"
-        existing_txn = await db.execute(
-            select(PaymentTransaction).where(
-                PaymentTransaction.razorpay_payment_id == razorpay_pid
-            )
-        )
-        if not existing_txn.scalars().first():
-            transaction = PaymentTransaction(
-                razorpay_payment_id=razorpay_pid,
-                order_id=payment.razorpay_order_id or f"order_manual_{payment.id}",
-                amount=payment.amount,
-                status="allocated",
-            )
-            db.add(transaction)
 
         logger.info(
             f"ALLOCATION: Completed for Payment {payment_id}. "
@@ -225,7 +99,7 @@ class PaymentServiceMixin:
         note,
         user_id: int,
     ) -> Payment:
-        """Record a manual payment (Cash/Manual UPI) and immediately allocate it."""
+        """Record a manual payment (Cash / Manual UPI) and allocate it."""
         from app.models.directory import Student
 
         student_check = await db.execute(
@@ -260,9 +134,8 @@ class PaymentServiceMixin:
         await self.allocate_payment(db, payment.id)
         await self._update_student_fee(db, student_id, amount, institution_id)
 
-        from app.models.directory import Student as _Student
         student_res = await db.execute(
-            select(_Student).where(_Student.id == student_id)
+            select(Student).where(Student.id == student_id)
         )
         student = student_res.scalars().first()
         if student:

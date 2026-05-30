@@ -1,12 +1,12 @@
 """
 Core business logic for the manual payment workflow.
 
-Boundary with the legacy Razorpay flow:
-  • This service NEVER reads or writes `payments`, `payment_allocations`,
-    `payment_transactions`, or `finance_ledger`. It owns its own tables.
-  • On admin approval it DOES call into the existing fee_service to reduce
-    the student's StudentFee dues — that's the single integration point
-    so dues correctly reflect approved manual payments.
+Boundary with the admin-side payment flow:
+  • This service owns `manual_payment_requests` and its audit log.
+  • On approval it reduces the student's StudentFee dues AND mirrors a row
+    into FinanceLedger via `write_manual_payment_ledger_entry`, so the
+    Finance dashboard / ledger surfaces the approved payment alongside
+    admin-recorded ones. The mirror is idempotent.
 """
 from __future__ import annotations
 
@@ -613,9 +613,14 @@ class ManualPaymentService:
     ) -> None:
         """
         Write an idempotent FinanceLedger row mirroring this approved manual
-        payment so the admin finance ledger page stays in sync with the
-        manual-payment queue. Imports are local to keep the manual-payment
+        payment so the finance ledger page stays in sync with the
+        verification queue. Imports are local to keep the manual-payment
         service free of a hard circular dependency on finance internals.
+
+        Failures are logged with full traceback so they are NEVER silent.
+        The read-side `backfill_missing_manual_ledger_entries` provides a
+        belt-and-suspenders safety net: even if this write fails, the
+        next ledger or summary read will repair it.
         """
         from app.services.finance.ledger_helpers import (
             write_manual_payment_ledger_entry,
@@ -631,13 +636,21 @@ class ManualPaymentService:
                 request.student_id, request.id,
             )
             return
-        await write_manual_payment_ledger_entry(
-            db,
-            institution_id=institution_id,
-            request=request,
-            student=student,
-            recorded_by_id=actor_user_id,
-        )
+        try:
+            await write_manual_payment_ledger_entry(
+                db,
+                institution_id=institution_id,
+                request=request,
+                student=student,
+                recorded_by_id=actor_user_id,
+            )
+        except Exception as e:  # noqa: BLE001 — log loudly, never swallow
+            logger.exception(
+                "MANUAL_PAY: FinanceLedger mirror FAILED for manual payment "
+                "request %s (status=%s, amount=%s). The ledger backfill will "
+                "repair this on the next ledger/summary read. Detail: %s",
+                request.id, request.status, request.approved_amount or request.amount, e,
+            )
 
     async def _reduce_student_dues(
         self,
