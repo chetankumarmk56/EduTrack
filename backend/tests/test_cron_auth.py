@@ -1,10 +1,15 @@
 """
-Verifies the cron-or-admin authentication path used by /fee-reminders/dispatch.
+Verifies the ``require_cron_or_admin`` dependency and the auth wiring on
+the fee-reminder dispatch endpoint.
 
-The scheduler now runs out-of-process — either via the standalone
-``worker.py`` or via an external cron (Render Cron Job, EventBridge,
-GitHub Actions) hitting the HTTPS endpoint. Both paths need to be
-guarded:
+The scheduled path now runs in-process: ``worker.py`` fires the
+dispatcher directly for institutions whose admin enabled it, so the
+``/fee-reminders/dispatch`` HTTP endpoint is the admin "Send Fee
+Reminders" click-to-send button and is gated by ``require_payment_admin``
+(see ``test_dispatch_endpoint_is_admin_only``).
+
+``require_cron_or_admin`` still exists for any authenticated
+external-cron HTTP trigger, and these tests guard it directly:
 
 * Cron callers send ``X-Cron-Secret`` (no JWT lifecycle to manage).
 * Operators running ad-hoc dispatches use their admin Bearer token.
@@ -113,25 +118,32 @@ async def test_rejects_non_admin_jwt(app_instance):
     assert r.status_code == 401, r.text
 
 
-def test_dispatch_endpoint_uses_cron_dependency():
+def test_dispatch_endpoint_is_admin_only():
     """
-    Structural guard: the dispatch endpoint must wire through
-    require_cron_or_admin. Catches "someone reverts to require_payment_admin
-    and accidentally locks out the cron job" regressions.
+    Structural guard: the dispatch endpoint is the admin "Send Fee
+    Reminders" click-to-send button and must wire through
+    require_payment_admin.
+
+    The scheduled path no longer goes over HTTP — worker.py fires the
+    dispatcher in-process for institutions whose admin enabled it (the
+    admin click-to-send endpoint is the source of truth). This test
+    catches "someone re-exposes an HTTP trigger and weakens the auth on
+    the admin endpoint" regressions.
     """
     from app.api.routes.finance.finance import dispatch_fee_reminders
-    # The dependency object lives on the parameter default in the wrapped function.
+    from app.core.dependencies import require_payment_admin
     import inspect
     sig = inspect.signature(dispatch_fee_reminders)
-    caller_param = sig.parameters.get("caller")
-    assert caller_param is not None, (
-        "dispatch_fee_reminders no longer has a `caller` parameter — "
-        "did the cron auth wiring get removed?"
+    admin_param = sig.parameters.get("admin")
+    assert admin_param is not None, (
+        "dispatch_fee_reminders no longer has an `admin` parameter — "
+        "did the admin auth wiring get removed?"
     )
-    # FastAPI's Depends stores the callable on .dependency.
-    dep = caller_param.default
+    # FastAPI's Depends stores the callable on .dependency. require_payment_admin
+    # is a RoleChecker instance (not a plain function), so compare by identity.
+    dep = admin_param.default
     assert hasattr(dep, "dependency"), "expected fastapi.Depends instance"
-    assert dep.dependency.__name__ == "require_cron_or_admin", (
-        f"dispatch endpoint is gated by {dep.dependency.__name__}, "
-        f"expected require_cron_or_admin"
+    assert dep.dependency is require_payment_admin, (
+        f"dispatch endpoint is gated by {dep.dependency!r}, "
+        f"expected the require_payment_admin RoleChecker"
     )

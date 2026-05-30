@@ -49,7 +49,7 @@ const STEP_ORDER: StepKey[] = ['student', 'guardian'];
  * We expose `fieldsForStep` so the wizard can check only the visible
  * step before letting the user advance.
  */
-function validateField(field: keyof EnrollForm, value: string, form: EnrollForm): string | undefined {
+function validateField(field: keyof EnrollForm, value: string): string | undefined {
   switch (field) {
     case 'name': {
       const v = value.trim();
@@ -155,13 +155,13 @@ export default function EnrollStudentModal({
   };
 
   const blurValidate = (field: keyof EnrollForm) => {
-    setErrors(prev => ({ ...prev, [field]: validateField(field, form[field], form) }));
+    setErrors(prev => ({ ...prev, [field]: validateField(field, form[field]) }));
   };
 
   const stepErrors = useMemo(() => {
     const next: Partial<Record<keyof EnrollForm, string>> = {};
     for (const field of FIELDS_FOR_STEP[step]) {
-      const msg = validateField(field, form[field], form);
+      const msg = validateField(field, form[field]);
       if (msg) next[field] = msg;
     }
     return next;
@@ -193,7 +193,7 @@ export default function EnrollStudentModal({
     // Validate every field across both steps before sending.
     const allErrors: Partial<Record<keyof EnrollForm, string>> = {};
     for (const field of [...FIELDS_FOR_STEP.student, ...FIELDS_FOR_STEP.guardian]) {
-      const msg = validateField(field, form[field], form);
+      const msg = validateField(field, form[field]);
       if (msg) allErrors[field] = msg;
     }
     if (Object.keys(allErrors).length > 0) {
