@@ -28,14 +28,29 @@ def _normalize_phone_to_last10(raw):
 
 class Parent(Base, TimestampMixin):
     """
-    Parent/Guardian profile.
-    Linked to a User for login credentials.
+    Parent/Guardian profile — the single source of truth for guardian
+    contact details. Optionally linked to a User for login credentials,
+    though parent-portal login resolves through the child's user (see
+    auth_service.authenticate_parent_by_phone).
     """
     __tablename__ = "parents"
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), unique=True)
-    phone = Column(String)
+
+    # Guardian contact details live here only — never duplicated on students.
+    name = Column(String, nullable=True, index=True)
+    email = Column(String, nullable=True, index=True)
+    # Primary phone is the main contact number and the parent-portal login
+    # credential (paired with the child's DOB). Secondary phone is the
+    # fallback / emergency number and is never used for login.
+    primary_phone = Column(String, nullable=True)
+    secondary_phone = Column(String, nullable=True)
+    # Auto-derived last-10-digits canonical form of primary_phone. Indexed
+    # so the parent-login lookup is a single equality probe instead of a
+    # scan. Kept in sync via the validator below — never set by hand
+    # outside the Alembic backfill.
+    primary_phone_normalized = Column(String(10), nullable=True, index=True)
     relation = Column(String) # e.g., "Mother", "Father", "Guardian"
 
     institution_id = Column(Integer, ForeignKey("institutions.id"), nullable=False, default=1, index=True)
@@ -45,6 +60,17 @@ class Parent(Base, TimestampMixin):
     students = relationship("Student", back_populates="parent")
     # Back-link to unified user
     user = relationship("User", back_populates="parent_profile")
+
+    @validates("primary_phone")
+    def _set_normalized_phone(self, _key, value):
+        """
+        Auto-populate ``primary_phone_normalized`` on every write to
+        ``primary_phone`` (INSERT and UPDATE, including bulk setattr).
+        Returning ``value`` leaves the column itself unchanged — we only
+        piggy-back to refresh the indexed login-lookup target.
+        """
+        self.primary_phone_normalized = _normalize_phone_to_last10(value)
+        return value
 
 class Student(Base, TimestampMixin):
     """
@@ -69,34 +95,15 @@ class Student(Base, TimestampMixin):
     # Recomputed whenever a student is added, removed, renamed, or moved between classes.
     roll_number = Column(Integer, nullable=True, index=True)
 
-    # New Integrated Parent Fields
-    parent_name = Column(String, nullable=True)
-    parent_email = Column(String, nullable=True)
-    parent_phone = Column(String, nullable=True)
-    # Auto-derived last-10-digits canonical form of parent_phone. Indexed
-    # alongside dob so the parent-login lookup is a single equality probe
-    # against the index instead of a full scan over every student with
-    # the same DOB across every institution. Kept in sync via the
-    # ``_set_normalized_phone`` validator below — never set it by hand
-    # outside the Alembic backfill.
-    parent_phone_normalized = Column(String(10), nullable=True, index=True)
+    # Optional student profile details.
+    address = Column(String, nullable=True)
+    blood_group = Column(String, nullable=True)
 
     institution_id = Column(Integer, ForeignKey("institutions.id"), nullable=False, default=1, index=True)
     institution = relationship("Institution", back_populates="students")
 
-    @validates("parent_phone")
-    def _set_normalized_phone(self, _key, value):
-        """
-        Auto-populate ``parent_phone_normalized`` on every write to
-        ``parent_phone``. Fires for INSERT and UPDATE, including bulk
-        ``setattr`` paths used by the directory service when applying a
-        partial update payload. Returning ``value`` keeps the column
-        itself unchanged — we only piggy-back to refresh the index target.
-        """
-        self.parent_phone_normalized = _normalize_phone_to_last10(value)
-        return value
-
-    # Relationships
+    # Guardian link — the only connection to parent contact details, which
+    # live entirely on the Parent record (see the Parent model above).
     parent_id = Column(Integer, ForeignKey("parents.id"), nullable=True)
     parent = relationship("Parent", back_populates="students")
     school_class = relationship("SchoolClass", back_populates="students")

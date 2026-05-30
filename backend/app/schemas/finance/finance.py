@@ -224,3 +224,81 @@ class PaginatedLedgerResponse(BaseModel):
     limit: int
     summary: LedgerSummary
     items: List[LedgerEntryResponse]
+
+
+# --- Fee reminders ---
+
+class FeeReminderEligibleRow(BaseModel):
+    student_fee_id: int
+    student_id: int
+    student_name: str
+    class_name: Optional[str] = None
+    parent_name: Optional[str] = None
+    parent_phone: Optional[str] = None
+    due_amount: float
+    due_date: str
+    days_overdue: int
+    last_notified_at: Optional[str] = None
+    has_login_target: bool = False
+    has_phone: bool = False
+    in_cooldown: bool = False
+    eligible_now: bool = False
+    skip_reason: Optional[str] = None
+
+
+class FeeReminderPreviewResponse(BaseModel):
+    # Total overdue, unpaid rows — the full population the admin can see.
+    overdue_count: int
+    overdue_unique_students: int
+    overdue_total_due: float
+    # Subset that would ACTUALLY be notified by clicking Send right now.
+    eligible_count: int
+    unique_students: int
+    total_due_amount: float
+    # Why some overdue rows aren't eligible right now.
+    in_cooldown_count: int
+    no_login_count: int
+    rows: List[FeeReminderEligibleRow]
+
+
+class FeeReminderDispatchSummary(BaseModel):
+    triggered: bool
+    skipped_reason: Optional[str] = None
+    eligible_rows: int = 0
+    unique_students: int = 0
+    skipped_no_target: int = 0
+    push: dict = {}
+    calls: dict = {}
+    notified_fee_ids: List[int] = []
+    # First voice-vendor error string from the run, if any call failed.
+    # E.g. "Twilio API error (HTTP 400): The number ... is unverified."
+    first_call_error: Optional[str] = None
+
+
+class FeeReminderSettingsResponse(BaseModel):
+    institution_id: int
+    # One of: DISABLED, WEEKLY, MONTHLY, CUSTOM
+    automation_mode: str
+    day_of_week: Optional[int] = None   # 0..6 (Mon..Sun) — for WEEKLY
+    day_of_month: Optional[int] = None  # 1..28 — for MONTHLY
+    send_hour: int = 9
+    timezone: str = "Asia/Kolkata"
+    overdue_days: Optional[int] = None
+    cooldown_days: Optional[int] = None
+    voice_calls_enabled: bool = True
+    last_run_at: Optional[datetime] = None
+    last_run_triggered_by: Optional[str] = None
+    # Defaults the UI shows as hints when overrides are NULL.
+    effective_overdue_days: int
+    effective_cooldown_days: int
+
+
+class FeeReminderSettingsUpdate(BaseModel):
+    automation_mode: Optional[str] = None
+    day_of_week: Optional[int] = None
+    day_of_month: Optional[int] = None
+    send_hour: Optional[int] = None
+    timezone: Optional[str] = None
+    overdue_days: Optional[int] = None
+    cooldown_days: Optional[int] = None
+    voice_calls_enabled: Optional[bool] = None

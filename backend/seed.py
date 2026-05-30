@@ -151,7 +151,11 @@ def seed_db():
                     p_email, s_email = f"parent.{s_code.lower()}@school.edu", f"student.{s_code.lower()}@school.edu"
                     
                     pu = get_or_create_user(db, p_email, "Parent", "parent123", "parent", institution_id=inst.id)
-                    p = db.query(Parent).filter(Parent.user_id == pu.id).first() or Parent(user_id=pu.id, institution_id=inst.id)
+                    p = db.query(Parent).filter(Parent.user_id == pu.id).first() or Parent(
+                        user_id=pu.id, institution_id=inst.id,
+                        name=f"Parent {s_code}", email=p_email,
+                        primary_phone=f"99999{i:05d}", relation="Guardian",
+                    )
                     if not p.id: db.add(p); db.commit(); db.refresh(p)
                     
                     su = get_or_create_user(db, s_email, f"Student {s_code}", "student123", "student", institution_id=inst.id)

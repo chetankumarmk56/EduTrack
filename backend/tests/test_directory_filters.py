@@ -6,7 +6,7 @@ client-side. The fix pushes filters into SQL via three new query params
 on ``GET /api/directory/`` (students) and two on ``GET /api/directory/teachers/``:
 
 * school_class_id — restrict students to one class (the common admin path)
-* search          — ILIKE on name / parent_name / parent_email
+* search          — ILIKE on student name / parent name / parent email
                     (and name / email for teachers)
 * is_active       — hide soft-deleted rows from admin lists
 
@@ -52,6 +52,7 @@ async def _make_test_session():
 
 async def _seed_two_classes_with_students(session):
     from app.models import Institution, Student, Teacher
+    from app.models.directory import Parent
     from app.models.academic import SchoolClass, Grade, Section
 
     inst = Institution(name="Test Inst", slug="test-inst")
@@ -71,14 +72,26 @@ async def _seed_two_classes_with_students(session):
     session.add_all([class_1a, class_1b])
     await session.flush()
 
+    # Guardian contact details live on the parents table; link each student
+    # via parent_id so search can ILIKE the parent name/email.
+    parents = [
+        Parent(name="Anna Apple", email="aapple@x.com", institution_id=inst.id),
+        Parent(name="Brian Berry", email="bberry@x.com", institution_id=inst.id),
+        Parent(name="Carla Cherry", email="ccherry@x.com", institution_id=inst.id),
+        Parent(name="Iris Ian", email="iian@x.com", institution_id=inst.id),
+    ]
+    session.add_all(parents)
+    await session.flush()
+    p_apple, p_berry, p_cherry, p_ian = parents
+
     students = [
-        Student(name="Alice Apple", parent_name="Anna Apple", parent_email="aapple@x.com",
+        Student(name="Alice Apple", parent_id=p_apple.id,
                 dob="2015-01-01", school_class_id=class_1a.id, institution_id=inst.id, is_active=True),
-        Student(name="Bob Berry", parent_name="Brian Berry", parent_email="bberry@x.com",
+        Student(name="Bob Berry", parent_id=p_berry.id,
                 dob="2015-02-01", school_class_id=class_1a.id, institution_id=inst.id, is_active=True),
-        Student(name="Carol Cherry", parent_name="Carla Cherry", parent_email="ccherry@x.com",
+        Student(name="Carol Cherry", parent_id=p_cherry.id,
                 dob="2015-03-01", school_class_id=class_1b.id, institution_id=inst.id, is_active=True),
-        Student(name="Inactive Ian", parent_name="Iris Ian", parent_email="iian@x.com",
+        Student(name="Inactive Ian", parent_id=p_ian.id,
                 dob="2015-04-01", school_class_id=class_1b.id, institution_id=inst.id, is_active=False),
     ]
     session.add_all(students)

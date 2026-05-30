@@ -29,13 +29,17 @@ def validate_password_strength(v: str) -> str:
 class ParentBase(BaseModel):
     name: Optional[str] = "Unknown Profile"
     is_active: Optional[bool] = True
-    phone: Optional[str] = None
+    email: Optional[str] = None
+    # primary_phone is the main contact + parent-login credential.
+    # secondary_phone is the fallback / emergency number.
+    primary_phone: Optional[str] = None
+    secondary_phone: Optional[str] = None
     relation: Optional[str] = None # e.g. "Guardian"
 
 class ParentCreate(ParentBase):
     email: EmailStr
     password: str = Field(..., min_length=10, description="Min 10 chars: uppercase, lowercase, digit, special char")
-    
+
     @field_validator('password')
     @classmethod
     def validate_password(cls, v: str) -> str:
@@ -43,7 +47,9 @@ class ParentCreate(ParentBase):
 
 class ParentUpdate(BaseModel):
     name: Optional[str] = None
-    phone: Optional[str] = None
+    email: Optional[str] = None
+    primary_phone: Optional[str] = None
+    secondary_phone: Optional[str] = None
     relation: Optional[str] = None
 
 class ParentResponse(ParentBase):
@@ -57,26 +63,40 @@ class StudentBase(BaseModel):
     is_active: Optional[bool] = True
     dob: Optional[str] = None
     whatsapp: Optional[str] = None
-    parent_name: Optional[str] = None
-    parent_email: Optional[str] = None
-    parent_phone: Optional[str] = None
+    # Optional student profile details.
+    address: Optional[str] = None
+    blood_group: Optional[str] = None
 
 class StudentCreate(StudentBase):
     email: Optional[EmailStr] = None
     password: str = Field(..., description="Student/Parent password (usually DOB)")
+    # Link to an existing parent directly, or omit to find-or-create one from
+    # the guardian inputs below.
     parent_id: Optional[int] = None
     school_class_id: Optional[int] = None
-    # ── Override: parent_phone is REQUIRED at enrollment ───────────────────
-    # Parent portal login uses (guardian_phone, student_dob), so a student
-    # enrolled without a phone has no way to log in. We intentionally do NOT
-    # backfill existing rows — they stay valid for everything except parent
-    # login until an admin edits them. New enrollments must provide one.
+
+    # ── Guardian inputs ────────────────────────────────────────────────────
+    # These are NOT stored on the student. The service uses them to
+    # find-or-create the Parent record (keyed on the normalized primary
+    # phone within the institution) and stores only parent_id on the student.
+    #
+    # parent_phone is REQUIRED: parent-portal login uses (guardian_phone,
+    # student_dob), so a student enrolled without a phone has no way to log
+    # in. Existing rows are intentionally not backfilled.
+    parent_name: Optional[str] = None
+    parent_email: Optional[str] = None
     parent_phone: str = Field(
         ...,
         min_length=4,
         max_length=24,
-        description="Guardian phone number — required for parent-portal login",
+        description="Guardian primary phone — required for parent-portal login",
     )
+    parent_secondary_phone: Optional[str] = Field(
+        None,
+        max_length=24,
+        description="Optional fallback / emergency guardian number",
+    )
+    parent_relation: Optional[str] = None
 
     @field_validator("parent_phone")
     @classmethod
@@ -95,9 +115,15 @@ class StudentUpdate(BaseModel):
     dob: Optional[str] = None
     whatsapp: Optional[str] = None
     school_class_id: Optional[int] = None
+    address: Optional[str] = None
+    blood_group: Optional[str] = None
+    # Guardian fields patch the linked parent record (creating one if the
+    # student has none and a primary phone is supplied).
     parent_name: Optional[str] = None
     parent_email: Optional[str] = None
     parent_phone: Optional[str] = None
+    parent_secondary_phone: Optional[str] = None
+    parent_relation: Optional[str] = None
 
 class StudentResponse(StudentBase):
     id: int

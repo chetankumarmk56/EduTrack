@@ -56,9 +56,13 @@ export interface SchoolClass {
 
 export interface Parent {
   id: number;
-  user_id: number;
-  name: string;
-  phone?: string;
+  user_id?: number;
+  name?: string;
+  email?: string;
+  // primary_phone is the main contact + login credential; secondary_phone
+  // is the fallback / emergency number.
+  primary_phone?: string;
+  secondary_phone?: string;
   relation?: string;
   is_active: boolean;
   // Present when parent is fetched as part of a user record
@@ -73,15 +77,16 @@ export interface Student {
   whatsapp?: string;
   alternate?: string;
   is_active: boolean;
+  // Guardian contact details live on the nested parent record only.
   parent?: Parent;
   classroom?: SchoolClass;
   school_class?: SchoolClass;
   school_class_id?: number;
   // Server-assigned alphabetical position within the class.
   roll_number?: number | null;
-  parent_name?: string;
-  parent_email?: string;
-  parent_phone?: string;
+  // Optional student profile details.
+  address?: string;
+  blood_group?: string;
   // Legacy fields returned by older API endpoints
   class_level?: string;
   section?: string;

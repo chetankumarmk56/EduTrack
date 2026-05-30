@@ -190,8 +190,11 @@ export default function ProfileScreen() {
       ? String(profile.roll_no)
       : '—';
   const dob         = formatDOB(profile?.dob);
-  const parentPhone = profile?.parent_phone || '—';
-  const parentEmail = profile?.parent_email || '—';
+  // /my-profile may return a Student (guardian nested under .parent) or, for a
+  // parent user with a Parent record, the parent fields directly.
+  const parentPhone = profile?.parent?.primary_phone || profile?.primary_phone
+    || profile?.parent?.secondary_phone || profile?.secondary_phone || '—';
+  const parentEmail = profile?.parent?.email || profile?.email || '—';
   const whatsapp    = profile?.whatsapp;
 
   // ── handlers ──

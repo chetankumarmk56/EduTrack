@@ -273,7 +273,7 @@ async def ensure_teacher_assigned_to_student(
 
 async def require_cron_or_admin(
     request: Request,
-    user: Optional[UserContext] = Depends(lambda: None),
+    bearer_token: Optional[str] = Depends(oauth2_scheme),
 ) -> str:
     """
     Authentication for cron-style endpoints. Accepts either:
@@ -287,9 +287,13 @@ async def require_cron_or_admin(
     failure so a misconfigured cron loops loudly instead of silently
     dropping notifications.
 
-    The dependency reads the JWT path lazily by hand because using
-    ``Depends(get_current_user)`` would 401 cron requests that
-    legitimately have no Authorization header.
+    ``bearer_token`` is declared via ``Depends(oauth2_scheme)`` purely so
+    FastAPI registers this endpoint as requiring OAuth2 in the generated
+    OpenAPI schema — that is what makes Swagger UI attach the
+    ``Authorization: Bearer …`` header on the dispatched curl. The actual
+    token read is still done manually below so requests that arrive with
+    only ``X-Cron-Secret`` (and no Authorization header) are not rejected
+    by ``auto_error``.
     """
     # 1. Shared-secret path.
     secret_header = request.headers.get("X-Cron-Secret")
@@ -300,11 +304,11 @@ async def require_cron_or_admin(
         if hmac.compare_digest(secret_header, configured):
             return "cron-secret"
 
-    # 2. Admin JWT path. Best-effort — if the Authorization header is
-    #    present we validate it; if not, we fall through to 401.
-    auth_header = request.headers.get("Authorization", "")
-    if auth_header.lower().startswith("bearer "):
-        token = auth_header.split(None, 1)[1]
+    # 2. Admin JWT path. Best-effort — accept the token via either the
+    #    Authorization header (Swagger / mobile) or the edu_access_* cookie
+    #    (web SPA). Fall through to 401 if neither resolves to an admin.
+    token = _extract_access_token(request, bearer_token)
+    if token:
         try:
             payload = decode_access_token(token)
             role = payload.get("role")

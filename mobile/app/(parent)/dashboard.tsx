@@ -49,7 +49,13 @@ export default function DashboardScreen() {
   const unreadAnnouncements = announcements.filter((a) => !a.is_read).length;
   const latestAnnouncement = announcements[0];
 
-  const parentName = profile?.parent_name?.trim() || 'Parent';
+  // /my-profile may return a Student (guardian under .parent) or, for a parent
+  // user with a Parent record, the parent fields directly. Use the student's
+  // own name only when the profile is itself a Parent record (no nested parent
+  // but a primary_phone), so we never show the student's name as the guardian.
+  const parentName = (
+    profile?.parent?.name || (profile?.primary_phone ? profile?.name : undefined)
+  )?.trim() || 'Parent';
   const studentName = profile?.name || user?.name || '';
   const gradeInfo =
     profile?.school_class?.grade?.level || profile?.class_level

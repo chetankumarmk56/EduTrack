@@ -10,6 +10,7 @@ import ClassesOverview from '@/features/finance/components/ClassesOverview';
 import PaymentLedger from '@/features/finance/components/PaymentLedger';
 import DefaultersTable from '@/features/finance/components/DefaultersTable';
 import ManualPaymentModal from '@/features/finance/components/ManualPaymentModal';
+import FeeRemindersPanel from '@/features/finance/components/FeeRemindersPanel';
 
 export default function FinanceDashboard() {
   const { grades, schoolClasses } = useApp();
@@ -17,7 +18,7 @@ export default function FinanceDashboard() {
   const [defaulters, setDefaulters] = useState<DefaulterResponse[]>([]);
   const [classBreakdown, setClassBreakdown] = useState<ClassFinanceBreakdownResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'classes' | 'ledger' | 'defaulters'>('classes');
+  const [activeTab, setActiveTab] = useState<'classes' | 'ledger' | 'defaulters' | 'reminders'>('classes');
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
   const [manualStudentId, setManualStudentId] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
@@ -94,7 +95,7 @@ export default function FinanceDashboard() {
         {/* Tab bar + action buttons — scrollable on small screens */}
         <div className="overflow-x-auto -mx-1 px-1 pb-1">
           <div className="flex items-center gap-2 p-1.5 bg-slate-900/50 backdrop-blur-md rounded-2xl border border-white/5 shadow-2xl w-max min-w-full sm:w-auto sm:min-w-0">
-            {(['classes', 'ledger', 'defaulters'] as const).map((tab) => (
+            {(['classes', 'ledger', 'defaulters', 'reminders'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -173,6 +174,12 @@ export default function FinanceDashboard() {
               grades={grades}
               schoolClasses={schoolClasses}
             />
+          </motion.div>
+        )}
+
+        {activeTab === 'reminders' && (
+          <motion.div key="reminders" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}>
+            <FeeRemindersPanel />
           </motion.div>
         )}
       </AnimatePresence>

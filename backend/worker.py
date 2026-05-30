@@ -1,33 +1,34 @@
 """
-Standalone worker entrypoint.
-
-Runs the in-process schedulers (currently just the Wednesday fee-reminder
-loop) outside the web replicas. Use this when you have a real process
-supervisor — docker-compose, ECS, Kubernetes — and want one dedicated
-container for background work instead of an external cron pinging an
-HTTP endpoint.
+Standalone worker entrypoint for the optional fee-reminder automation loop.
 
 Run:
     python worker.py
 
-The worker forces ``FEE_REMINDER_SCHEDULER_ENABLED=true`` regardless of
-the env file, since the whole point of running this process is to have
-the scheduler on.
+When started, this process forces ``FEE_REMINDER_SCHEDULER_ENABLED=true``
+and spawns the per-institution automation loop. The loop polls every
+5 minutes and fires the dispatcher ONLY for institutions whose admin has
+opted into WEEKLY / MONTHLY reminders via the Finance UI. The default
+state for every institution is DISABLED, so a freshly-bootstrapped
+deployment running this worker still won't send a single push until
+someone configures a schedule.
+
+Background
+----------
+Fee reminders used to be a hardcoded Wednesday-at-09:00-IST cron. That
+behaviour has been replaced with an admin click-to-send button in the
+Finance dashboard. This worker exists only for institutions that
+explicitly opt into recurring sends; it is NOT required for the
+manual flow.
 
 Production wiring
 -----------------
-* Web pods: ``FEE_REMINDER_SCHEDULER_ENABLED=false`` (set in render.yaml).
-* This worker pod / service: launched via ``python worker.py``; runs one
-  replica only — the cron_locks table is a belt-and-braces guard in case
-  someone scales it up.
+* Web pods: ``FEE_REMINDER_SCHEDULER_ENABLED=false`` (default in render.yaml).
+* Optional worker pod: launch with ``python worker.py``; run exactly one
+  replica — the per-institution cron_locks row is a belt-and-braces guard
+  if someone scales it up.
 
-Why this rather than an external HTTP cron:
-  * No external dependency on the platform's scheduler.
-  * No need to manage a long-lived secret on a separate system.
-  * Same code path as the in-process scheduler we already wrote.
-
-Render alternative (HTTP cron) lives alongside this in render.yaml — it's
-fine to use just the HTTP route and skip this worker entirely. Pick one.
+If no institution will ever want recurring reminders, this worker can be
+omitted entirely. The admin click-to-send endpoint is the source of truth.
 """
 from __future__ import annotations
 

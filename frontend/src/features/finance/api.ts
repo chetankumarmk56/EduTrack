@@ -161,6 +161,37 @@ export const financeApi = {
     });
     return response.data as Blob;
   },
+
+  // --- Fee reminders ---
+  getFeeReminderSettings: async (): Promise<FeeReminderSettings> => {
+    const { data } = await client.get<FeeReminderSettings>('finance/fee-reminders/settings');
+    return data;
+  },
+
+  updateFeeReminderSettings: async (
+    payload: FeeReminderSettingsUpdate,
+  ): Promise<FeeReminderSettings> => {
+    const { data } = await client.put<FeeReminderSettings>(
+      'finance/fee-reminders/settings', payload,
+    );
+    return data;
+  },
+
+  previewFeeReminders: async (): Promise<FeeReminderPreview> => {
+    const { data } = await client.get<FeeReminderPreview>('finance/fee-reminders/preview');
+    return data;
+  },
+
+  dispatchFeeReminders: async (
+    opts: { dry_run?: boolean } = {},
+  ): Promise<FeeReminderDispatchSummary> => {
+    const { data } = await client.post<FeeReminderDispatchSummary>(
+      'finance/fee-reminders/dispatch',
+      undefined,
+      { params: opts.dry_run ? { dry_run: true } : undefined },
+    );
+    return data;
+  },
 };
 
 // --- Ledger types ---
@@ -245,6 +276,79 @@ export interface LedgerExportParams {
   payment_status?: string;
   payment_method?: string;
   academic_year?: string;
+}
+
+// --- Fee-reminder types ---
+
+export type FeeReminderAutomationMode = 'DISABLED' | 'WEEKLY' | 'MONTHLY' | 'CUSTOM';
+
+export interface FeeReminderSettings {
+  institution_id: number;
+  automation_mode: FeeReminderAutomationMode;
+  day_of_week: number | null;   // 0..6 (Mon..Sun) for WEEKLY
+  day_of_month: number | null;  // 1..28 for MONTHLY
+  send_hour: number;            // 0..23
+  timezone: string;
+  overdue_days: number | null;
+  cooldown_days: number | null;
+  voice_calls_enabled: boolean;
+  last_run_at: string | null;
+  last_run_triggered_by: string | null;
+  effective_overdue_days: number;
+  effective_cooldown_days: number;
+}
+
+export interface FeeReminderSettingsUpdate {
+  automation_mode?: FeeReminderAutomationMode;
+  day_of_week?: number | null;
+  day_of_month?: number | null;
+  send_hour?: number;
+  timezone?: string;
+  overdue_days?: number | null;
+  cooldown_days?: number | null;
+  voice_calls_enabled?: boolean;
+}
+
+export interface FeeReminderEligibleRow {
+  student_fee_id: number;
+  student_id: number;
+  student_name: string;
+  class_name: string | null;
+  parent_name: string | null;
+  parent_phone: string | null;
+  due_amount: number;
+  due_date: string;
+  days_overdue: number;
+  last_notified_at: string | null;
+  has_login_target: boolean;
+  has_phone: boolean;
+  in_cooldown: boolean;
+  eligible_now: boolean;
+  skip_reason: string | null;
+}
+
+export interface FeeReminderPreview {
+  overdue_count: number;
+  overdue_unique_students: number;
+  overdue_total_due: number;
+  eligible_count: number;
+  unique_students: number;
+  total_due_amount: number;
+  in_cooldown_count: number;
+  no_login_count: number;
+  rows: FeeReminderEligibleRow[];
+}
+
+export interface FeeReminderDispatchSummary {
+  triggered: boolean;
+  skipped_reason: string | null;
+  eligible_rows: number;
+  unique_students: number;
+  skipped_no_target: number;
+  push: { sent?: number; failed?: number; tokens?: number; invalidated?: number };
+  calls: { placed?: number; failed?: number; skipped_no_phone?: number };
+  notified_fee_ids: number[];
+  first_call_error: string | null;
 }
 
 export interface LedgerFilterOptions {

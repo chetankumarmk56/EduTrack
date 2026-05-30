@@ -183,7 +183,7 @@ async def read_students(
     search: Optional[str] = Query(
         None,
         min_length=1, max_length=80,
-        description="ILIKE match on name / parent_name / parent_email.",
+        description="ILIKE match on student name / parent name / parent email.",
     ),
     is_active: Optional[bool] = Query(
         None,

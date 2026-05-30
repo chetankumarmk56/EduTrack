@@ -7,12 +7,15 @@ from datetime import datetime, date
 import io
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_user, require_payment_admin, require_cron_or_admin, UserContext
+from app.core.dependencies import get_current_user, require_payment_admin, UserContext
 from app.schemas.finance import (
     StudentDuesResponse, PaymentResponse, PaginatedPaymentResponse,
     ManualPaymentCreate, ManualPaymentResponse, FinanceSummaryResponse, DefaulterResponse,
     ClassFinanceBreakdownResponse,
     LedgerEntryResponse, PaginatedLedgerResponse, LedgerSummary,
+    FeeReminderPreviewResponse, FeeReminderEligibleRow,
+    FeeReminderDispatchSummary, FeeReminderSettingsResponse,
+    FeeReminderSettingsUpdate,
 )
 from app.services.finance import finance_service
 from app.services.finance.ledger_service import (
@@ -670,24 +673,180 @@ async def export_ledger(
     )
 
 
-# ─── Fee reminder dispatcher ─────────────────────────────────────────────────
+# ─── Fee reminders (admin-controlled) ─────────────────────────────────────
+#
+# Reminder dispatch is admin-triggered by default. The optional automation
+# loop lives in fee_reminder_scheduler.py and only fires when an admin has
+# explicitly switched their institution to WEEKLY / MONTHLY via the
+# settings endpoint below. No request here ever needs a Wednesday gate.
 
-@router.post("/fee-reminders/dispatch")
-async def dispatch_fee_reminders(
-    force: bool = Query(False, description="Skip the Wednesday/hour guard"),
-    dry_run: bool = Query(False, description="Compute eligible rows but don't push or bump last_notified_at"),
+_VALID_AUTOMATION_MODES = {"DISABLED", "WEEKLY", "MONTHLY", "CUSTOM"}
+
+
+def _settings_to_response(s, *, effective_overdue: int, effective_cooldown: int) -> FeeReminderSettingsResponse:
+    return FeeReminderSettingsResponse(
+        institution_id=s.institution_id,
+        automation_mode=s.automation_mode,
+        day_of_week=s.day_of_week,
+        day_of_month=s.day_of_month,
+        send_hour=s.send_hour,
+        timezone=s.timezone,
+        overdue_days=s.overdue_days,
+        cooldown_days=s.cooldown_days,
+        voice_calls_enabled=bool(s.voice_calls_enabled),
+        last_run_at=s.last_run_at,
+        last_run_triggered_by=s.last_run_triggered_by,
+        effective_overdue_days=effective_overdue,
+        effective_cooldown_days=effective_cooldown,
+    )
+
+
+@router.get("/fee-reminders/settings", response_model=FeeReminderSettingsResponse)
+async def get_fee_reminder_settings(
     db: AsyncSession = Depends(get_db),
-    caller: str = Depends(require_cron_or_admin),
+    admin: UserContext = Depends(require_payment_admin),
 ):
-    """Run the weekly fee-reminder push."""
+    """
+    Read this institution's fee-reminder automation settings. Lazily
+    creates a DISABLED row the first time the page is opened.
+    """
+    from app.services.finance.fee_reminder_service import fee_reminder_service
+    s = await fee_reminder_service.get_or_create_settings(db, admin.institution_id)
+    return _settings_to_response(
+        s,
+        effective_overdue=fee_reminder_service._effective_overdue_days(s),
+        effective_cooldown=fee_reminder_service._effective_cooldown_days(s),
+    )
+
+
+@router.put("/fee-reminders/settings", response_model=FeeReminderSettingsResponse)
+async def update_fee_reminder_settings(
+    payload: FeeReminderSettingsUpdate,
+    db: AsyncSession = Depends(get_db),
+    admin: UserContext = Depends(require_payment_admin),
+):
+    """
+    Update automation mode / schedule / overrides. Validation is strict:
+    WEEKLY requires day_of_week, MONTHLY requires day_of_month, etc.
+    """
+    from app.services.finance.fee_reminder_service import fee_reminder_service
+
+    if payload.automation_mode is not None:
+        mode = payload.automation_mode.upper()
+        if mode not in _VALID_AUTOMATION_MODES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid automation_mode. Allowed: {sorted(_VALID_AUTOMATION_MODES)}",
+            )
+        payload.automation_mode = mode
+
+    if payload.day_of_week is not None and not (0 <= payload.day_of_week <= 6):
+        raise HTTPException(status_code=400, detail="day_of_week must be 0..6 (Mon..Sun).")
+    if payload.day_of_month is not None and not (1 <= payload.day_of_month <= 28):
+        raise HTTPException(status_code=400, detail="day_of_month must be 1..28 (capped so Feb fires).")
+    if payload.send_hour is not None and not (0 <= payload.send_hour <= 23):
+        raise HTTPException(status_code=400, detail="send_hour must be 0..23.")
+    if payload.overdue_days is not None and payload.overdue_days < 0:
+        raise HTTPException(status_code=400, detail="overdue_days must be >= 0.")
+    if payload.cooldown_days is not None and payload.cooldown_days < 0:
+        raise HTTPException(status_code=400, detail="cooldown_days must be >= 0.")
+
+    s = await fee_reminder_service.get_or_create_settings(db, admin.institution_id)
+
+    if payload.automation_mode is not None:
+        if payload.automation_mode == "WEEKLY":
+            target_dow = payload.day_of_week if payload.day_of_week is not None else s.day_of_week
+            if target_dow is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="WEEKLY automation requires day_of_week (0..6).",
+                )
+        if payload.automation_mode == "MONTHLY":
+            target_dom = payload.day_of_month if payload.day_of_month is not None else s.day_of_month
+            if target_dom is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="MONTHLY automation requires day_of_month (1..28).",
+                )
+
+    for field in (
+        "automation_mode", "day_of_week", "day_of_month", "send_hour",
+        "timezone", "overdue_days", "cooldown_days", "voice_calls_enabled",
+    ):
+        val = getattr(payload, field)
+        if val is not None:
+            setattr(s, field, val)
+    s.updated_by_user_id = admin.id
+
+    await db.commit()
+    await db.refresh(s)
+    return _settings_to_response(
+        s,
+        effective_overdue=fee_reminder_service._effective_overdue_days(s),
+        effective_cooldown=fee_reminder_service._effective_cooldown_days(s),
+    )
+
+
+@router.get("/fee-reminders/preview", response_model=FeeReminderPreviewResponse)
+async def preview_fee_reminders(
+    db: AsyncSession = Depends(get_db),
+    admin: UserContext = Depends(require_payment_admin),
+):
+    """
+    List every overdue, unpaid fee for this institution, tagged with
+    whether it would actually be notified on the next dispatch.
+
+    Aggregate counts split the population:
+      - `overdue_*`        : full visible list (admin's situational awareness)
+      - `eligible_*`       : the subset that the next click-to-send would notify
+      - `in_cooldown_count`: silenced by `last_notified_at + cooldown_days`
+      - `no_login_count`   : student has no parent/student login — admin must
+                             link a User before any push can reach them
+    """
+    from app.services.finance.fee_reminder_service import fee_reminder_service
+    rows = await fee_reminder_service.preview_eligible(
+        db, institution_id=admin.institution_id,
+    )
+    eligible_rows = [r for r in rows if r.eligible_now]
+    in_cooldown = sum(1 for r in rows if r.in_cooldown)
+    no_login = sum(1 for r in rows if not r.has_login_target and not r.in_cooldown)
+    return FeeReminderPreviewResponse(
+        overdue_count=len(rows),
+        overdue_unique_students=len({r.student_id for r in rows}),
+        overdue_total_due=sum(r.due_amount for r in rows),
+        eligible_count=len(eligible_rows),
+        unique_students=len({r.student_id for r in eligible_rows}),
+        total_due_amount=sum(r.due_amount for r in eligible_rows),
+        in_cooldown_count=in_cooldown,
+        no_login_count=no_login,
+        rows=[FeeReminderEligibleRow(**r.__dict__) for r in rows],
+    )
+
+
+@router.post("/fee-reminders/dispatch", response_model=FeeReminderDispatchSummary)
+async def dispatch_fee_reminders(
+    dry_run: bool = Query(False, description="Compute eligibility but don't push or bump last_notified_at"),
+    db: AsyncSession = Depends(get_db),
+    admin: UserContext = Depends(require_payment_admin),
+):
+    """
+    Send fee reminders for the admin's institution NOW.
+
+    This is the click-to-send endpoint behind the Finance dashboard's
+    "Send Fee Reminders" button. Eligibility, cooldown, and lock semantics
+    are unchanged from the previous cron flow — only the trigger changed.
+    """
     from app.services.finance.fee_reminder_service import fee_reminder_service
     from app.core.logger import logger
 
-    logger.info("[fee-reminder] dispatch triggered by %s (force=%s, dry_run=%s)",
-                caller, force, dry_run)
+    logger.info(
+        "[fee-reminder] dispatch triggered by user=%s institution=%s (dry_run=%s)",
+        admin.id, admin.institution_id, dry_run,
+    )
     summary = await fee_reminder_service.dispatch_due_reminders(
         db,
-        force_day=force,
+        institution_id=admin.institution_id,
+        triggered_by="manual",
         dry_run=dry_run,
     )
-    return summary.as_dict()
+    return FeeReminderDispatchSummary(**summary.as_dict())

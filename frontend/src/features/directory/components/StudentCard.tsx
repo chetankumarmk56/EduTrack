@@ -39,15 +39,15 @@ export default function StudentCard({ student: s, viewMode, onEdit, onDelete, de
 
           {/* Parent info */}
           <div className="hidden md:flex flex-col gap-0.5 min-w-0 flex-1">
-            <p className="text-xs font-semibold text-white/70 truncate">{s.parent_name || 'No guardian'}</p>
+            <p className="text-xs font-semibold text-white/70 truncate">{s.parent?.name || 'No guardian'}</p>
             <div className="flex items-center gap-3 text-[10px] text-text-secondary">
-              {s.parent_email && (
-                <span className="flex items-center gap-1 truncate"><Mail className="w-3 h-3 shrink-0" /> {s.parent_email}</span>
+              {s.parent?.email && (
+                <span className="flex items-center gap-1 truncate"><Mail className="w-3 h-3 shrink-0" /> {s.parent.email}</span>
               )}
-              {s.parent_phone && (
-                <span className="flex items-center gap-1 shrink-0"><Phone className="w-3 h-3" /> {s.parent_phone}</span>
+              {s.parent?.primary_phone && (
+                <span className="flex items-center gap-1 shrink-0"><Phone className="w-3 h-3" /> {s.parent.primary_phone}</span>
               )}
-              {!s.parent_email && !s.parent_phone && (
+              {!s.parent?.email && !s.parent?.primary_phone && (
                 <span className="opacity-40 italic">No contact info</span>
               )}
             </div>
@@ -125,16 +125,22 @@ export default function StudentCard({ student: s, viewMode, onEdit, onDelete, de
             Parent / Guardian
           </p>
           <div className="space-y-1.5">
-            <p className="text-sm font-bold text-white/90 truncate">{s.parent_name || 'Not set'}</p>
+            <p className="text-sm font-bold text-white/90 truncate">{s.parent?.name || 'Not set'}</p>
             <div className="space-y-1">
               <span className="text-[11px] text-text-secondary flex items-center gap-2">
                 <Mail className="w-3 h-3 text-brand-indigo/50 shrink-0" />
-                <span className="truncate">{s.parent_email || 'No email'}</span>
+                <span className="truncate">{s.parent?.email || 'No email'}</span>
               </span>
               <span className="text-[11px] text-text-secondary flex items-center gap-2">
                 <Phone className="w-3 h-3 text-brand-indigo/50 shrink-0" />
-                {s.parent_phone || 'No phone'}
+                {s.parent?.primary_phone || 'No phone'}
               </span>
+              {s.parent?.secondary_phone && (
+                <span className="text-[11px] text-text-secondary flex items-center gap-2">
+                  <Phone className="w-3 h-3 text-brand-indigo/30 shrink-0" />
+                  {s.parent.secondary_phone} <span className="opacity-50">(alt)</span>
+                </span>
+              )}
             </div>
           </div>
         </div>

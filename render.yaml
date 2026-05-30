@@ -50,39 +50,11 @@ services:
       # Free options: Upstash, Render Redis, or KV providers compatible with redis://
       - key: REDIS_URL
         sync: false
-      # ── Scheduler — keep OFF here; the Render Cron Job below drives dispatch ──
+      # ── Fee-reminder automation loop. OFF on web pods to avoid duplicate
+      #    sends across replicas. Enable on the dedicated worker tier (see
+      #    docker-compose.yml for the local equivalent). Even when ON, the
+      #    loop only fires for institutions whose admin opted into WEEKLY /
+      #    MONTHLY automation in the Finance UI — default per institution
+      #    is DISABLED, so admin click-to-send is the primary flow. ──
       - key: FEE_REMINDER_SCHEDULER_ENABLED
         value: "false"
-      # ── Shared secret for the Render Cron Job to authenticate against
-      #    POST /api/finance/fee-reminders/dispatch without holding a JWT.
-      #    Generate with: python -c 'import secrets; print(secrets.token_urlsafe(32))'
-      - key: CRON_SECRET
-        sync: false
-
-  # ── Fee reminder cron job ─────────────────────────────────────────────
-  # Render Cron Jobs do an HTTPS call from a managed scheduler — no
-  # always-on worker container required. Runs every Wednesday at 09:00
-  # IST (03:30 UTC). The endpoint enforces day/hour guard internally
-  # and acquires cron_locks.fee_reminder_weekly so even if Render fires
-  # twice (rare but possible during outages) we won't double-dispatch.
-  #
-  # NOTE: replace {EDUTRACK_BACKEND_HOST} with the actual web service URL
-  # after first deploy (Render lets you reference it via fromService).
-  - type: cron
-    name: edutrack-fee-reminder-cron
-    runtime: python
-    plan: free
-    rootDir: backend
-    schedule: "30 3 * * 3"   # Wed 03:30 UTC == 09:00 Asia/Kolkata
-    buildCommand: pip install -r requirements.txt
-    # `curl --fail-with-body` makes a non-2xx body land in the job's log so
-    # operators can see exactly why a dispatch failed.
-    startCommand: |
-      curl --fail-with-body -sS -X POST \
-        -H "X-Cron-Secret: ${CRON_SECRET}" \
-        "${BACKEND_BASE_URL}/api/finance/fee-reminders/dispatch"
-    envVars:
-      - key: CRON_SECRET
-        sync: false   # must match the web service's value
-      - key: BACKEND_BASE_URL
-        sync: false   # e.g. https://edutrack-backend.onrender.com

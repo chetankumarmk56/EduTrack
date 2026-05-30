@@ -470,30 +470,31 @@ class AuthService:
 
         Performance / privacy notes
         ---------------------------
-        We query against ``parent_phone_normalized`` (last-10-digits
-        canonical form, populated automatically by the Student model's
-        validator and backfilled by migration ``i7d8e9f0a1b2``). The
-        compound index ``(parent_phone_normalized, dob)`` makes this a
-        single equality probe instead of the previous full scan over
-        every student with the same DOB — which used to pull thousands
-        of other schools' rows into worker memory on each parent login.
+        We query against ``parents.primary_phone_normalized`` (last-10-digits
+        canonical form, populated automatically by the Parent model's
+        validator) joined to the child on ``parent_id`` + ``dob``. The
+        index on ``primary_phone_normalized`` makes this a single equality
+        probe instead of a full scan over every student with the same DOB —
+        which used to pull thousands of other schools' rows into worker
+        memory on each parent login.
         """
-        from app.models.directory import Student
+        from app.models.directory import Student, Parent
         from sqlalchemy.orm import joinedload
 
         normalized = AuthService._normalize_phone(parent_phone)
         if not normalized:
             return None
 
-        # Indexed lookup: at most a handful of rows globally (typically
-        # one). LIMIT 5 is a defence-in-depth cap so even if the data is
-        # weird (e.g. legacy duplicates) we don't materialise unbounded
-        # candidates.
+        # Indexed lookup on the parent phone, joined to the child by DOB.
+        # At most a handful of rows globally (typically one). LIMIT 5 is a
+        # defence-in-depth cap so even if the data is weird (e.g. legacy
+        # duplicates) we don't materialise unbounded candidates.
         result = await db.execute(
             select(Student)
+            .join(Parent, Student.parent_id == Parent.id)
             .options(joinedload(Student.institution))
             .where(
-                Student.parent_phone_normalized == normalized,
+                Parent.primary_phone_normalized == normalized,
                 Student.dob == dob,
                 Student.is_active.is_(True),
             )

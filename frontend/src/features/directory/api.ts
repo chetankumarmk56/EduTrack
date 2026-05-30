@@ -33,10 +33,17 @@ export interface StudentCreatePayload {
   dob?: string;
   whatsapp?: string;
   school_class_id?: number;
+  // Optional student profile details.
+  address?: string;
+  blood_group?: string;
+  // Link an existing parent, or supply the guardian inputs below to
+  // find-or-create one server-side (only parent_id is stored on the student).
   parent_id?: number;
   parent_name?: string;
   parent_email?: string;
   parent_phone?: string;
+  parent_secondary_phone?: string;
+  parent_relation?: string;
 }
 
 // Extend Teacher type to include admin-visible password
@@ -70,8 +77,8 @@ export const directoryApi = {
   //
   // Pass `schoolClassId` to load just one class (the admin directory's
   // common path) instead of all students. `search` is matched
-  // server-side on name / parent_name / parent_email via ILIKE so the
-  // client doesn't have to fetch then filter.
+  // server-side on student name / parent name / parent email via ILIKE so
+  // the client doesn't have to fetch then filter.
   getStudents: async (filters: StudentListFilters = {}) => {
     const params: Record<string, string | number | boolean> = {
       skip: filters.skip ?? 0,

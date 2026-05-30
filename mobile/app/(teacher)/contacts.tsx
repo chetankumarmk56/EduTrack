@@ -322,12 +322,12 @@ export default function TeacherContacts() {
                     name={student.name}
                     sub={groupKey}
                     role="Student"
-                    phone={student.whatsapp || student.parent_phone}
-                    email={student.parent_email}
+                    phone={student.whatsapp || student.parent?.primary_phone}
+                    email={student.parent?.email}
                     rollNo={idx + 1}
-                    onCall={() => handleCall(student.parent_phone)}
-                    onEmail={() => handleEmail(student.parent_email)}
-                    onWhatsApp={() => handleWhatsApp(student.whatsapp || student.parent_phone)}
+                    onCall={() => handleCall(student.parent?.primary_phone)}
+                    onEmail={() => handleEmail(student.parent?.email)}
+                    onWhatsApp={() => handleWhatsApp(student.whatsapp || student.parent?.primary_phone)}
                   />
                 </Animated.View>
               ))}

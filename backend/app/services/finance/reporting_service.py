@@ -6,7 +6,7 @@ from app.core.logger import logger
 from app.models.finance import (
     Payment, StudentFee, StudentFeeStatus, FinanceLedger, LedgerEntryType,
 )
-from app.models.directory import Student
+from app.models.directory import Student, Parent
 from app.models.academic import SchoolClass
 from app.schemas.finance import (
     FinanceSummaryResponse,
@@ -222,18 +222,19 @@ class ReportingServiceMixin:
                 Student.name,
                 func.sum(StudentFee.due_amount).label("total_due"),
                 SchoolClass.display_name.label("class_name"),
-                Student.parent_phone.label("phone"),
+                Parent.primary_phone.label("phone"),
                 SchoolClass.id.label("class_id"),
                 SchoolClass.grade_id.label("grade_id"),
             )
             .join(StudentFee, Student.id == StudentFee.student_id)
             .join(SchoolClass, Student.school_class_id == SchoolClass.id, isouter=True)
+            .join(Parent, Student.parent_id == Parent.id, isouter=True)
             .where(Student.institution_id == institution_id)
             .group_by(
                 Student.id,
                 Student.name,
                 SchoolClass.display_name,
-                Student.parent_phone,
+                Parent.primary_phone,
                 SchoolClass.id,
                 SchoolClass.grade_id,
             )

@@ -101,9 +101,22 @@ export interface StudentProfile {
   roll_no?: string | number;
   // Server-assigned alphabetical position within the class.
   roll_number?: number | null;
-  parent_name?: string;
-  parent_phone?: string;
-  parent_email?: string;
+  // Guardian contact details live on the nested parent record.
+  parent?: {
+    id: number;
+    name?: string;
+    email?: string;
+    primary_phone?: string;
+    secondary_phone?: string;
+    relation?: string;
+  };
+  // Present when /my-profile resolves the logged-in user to a Parent record
+  // directly (parent role) rather than a Student with a nested parent.
+  email?: string;
+  primary_phone?: string;
+  secondary_phone?: string;
+  address?: string;
+  blood_group?: string;
   whatsapp?: string;
   user_id?: number;
 }

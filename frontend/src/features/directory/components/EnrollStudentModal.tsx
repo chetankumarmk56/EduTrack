@@ -21,15 +21,20 @@ interface EnrollForm {
   name: string;
   dob: string;
   whatsapp: string;
+  address: string;
+  blood_group: string;
   parent_name: string;
   parent_email: string;
   parent_phone: string;
+  parent_secondary_phone: string;
 }
 
 const EMPTY_FORM: EnrollForm = {
-  name: '', dob: '', whatsapp: '',
-  parent_name: '', parent_email: '', parent_phone: '',
+  name: '', dob: '', whatsapp: '', address: '', blood_group: '',
+  parent_name: '', parent_email: '', parent_phone: '', parent_secondary_phone: '',
 };
+
+const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
 const NAME_REGEX = /^[A-Za-z][A-Za-z\s.'-]{1,}$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -88,16 +93,26 @@ function validateField(field: keyof EnrollForm, value: string, form: EnrollForm)
       if (!value.trim()) return 'Phone is required for portal login.';
       if (digits < 10) return 'Enter a complete number (min 10 digits).';
       if (digits > 15) return 'Number is too long (max 15 digits).';
-      // Mismatch with student DOB → the parent-portal login won't work.
-      if (form.parent_phone && !form.parent_phone.trim()) return undefined;
       return undefined;
     }
+    case 'parent_secondary_phone': {
+      // Optional fallback/emergency number — only validate when provided.
+      if (!value.trim()) return undefined;
+      const digits = (value.match(/\d/g) || []).length;
+      if (digits < 10) return 'Enter a complete number (min 10 digits).';
+      if (digits > 15) return 'Number is too long (max 15 digits).';
+      return undefined;
+    }
+    // address and blood_group are optional and free-form — no validation.
+    case 'address':
+    case 'blood_group':
+      return undefined;
   }
 }
 
 const FIELDS_FOR_STEP: Record<StepKey, (keyof EnrollForm)[]> = {
-  student: ['name', 'dob', 'whatsapp'],
-  guardian: ['parent_name', 'parent_email', 'parent_phone'],
+  student: ['name', 'dob', 'whatsapp', 'address', 'blood_group'],
+  guardian: ['parent_name', 'parent_email', 'parent_phone', 'parent_secondary_phone'],
 };
 
 export default function EnrollStudentModal({
@@ -198,9 +213,13 @@ export default function EnrollStudentModal({
         name: form.name.trim(),
         dob: form.dob,
         whatsapp: form.whatsapp.trim(),
+        // Optional student fields — only send when the admin filled them in.
+        address: form.address.trim() || undefined,
+        blood_group: form.blood_group.trim() || undefined,
         parent_name: form.parent_name.trim(),
         parent_email: form.parent_email.trim(),
         parent_phone: form.parent_phone.trim(),
+        parent_secondary_phone: form.parent_secondary_phone.trim() || undefined,
         password: form.dob,
         school_class_id: selectedSchoolClassId,
       });
@@ -320,6 +339,28 @@ export default function EnrollStudentModal({
                         />
                       </Field>
                     </div>
+                    <Field label="Address" error={errors.address}>
+                      <textarea
+                        rows={2}
+                        placeholder="Optional — residential address"
+                        maxLength={250}
+                        className="input-obsidian resize-none"
+                        value={form.address}
+                        onChange={e => setField('address', e.target.value)}
+                      />
+                    </Field>
+                    <Field label="Blood group" error={errors.blood_group}>
+                      <select
+                        className="input-obsidian"
+                        value={form.blood_group}
+                        onChange={e => setField('blood_group', e.target.value)}
+                      >
+                        <option value="">Optional — select blood group</option>
+                        {BLOOD_GROUPS.map(bg => (
+                          <option key={bg} value={bg}>{bg}</option>
+                        ))}
+                      </select>
+                    </Field>
                   </Section>
                 )}
 
@@ -372,6 +413,21 @@ export default function EnrollStudentModal({
                         value={form.parent_phone}
                         onChange={e => setField('parent_phone', e.target.value)}
                         onBlur={() => blurValidate('parent_phone')}
+                      />
+                    </Field>
+                    <Field
+                      label="Secondary phone"
+                      error={errors.parent_secondary_phone}
+                      hint="Optional fallback / emergency contact number."
+                    >
+                      <input
+                        type="tel"
+                        inputMode="tel"
+                        placeholder="+91 91234 56789"
+                        className={cn('input-obsidian', errors.parent_secondary_phone && 'border-rose-500/50 bg-rose-500/[0.02]')}
+                        value={form.parent_secondary_phone}
+                        onChange={e => setField('parent_secondary_phone', e.target.value)}
+                        onBlur={() => blurValidate('parent_secondary_phone')}
                       />
                     </Field>
                     <SummaryRow form={form} />

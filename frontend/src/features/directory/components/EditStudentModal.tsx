@@ -36,6 +36,12 @@ export default function EditStudentModal({ student, onClose, onUpdated }: EditSt
     if (errors.submit) setErrors({});
   };
 
+  // Guardian details live on the nested parent record — edit that object.
+  const updateParent = (field: 'name' | 'email' | 'primary_phone' | 'secondary_phone', value: string) => {
+    setLocalStudent((prev) => (prev ? { ...prev, parent: { ...(prev.parent ?? { id: 0, is_active: true }), [field]: value } } : prev));
+    if (errors.submit) setErrors({});
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!localStudent) return;
@@ -48,9 +54,13 @@ export default function EditStudentModal({ student, onClose, onUpdated }: EditSt
         dob: localStudent.dob,
         whatsapp: localStudent.whatsapp,
         school_class_id: localStudent.school_class_id,
-        parent_name: localStudent.parent_name,
-        parent_email: localStudent.parent_email,
-        parent_phone: localStudent.parent_phone,
+        address: localStudent.address,
+        blood_group: localStudent.blood_group,
+        // Map the nested parent back to the guardian inputs the API expects.
+        parent_name: localStudent.parent?.name,
+        parent_email: localStudent.parent?.email,
+        parent_phone: localStudent.parent?.primary_phone,
+        parent_secondary_phone: localStudent.parent?.secondary_phone,
       });
       onClose();
       onUpdated();
@@ -124,6 +134,14 @@ export default function EditStudentModal({ student, onClose, onUpdated }: EditSt
                         <input className="input-obsidian" value={localStudent.whatsapp || ''} onChange={e => update('whatsapp', e.target.value)} />
                       </div>
                     </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Address</label>
+                      <textarea rows={2} className="input-obsidian resize-none" value={localStudent.address || ''} onChange={e => update('address', e.target.value)} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Blood Group</label>
+                      <input className="input-obsidian" placeholder="e.g. O+" value={localStudent.blood_group || ''} onChange={e => update('blood_group', e.target.value)} />
+                    </div>
                   </div>
                 </div>
 
@@ -136,15 +154,19 @@ export default function EditStudentModal({ student, onClose, onUpdated }: EditSt
                   <div className="space-y-4">
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Guardian Name</label>
-                      <input className="input-obsidian" value={localStudent.parent_name || ''} onChange={e => update('parent_name', e.target.value)} />
+                      <input className="input-obsidian" value={localStudent.parent?.name || ''} onChange={e => updateParent('name', e.target.value)} />
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Email Address</label>
-                      <input type="email" className="input-obsidian" value={localStudent.parent_email || ''} onChange={e => update('parent_email', e.target.value)} />
+                      <input type="email" className="input-obsidian" value={localStudent.parent?.email || ''} onChange={e => updateParent('email', e.target.value)} />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Phone Number</label>
-                      <input className="input-obsidian" value={localStudent.parent_phone || ''} onChange={e => update('parent_phone', e.target.value)} />
+                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Primary Phone</label>
+                      <input className="input-obsidian" value={localStudent.parent?.primary_phone || ''} onChange={e => updateParent('primary_phone', e.target.value)} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Secondary Phone</label>
+                      <input className="input-obsidian" placeholder="Fallback / emergency" value={localStudent.parent?.secondary_phone || ''} onChange={e => updateParent('secondary_phone', e.target.value)} />
                     </div>
                   </div>
                 </div>

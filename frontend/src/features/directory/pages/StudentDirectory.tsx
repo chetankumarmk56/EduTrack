@@ -104,8 +104,8 @@ export default function StudentDirectory() {
       const lowSearch = searchTerm.toLowerCase();
       listWithRoll = listWithRoll.filter(s =>
         s.name.toLowerCase().includes(lowSearch) ||
-        s.parent_name?.toLowerCase().includes(lowSearch) ||
-        s.parent_email?.toLowerCase().includes(lowSearch)
+        s.parent?.name?.toLowerCase().includes(lowSearch) ||
+        s.parent?.email?.toLowerCase().includes(lowSearch)
       );
     }
 
@@ -395,11 +395,11 @@ export default function StudentDirectory() {
             {pendingDeleteStudent.dob && (
               <p className="text-slate-600 dark:text-slate-300"><span className="font-bold uppercase tracking-widest opacity-60">DOB</span> · {pendingDeleteStudent.dob}</p>
             )}
-            {pendingDeleteStudent.parent_name && (
-              <p className="text-slate-600 dark:text-slate-300"><span className="font-bold uppercase tracking-widest opacity-60">Guardian</span> · {pendingDeleteStudent.parent_name}</p>
+            {pendingDeleteStudent.parent?.name && (
+              <p className="text-slate-600 dark:text-slate-300"><span className="font-bold uppercase tracking-widest opacity-60">Guardian</span> · {pendingDeleteStudent.parent.name}</p>
             )}
-            {pendingDeleteStudent.parent_phone && (
-              <p className="text-slate-600 dark:text-slate-300 tabular-nums"><span className="font-bold uppercase tracking-widest opacity-60">Phone</span> · {pendingDeleteStudent.parent_phone}</p>
+            {pendingDeleteStudent.parent?.primary_phone && (
+              <p className="text-slate-600 dark:text-slate-300 tabular-nums"><span className="font-bold uppercase tracking-widest opacity-60">Phone</span> · {pendingDeleteStudent.parent.primary_phone}</p>
             )}
           </div>
         )}

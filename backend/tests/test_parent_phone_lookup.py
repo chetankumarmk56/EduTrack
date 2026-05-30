@@ -1,18 +1,18 @@
 """
 Verifies the parent-by-phone login lookup uses the indexed
-``parent_phone_normalized`` column instead of scanning every
+``parents.primary_phone_normalized`` column instead of scanning every
 matching-DOB student into worker memory.
 
 Two layers:
 
-1. Model: the validator auto-populates ``parent_phone_normalized`` on
-   every write to ``parent_phone``. Catches the regression "someone
-   removed the @validates and writes broke the index target."
+1. Model: the validator auto-populates ``primary_phone_normalized`` on
+   every write to ``Parent.primary_phone``. Catches the regression
+   "someone removed the @validates and writes broke the index target."
 
 2. Service: ``authenticate_parent_by_phone`` issues exactly ONE SELECT
-   against the new column with a LIMIT, not the old "load every
-   matching-DOB student" scan. We intercept ``db.execute`` to count
-   queries and inspect the compiled SQL.
+   that joins ``students`` to ``parents`` and filters on the new column
+   with a LIMIT, not the old "load every matching-DOB student" scan. We
+   intercept ``db.execute`` to count queries and inspect the compiled SQL.
 """
 import os
 import sys
@@ -32,10 +32,10 @@ os.environ["FEE_REMINDER_SCHEDULER_ENABLED"] = "false"
 
 def test_validator_normalizes_various_phone_formats():
     """
-    The @validates on parent_phone must canonicalise to last-10-digits.
-    Cover the formats parents actually type during enrollment.
+    The @validates on Parent.primary_phone must canonicalise to
+    last-10-digits. Cover the formats parents actually type at enrollment.
     """
-    from app.models.directory import Student
+    from app.models.directory import Parent
 
     cases = [
         ("9876543210", "9876543210"),       # bare 10 digits
@@ -45,9 +45,9 @@ def test_validator_normalizes_various_phone_formats():
         ("(987) 654-3210", "9876543210"),   # US formatting
     ]
     for raw, expected in cases:
-        s = Student(parent_phone=raw)
-        assert s.parent_phone_normalized == expected, (
-            f"normalize({raw!r}) = {s.parent_phone_normalized!r}, expected {expected!r}"
+        p = Parent(primary_phone=raw)
+        assert p.primary_phone_normalized == expected, (
+            f"normalize({raw!r}) = {p.primary_phone_normalized!r}, expected {expected!r}"
         )
 
 
@@ -56,27 +56,27 @@ def test_validator_handles_empty_and_short_input():
     Empty / too-short numbers must yield ``None`` so the column never
     contains a partial value that would false-match.
     """
-    from app.models.directory import Student
+    from app.models.directory import Parent
 
     for raw in (None, "", "123", "+91 987"):
-        s = Student(parent_phone=raw)
-        assert s.parent_phone_normalized is None, (
-            f"short input {raw!r} produced {s.parent_phone_normalized!r}"
+        p = Parent(primary_phone=raw)
+        assert p.primary_phone_normalized is None, (
+            f"short input {raw!r} produced {p.primary_phone_normalized!r}"
         )
 
 
 def test_validator_reapplies_on_update():
     """
-    Setting parent_phone a second time updates the normalized form.
+    Setting primary_phone a second time updates the normalized form.
     Catches the regression "validator only fires on insert."
     """
-    from app.models.directory import Student
-    s = Student(parent_phone="+91 9876543210")
-    assert s.parent_phone_normalized == "9876543210"
-    s.parent_phone = "8765432109"
-    assert s.parent_phone_normalized == "8765432109"
-    s.parent_phone = None
-    assert s.parent_phone_normalized is None
+    from app.models.directory import Parent
+    p = Parent(primary_phone="+91 9876543210")
+    assert p.primary_phone_normalized == "9876543210"
+    p.primary_phone = "8765432109"
+    assert p.primary_phone_normalized == "8765432109"
+    p.primary_phone = None
+    assert p.primary_phone_normalized is None
 
 
 # ─── Service: single indexed query, not a broad scan ────────────────────────
@@ -107,8 +107,8 @@ class _CountingSession:
 async def test_service_issues_one_indexed_query(monkeypatch):
     """
     A failed-lookup path must hit the DB exactly once and the WHERE
-    clause must reference ``parent_phone_normalized`` (the indexed
-    column) — not ``parent_phone`` (the old broad-scan column).
+    clause must reference ``primary_phone_normalized`` (the indexed
+    column) — not the old per-student ``parent_phone`` column.
     """
     from app.services.auth.auth_service import AuthService
 
@@ -128,8 +128,8 @@ async def test_service_issues_one_indexed_query(monkeypatch):
     # Compile to inspect the WHERE clause text. We use literal_binds=False
     # so we see column names, not values.
     compiled = str(session.statements[0])
-    assert "parent_phone_normalized" in compiled, (
-        f"query must filter on parent_phone_normalized; got:\n{compiled}"
+    assert "primary_phone_normalized" in compiled, (
+        f"query must filter on primary_phone_normalized; got:\n{compiled}"
     )
     assert "LIMIT" in compiled.upper() or " :param_" in compiled, (
         f"query must carry a LIMIT defence-in-depth cap; got:\n{compiled}"
@@ -170,7 +170,7 @@ def test_migration_normalizer_matches_model_validator():
     here = os.path.dirname(os.path.abspath(__file__))
     mig_path = os.path.join(
         here, "..", "alembic", "versions",
-        "i7d8e9f0a1b2_add_parent_phone_normalized.py",
+        "q5f6a7b8c9d0_refactor_parent_contact_to_parents.py",
     )
     spec = importlib.util.spec_from_file_location("mig_under_test", mig_path)
     mig = importlib.util.module_from_spec(spec)

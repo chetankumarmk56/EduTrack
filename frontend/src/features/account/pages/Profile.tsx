@@ -56,9 +56,9 @@ export default function Profile() {
     );
   }
 
-  const parentName = activeStudent.parent_name || 'Guardian';
-  const parentEmail = activeStudent.parent_email || activeStudent.parent?.user?.email || 'N/A';
-  const parentPhone = activeStudent.parent_phone || activeStudent.parent?.phone || 'N/A';
+  const parentName = activeStudent.parent?.name || 'Guardian';
+  const parentEmail = activeStudent.parent?.email || activeStudent.parent?.user?.email || 'N/A';
+  const parentPhone = activeStudent.parent?.primary_phone || activeStudent.parent?.secondary_phone || 'N/A';
 
   return (
     <div className="aurora-bg min-h-screen pb-20">

@@ -4,7 +4,7 @@ from sqlalchemy.orm import selectinload
 from app.models.core import User
 from app.schemas import directory as schemas
 from app.core.security import get_password_hash_async
-from app.models.directory import Student
+from app.models.directory import Student, Parent
 from typing import List, Optional
 from app.core.logger import logger
 
@@ -34,12 +34,87 @@ class StudentService:
         await db.flush()
 
     @staticmethod
+    def _normalize_phone(raw: Optional[str]) -> Optional[str]:
+        """Last-10-digits canonical form; mirrors the Parent model validator."""
+        if not raw:
+            return None
+        digits = "".join(ch for ch in str(raw) if ch.isdigit())
+        if len(digits) < 10:
+            return None
+        return digits[-10:]
+
+    @staticmethod
+    async def _find_or_create_parent(
+        db: AsyncSession,
+        institution_id: int,
+        *,
+        name: Optional[str] = None,
+        email: Optional[str] = None,
+        primary_phone: Optional[str] = None,
+        secondary_phone: Optional[str] = None,
+        relation: Optional[str] = None,
+    ) -> Optional[Parent]:
+        """
+        Resolve the Parent record for a guardian, deduping siblings.
+
+        Keyed on the normalized primary phone within the institution: if a
+        parent with that phone already exists, reuse it (filling in any
+        missing name/email/secondary phone) so siblings share one record;
+        otherwise create a new parent. Returns None when no primary phone is
+        supplied (we can't safely dedupe without one).
+        """
+        normalized = StudentService._normalize_phone(primary_phone)
+        parent: Optional[Parent] = None
+
+        if normalized:
+            existing = await db.execute(
+                select(Parent).where(
+                    Parent.institution_id == institution_id,
+                    Parent.primary_phone_normalized == normalized,
+                ).limit(1)
+            )
+            parent = existing.scalars().first()
+
+        if parent:
+            # Backfill any details this guardian provided that the shared
+            # record is still missing — never clobber existing values.
+            if name and not parent.name:
+                parent.name = name
+            if email and not parent.email:
+                parent.email = email
+            if secondary_phone and not parent.secondary_phone:
+                parent.secondary_phone = secondary_phone
+            if relation and not parent.relation:
+                parent.relation = relation
+        else:
+            parent = Parent(
+                institution_id=institution_id,
+                name=name,
+                email=email,
+                primary_phone=primary_phone,
+                secondary_phone=secondary_phone,
+                relation=relation,
+            )
+            db.add(parent)
+        await db.flush()  # Get parent.id
+        return parent
+
+    @staticmethod
     async def create_student(db: AsyncSession, institution_id: int, student_data: schemas.StudentCreate):
         from app.models.academic import SchoolClass
         data = student_data.model_dump()
         password_value = data.pop('password', None)
         student_email = data.pop('email', None)
-        
+
+        # Guardian inputs are used to find-or-create the Parent record — they
+        # are not student columns.
+        parent_name = data.pop('parent_name', None)
+        parent_email = data.pop('parent_email', None)
+        parent_phone = data.pop('parent_phone', None)
+        parent_secondary_phone = data.pop('parent_secondary_phone', None)
+        parent_relation = data.pop('parent_relation', None)
+        parent_id = data.pop('parent_id', None)
+
         existing_user = None
         if student_email:
             user_result = await db.execute(select(User).where(User.email == student_email))
@@ -64,9 +139,22 @@ class StudentService:
             db.add(db_user)
             await db.flush()
 
+        # Resolve the parent first so we can store only parent_id on the student.
+        if parent_id is None:
+            parent = await StudentService._find_or_create_parent(
+                db, institution_id,
+                name=parent_name,
+                email=parent_email,
+                primary_phone=parent_phone,
+                secondary_phone=parent_secondary_phone,
+                relation=parent_relation,
+            )
+            parent_id = parent.id if parent else None
+
         db_student = Student(
             user_id=db_user.id,
             institution_id=institution_id,
+            parent_id=parent_id,
             **data,
             plain_password=password_value
         )
@@ -97,10 +185,10 @@ class StudentService:
 
         Push as much filtering as possible into SQL so the admin UI
         doesn't have to pull 500 rows just to render the 30 in one
-        class. Search runs against name + parent_name + parent_email
-        with ILIKE — the (institution_id, school_class_id) compound index
-        already on the table makes the class-filter path a sub-millisecond
-        lookup.
+        class. Search runs against the student name + the linked parent's
+        name + email with ILIKE — the (institution_id, school_class_id)
+        compound index already on the table makes the class-filter path a
+        sub-millisecond lookup.
         """
         from app.models.academic import SchoolClass
         from sqlalchemy import or_, func
@@ -120,11 +208,13 @@ class StudentService:
             stmt = stmt.where(Student.is_active.is_(is_active))
         if search:
             like = f"%{search.strip().lower()}%"
-            stmt = stmt.where(
+            # Outer-join the parent so students without a guardian still match
+            # on their own name.
+            stmt = stmt.outerjoin(Parent, Student.parent_id == Parent.id).where(
                 or_(
                     func.lower(Student.name).like(like),
-                    func.lower(Student.parent_name).like(like),
-                    func.lower(Student.parent_email).like(like),
+                    func.lower(Parent.name).like(like),
+                    func.lower(Parent.email).like(like),
                 )
             )
 
@@ -217,9 +307,47 @@ class StudentService:
         if "email" in update_data and update_data["email"] == "":
             update_data["email"] = None
 
+        # Peel off guardian fields — these update the linked Parent record,
+        # not the student. They are never student columns.
+        guardian_keys = {
+            "parent_name": "name",
+            "parent_email": "email",
+            "parent_phone": "primary_phone",
+            "parent_secondary_phone": "secondary_phone",
+            "parent_relation": "relation",
+        }
+        guardian_update = {
+            parent_attr: update_data.pop(payload_key)
+            for payload_key, parent_attr in guardian_keys.items()
+            if payload_key in update_data
+        }
+
         for key, value in update_data.items():
             if hasattr(db_student, key):
                 setattr(db_student, key, value)
+
+        if guardian_update:
+            parent = None
+            if db_student.parent_id:
+                parent_res = await db.execute(
+                    select(Parent).where(Parent.id == db_student.parent_id)
+                )
+                parent = parent_res.scalars().first()
+            if parent:
+                for attr, value in guardian_update.items():
+                    setattr(parent, attr, value)
+            elif guardian_update.get("primary_phone"):
+                # No parent yet — create one so the guardian edit isn't lost
+                # (and parent-portal login becomes possible).
+                parent = await StudentService._find_or_create_parent(
+                    db, institution_id,
+                    name=guardian_update.get("name"),
+                    email=guardian_update.get("email"),
+                    primary_phone=guardian_update.get("primary_phone"),
+                    secondary_phone=guardian_update.get("secondary_phone"),
+                    relation=guardian_update.get("relation"),
+                )
+                db_student.parent_id = parent.id if parent else None
 
         if db_student.user_id:
             user_result = await db.execute(select(User).where(User.id == db_student.user_id))
