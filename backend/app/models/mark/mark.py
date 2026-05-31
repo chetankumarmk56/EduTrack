@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Date
+from sqlalchemy import Column, Integer, String, ForeignKey, Date, Index
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 from app.models.core import TimestampMixin
@@ -49,3 +49,18 @@ class Mark(Base, TimestampMixin):
     exam = relationship("Exam", back_populates="marks")
     subject_ref = relationship("Subject", back_populates="marks_records")
     recorded_by = relationship("Teacher", back_populates="marks_recorded")
+
+    # Compound indexes for the hot batch-query paths. Originally created
+    # out-of-band by migration `c9f8a1b2e3d4` (raw CREATE INDEX); mirrored
+    # here so `alembic revision --autogenerate` recognises them as present
+    # and never emits a spurious DROP. Names + column order match the DB.
+    __table_args__ = (
+        Index(
+            "ix_marks_student_institution_test_subject",
+            "student_id", "institution_id", "test_name", "subject",
+        ),
+        Index(
+            "ix_marks_exam_institution_student",
+            "exam_id", "institution_id", "student_id",
+        ),
+    )

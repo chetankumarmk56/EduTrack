@@ -86,6 +86,9 @@ class Announcement(Base):
         Index("ix_announcements_student_id", "student_id"),
         Index("ix_announcements_created_at_desc", created_at.desc()),
         Index("ix_announcements_category", "category"),
+        # Teacher's own announcement feed (get_announcements_for_teacher)
+        # filters on teacher_id — without this it's a sequential scan.
+        Index("ix_announcements_teacher_id", "teacher_id"),
     )
 
 class AnnouncementRead(Base):

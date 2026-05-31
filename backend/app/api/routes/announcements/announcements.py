@@ -27,14 +27,25 @@ router = APIRouter(
 )
 
 @router.get("/download")
-async def download_announcement_file(file_path: str):
+async def download_announcement_file(
+    file_path: str,
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(get_current_active_user),
+):
     """
-    Public-by-design download handler. Mirrors the existing /static/uploads/
-    route, which is also unauthenticated; gating only this URL would not
-    improve security since the same files are reachable via /static.
-    Path traversal is blocked via the abspath check below. Filenames are
-    server-generated (UUID-like), so unguessable in practice. A signed-URL
-    or move to Cloudinary is the proper hardening path; that is out of scope.
+    Authenticated download handler for announcement attachments (dev / local
+    storage only — in production attachments live in S3 and are served via
+    presigned URLs, so this path 404s there).
+
+    Two gates protect against cross-tenant access:
+      1. Authentication — the caller must present a valid token.
+      2. Tenant ownership — the requested file must be referenced by an
+         announcement in the caller's OWN institution. Previously this route
+         was unauthenticated and served any file under the shared
+         static/uploads/ directory, so anyone who learned a filename could
+         read another school's attachment.
+
+    Path traversal is additionally blocked via the abspath check below.
     """
     from urllib.parse import urlparse
 
@@ -52,12 +63,35 @@ async def download_announcement_file(file_path: str):
     if not full_path.startswith(os.path.abspath("static/uploads")):
         raise HTTPException(status_code=403, detail="Forbidden")
 
+    # Tenant ownership: confirm an announcement in the caller's institution
+    # references this exact file. Match on the (unique, server-generated)
+    # filename suffix so we tolerate attachment_url being stored as either a
+    # full URL or a relative path. LIKE metacharacters in the filename are
+    # escaped so they can't widen the match.
+    from app.models import Announcement
+    from app.core.tenant import tenant_owns
+
+    filename = os.path.basename(full_path)
+    if not filename:
+        raise HTTPException(status_code=400, detail="Invalid path")
+    escaped = (
+        filename.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    )
+    if not await tenant_owns(
+        db,
+        Announcement,
+        user.institution_id,
+        Announcement.attachment_url.like(f"%{escaped}", escape="\\"),
+    ):
+        # Don't reveal whether the file exists on disk for another tenant.
+        raise HTTPException(status_code=404, detail="Not Found")
+
     if not os.path.exists(full_path):
         raise HTTPException(status_code=404, detail="Not Found")
 
     return FileResponse(
         full_path,
-        filename=os.path.basename(full_path),
+        filename=filename,
         media_type='application/octet-stream'
     )
 
@@ -186,24 +220,38 @@ async def mark_announcement_as_read(
     db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(get_current_active_user)
 ):
-    """Mark an announcement as read for a specific parent/student."""
+    """Mark an announcement as read for the authenticated parent/student."""
     announcement_id = data.get("announcement_id")
-    parent_id = data.get("parent_id")
-    
+
     if not announcement_id:
         raise HTTPException(status_code=400, detail="Missing announcement_id")
 
-    # Auto-resolve parent_id from token if not provided (Performance optimization)
-    if not parent_id and user.role in ["student", "parent"]:
+    # SECURITY: parent_id is ALWAYS derived from the authenticated token,
+    # never from the request body. A body-supplied parent_id previously let
+    # any caller write a read-receipt for an arbitrary parent in any
+    # institution (cross-tenant IDOR / analytics pollution). We resolve the
+    # caller's own parent record, scoped to their institution.
+    parent_id = None
+    if user.role in ["student", "parent"]:
         from app.models.directory import Parent, Student
-        # 1. Try resolving as parent
-        parent_result = await db.execute(select(Parent).where(Parent.user_id == user.id))
+        # 1. Try resolving as parent (scoped to the caller's institution).
+        parent_result = await db.execute(
+            select(Parent).where(
+                Parent.user_id == user.id,
+                Parent.institution_id == user.institution_id,
+            )
+        )
         db_parent = parent_result.scalars().first()
         if db_parent:
             parent_id = db_parent.id
         else:
-            # 2. Try resolving via student's parent link
-            student_result = await db.execute(select(Student).where(Student.user_id == user.id))
+            # 2. Try resolving via the student's parent link (same institution).
+            student_result = await db.execute(
+                select(Student).where(
+                    Student.user_id == user.id,
+                    Student.institution_id == user.institution_id,
+                )
+            )
             db_student = student_result.scalars().first()
             if db_student:
                 parent_id = db_student.parent_id
@@ -216,7 +264,12 @@ async def mark_announcement_as_read(
         # Parents and parent-linked students still get their reads tracked.
         return {"message": "Acknowledged (no parent record to track read)"}
 
-    await announcement_service.mark_as_read(db, announcement_id, parent_id)
+    marked = await announcement_service.mark_as_read(
+        db, announcement_id, parent_id, institution_id=user.institution_id
+    )
+    if not marked:
+        # The announcement does not exist in the caller's institution.
+        raise HTTPException(status_code=404, detail="Announcement not found")
     return {"message": "Marked as read"}
 
 

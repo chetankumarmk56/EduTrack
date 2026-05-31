@@ -502,11 +502,33 @@ class AnnouncementService:
         return await _serialize_announcement(db_announcement)
 
     @staticmethod
-    async def mark_as_read(db: AsyncSession, announcement_id: UUID, parent_id: int) -> bool:
+    async def mark_as_read(
+        db: AsyncSession,
+        announcement_id: UUID,
+        parent_id: int,
+        institution_id: int,
+    ) -> bool:
         """
         Idempotent mark-as-read operation for parents.
+
+        Tenant scope: the announcement MUST belong to ``institution_id`` (the
+        caller's institution). ``announcement_reads`` has no institution_id
+        column of its own, so without this gate a caller could write a
+        read-receipt against another school's announcement (cross-tenant
+        write / read-count pollution). The caller's ``parent_id`` is resolved
+        from their token in the route, never supplied by the client.
+
+        Returns False when the announcement is not found in the caller's
+        institution so the route can answer 404.
         """
-        # Check if already read
+        # Confirm the target announcement exists within this tenant.
+        from app.core.tenant import tenant_owns
+        if not await tenant_owns(
+            db, Announcement, institution_id, Announcement.id == announcement_id
+        ):
+            return False
+
+        # Check if already read (idempotent).
         existing = await db.execute(
             select(AnnouncementRead).where(
                 AnnouncementRead.announcement_id == announcement_id,
@@ -515,7 +537,7 @@ class AnnouncementService:
         )
         if existing.scalars().first():
             return True
-            
+
         read_entry = AnnouncementRead(announcement_id=announcement_id, parent_id=parent_id)
         db.add(read_entry)
         try:

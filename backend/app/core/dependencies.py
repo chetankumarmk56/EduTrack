@@ -327,15 +327,13 @@ async def require_cron_or_admin(
 
 
 async def get_record_or_404(db: AsyncSession, model, record_id: int, institution_id: int):
-    result = await db.execute(select(model).where(
-        model.id == record_id, 
-        model.institution_id == institution_id
-    ))
-    record = result.scalars().first()
-    
-    if not record:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, 
-            detail=f"{model.__name__} not found or access denied"
-        )
-    return record
+    """
+    Tenant-scoped fetch-by-id, 404 if not found in this institution.
+
+    Thin wrapper kept for backwards compatibility — the canonical
+    implementation now lives in app.core.tenant so there is a single source
+    of truth for tenant scoping. Prefer importing from app.core.tenant
+    directly in new code.
+    """
+    from app.core.tenant import get_scoped_or_404
+    return await get_scoped_or_404(db, model, record_id, institution_id)

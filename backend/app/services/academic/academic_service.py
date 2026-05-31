@@ -9,6 +9,7 @@ from app.models.finance import StudentFee
 from app.models.timetable import TimetableSlot
 from app.schemas import academic as schemas
 from app.core.logger import logger
+from app.core.tenant import get_scoped
 
 
 import re
@@ -507,8 +508,8 @@ class AcademicService:
 
     @staticmethod
     async def update_section(db: AsyncSession, institution_id: int, section_id: int, section_in: schemas.SectionUpdate):
-        result = await db.execute(select(Section).where(Section.id == section_id))
-        db_section = result.scalars().first()
+        # Tenant scope: never resolve a section outside the caller's institution.
+        db_section = await get_scoped(db, Section, section_id, institution_id)
         if not db_section:
             return None
 
@@ -534,8 +535,8 @@ class AcademicService:
 
     @staticmethod
     async def delete_section(db: AsyncSession, institution_id: int, section_id: int):
-        result = await db.execute(select(Section).where(Section.id == section_id))
-        db_section = result.scalars().first()
+        # Tenant scope: never resolve a section outside the caller's institution.
+        db_section = await get_scoped(db, Section, section_id, institution_id)
         if db_section:
             await db.delete(db_section)
             await db.commit()
@@ -579,8 +580,8 @@ class AcademicService:
 
     @staticmethod
     async def update_subject(db: AsyncSession, institution_id: int, subject_id: int, subject_in: schemas.SubjectUpdate):
-        result = await db.execute(select(Subject).where(Subject.id == subject_id))
-        db_subject = result.scalars().first()
+        # Tenant scope: never resolve a subject outside the caller's institution.
+        db_subject = await get_scoped(db, Subject, subject_id, institution_id)
         if not db_subject:
             return None
 
@@ -603,8 +604,8 @@ class AcademicService:
 
     @staticmethod
     async def delete_subject(db: AsyncSession, institution_id: int, subject_id: int):
-        result = await db.execute(select(Subject).where(Subject.id == subject_id))
-        db_subject = result.scalars().first()
+        # Tenant scope: never resolve a subject outside the caller's institution.
+        db_subject = await get_scoped(db, Subject, subject_id, institution_id)
         if db_subject:
             await db.delete(db_subject)
             await db.commit()
@@ -672,8 +673,8 @@ class AcademicService:
 
     @staticmethod
     async def delete_school_class(db: AsyncSession, institution_id: int, class_id: int):
-        result = await db.execute(select(SchoolClass).where(SchoolClass.id == class_id))
-        db_class = result.scalars().first()
+        # Tenant scope: never resolve a class outside the caller's institution.
+        db_class = await get_scoped(db, SchoolClass, class_id, institution_id)
         if db_class:
             await db.delete(db_class)
             await db.commit()

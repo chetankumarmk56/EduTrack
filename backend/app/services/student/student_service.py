@@ -271,7 +271,6 @@ class StudentService:
 
             # Delete fee tracking and structure
             await db.execute(delete(StudentFee).where(StudentFee.student_id == student_id))
-            await db.execute(delete(FeeStructure).where(FeeStructure.student_id == student_id))
             
             # Finally delete the student profile (ORM will handle Mark and Attendance via cascades)
             await db.delete(student)

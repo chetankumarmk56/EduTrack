@@ -85,8 +85,10 @@ class Student(Base, TimestampMixin):
     dob = Column(String) # YYYY-MM-DD
     whatsapp = Column(String, nullable=True)
     
-    # Core Relational Link
-    school_class_id = Column(Integer, ForeignKey("school_classes.id"))
+    # Core Relational Link. Indexed: every class roster, class-attendance
+    # join, finance class-breakdown, announcement class-size count, and the
+    # student-login (name+class+dob) lookup filters on this FK.
+    school_class_id = Column(Integer, ForeignKey("school_classes.id"), index=True)
     
     is_active = Column(Boolean, default=True)
     plain_password = Column(String, nullable=True)  # Admin-visible for credential recovery
@@ -104,7 +106,9 @@ class Student(Base, TimestampMixin):
 
     # Guardian link — the only connection to parent contact details, which
     # live entirely on the Parent record (see the Parent model above).
-    parent_id = Column(Integer, ForeignKey("parents.id"), nullable=True)
+    # Indexed: the Parent->children join runs on every parent-portal request
+    # (announcements feed, /parents/fees, dashboard).
+    parent_id = Column(Integer, ForeignKey("parents.id"), nullable=True, index=True)
     parent = relationship("Parent", back_populates="students")
     school_class = relationship("SchoolClass", back_populates="students")
     user = relationship("User", back_populates="student_profile")
