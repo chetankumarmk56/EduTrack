@@ -64,6 +64,17 @@ async def lifespan(app: FastAPI):
     """
     from app.services.finance.fee_reminder_scheduler import start_scheduler, stop_scheduler
     from app.core.websocket import broadcaster
+    from app.core.security import assert_jwt_roundtrip
+
+    # Fail fast if the SECRET_KEY cannot round-trip a JWT.  This catches the
+    # most common production misconfiguration (key mismatch / whitespace) at
+    # startup rather than on the first real authenticated request.
+    assert_jwt_roundtrip()
+    logger.info(
+        "JWT round-trip OK — SECRET_KEY prefix=%s... algorithm=%s",
+        settings.SECRET_KEY[:6],
+        settings.ALGORITHM,
+    )
 
     await broadcaster.start()
     start_scheduler()

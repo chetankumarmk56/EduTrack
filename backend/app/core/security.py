@@ -65,5 +65,28 @@ def create_refresh_token(data: dict):
 def decode_access_token(token: str):
     """
     Decodes the JWT token and returns the payload data.
+    Raises jose.JWTError on signature failure (wrong key or algorithm).
     """
     return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+
+
+def assert_jwt_roundtrip() -> None:
+    """
+    Smoke-test that the currently loaded SECRET_KEY can round-trip a JWT.
+    Call once at startup to catch key misconfiguration before the first
+    real request fails with a cryptic "Invalid authentication token".
+
+    Raises RuntimeError with an actionable message on failure.
+    """
+    probe = {"sub": "startup-probe", "role": "test"}
+    try:
+        token = create_access_token(probe)
+        decoded = decode_access_token(token)
+        assert decoded["sub"] == probe["sub"]
+    except Exception as exc:
+        raise RuntimeError(
+            f"JWT round-trip failed — SECRET_KEY is inconsistent or invalid. "
+            f"Check that SECRET_KEY is identical across all workers and has no "
+            f"trailing whitespace or newline characters. "
+            f"Inner error: {type(exc).__name__}: {exc}"
+        ) from exc

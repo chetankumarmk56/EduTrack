@@ -10,6 +10,7 @@ from app.core.database import get_db
 from app.core.config import settings
 from app.core.security import decode_access_token
 from app.core.user_cache import user_cache
+from app.core.logger import logger
 from app.models import User, Teacher, Student, TeacherAssignment
 
 # OpenAPI Swagger UI still needs the Bearer prompt for mobile clients,
@@ -101,16 +102,29 @@ async def get_current_user(
         
     try:
         payload = decode_access_token(token)
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token has expired")
+    except jwt.JWTError as exc:
+        # Log the real error so production failures are self-diagnosing.
+        # Common cause: SECRET_KEY mismatch between signing and verification
+        # (e.g. different env var vs .env file value, or trailing whitespace).
+        logger.warning("JWT decode failed: %s: %s", type(exc).__name__, exc)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication token",
+        )
+
+    try:
         user_id_val = payload.get("sub")
         role_val = payload.get("role")
         inst_val = payload.get("institution_id")
-        
+
         if user_id_val is None or role_val is None:
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, 
-                detail="Invalid token structure."
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token structure.",
             )
-            
+
         user_id = int(user_id_val)
         # Super admins are global — no institution. Use 0 as a sentinel so the
         # int-typed UserContext stays happy; super-admin routes don't filter on it.
@@ -123,48 +137,52 @@ async def get_current_user(
                     detail="Invalid token: missing institution context",
                 )
             institution_id = int(inst_val)
-        
-        # Unified Identity Fetch — Redis-cached so we don't hit Postgres
-        # on every authenticated request. The cache holds (is_active, name)
-        # with a 60s TTL; admin write paths call user_cache.invalidate(id)
-        # on deactivation so revocation latency is bounded by the time it
-        # takes to handle the next request (effectively instant).
-        cached = await user_cache.get(user_id)
-        if cached is not None:
-            user_name = cached["name"]
-            is_active = cached["is_active"]
-        else:
-            result = await db.execute(select(User).where(User.id == user_id))
-            user_obj = result.scalars().first()
-            if not user_obj:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="User record not found."
-                )
-            user_name = user_obj.name
-            is_active = bool(getattr(user_obj, "is_active", True))
-            # Populate cache for the next 60s of requests on this user_id.
-            await user_cache.set(
-                user_id,
-                {"is_active": is_active, "name": user_name},
-            )
 
-        if not is_active:
-            # Belt-and-braces: also drop any stale cache entry so a
-            # deactivation that the cache hasn't seen yet doesn't keep
-            # serving subsequent requests with `is_active=True`.
-            await user_cache.invalidate(user_id)
+    except HTTPException:
+        raise
+    except (TypeError, ValueError) as exc:
+        logger.warning("JWT claim conversion failed: %s: %s", type(exc).__name__, exc)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token claims.",
+        )
+
+    # Unified Identity Fetch — Redis-cached so we don't hit Postgres
+    # on every authenticated request. The cache holds (is_active, name)
+    # with a 60s TTL; admin write paths call user_cache.invalidate(id)
+    # on deactivation so revocation latency is bounded by the time it
+    # takes to handle the next request (effectively instant).
+    cached = await user_cache.get(user_id)
+    if cached is not None:
+        user_name = cached["name"]
+        is_active = cached["is_active"]
+    else:
+        result = await db.execute(select(User).where(User.id == user_id))
+        user_obj = result.scalars().first()
+        if not user_obj:
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="User account is deactivated."
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User record not found.",
             )
+        user_name = user_obj.name
+        is_active = bool(getattr(user_obj, "is_active", True))
+        # Populate cache for the next 60s of requests on this user_id.
+        await user_cache.set(
+            user_id,
+            {"is_active": is_active, "name": user_name},
+        )
 
-        return UserContext(id=user_id, role=role_val, institution_id=institution_id, name=user_name)
-        
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token has expired")
-    except (jwt.JWTError, ValueError):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication token")
+    if not is_active:
+        # Belt-and-braces: also drop any stale cache entry so a
+        # deactivation that the cache hasn't seen yet doesn't keep
+        # serving subsequent requests with `is_active=True`.
+        await user_cache.invalidate(user_id)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is deactivated.",
+        )
+
+    return UserContext(id=user_id, role=role_val, institution_id=institution_id, name=user_name)
 
 async def get_current_active_user(
     current_user: UserContext = Depends(get_current_user)
