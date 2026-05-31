@@ -21,6 +21,29 @@ if config.config_file_name is not None:
 # target_metadata for 'autogenerate' support
 target_metadata = Base.metadata
 
+# Tables intentionally NOT managed by Alembic in the current product baseline.
+# They remain importable in the ORM, but are excluded from autogenerate and from
+# the generated migrations so the schema matches the *active* running product:
+#   - transport.*   : future-only module, not part of the first production release
+#   - fee_structure : retired from active use
+# To re-enable one later, remove it from this set and autogenerate a migration.
+EXCLUDED_TABLES = {
+    "buses", "routes", "stops", "student_transport",
+    "bus_locations", "transport_notification_logs",
+    "fee_structure",
+}
+
+
+def include_object(object, name, type_, reflected, compare_to):
+    """Skip excluded tables (and their indexes) during autogenerate/compare."""
+    if type_ == "table" and name in EXCLUDED_TABLES:
+        return False
+    if type_ == "index":
+        tbl = getattr(object, "table", None)
+        if tbl is not None and tbl.name in EXCLUDED_TABLES:
+            return False
+    return True
+
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode."""
     url = config.get_main_option("sqlalchemy.url")
@@ -29,6 +52,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_object=include_object,
     )
 
     with context.begin_transaction():
@@ -43,8 +67,9 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, 
+            connection=connection,
             target_metadata=target_metadata,
+            include_object=include_object,
         )
 
         with context.begin_transaction():
