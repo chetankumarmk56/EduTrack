@@ -148,10 +148,20 @@ class Settings(BaseSettings):
     # use 6 not 7 so a Wednesday-after-DST or a single re-trigger doesn't
     # accidentally skip a week.
     FEE_REMINDER_COOLDOWN_DAYS: int = 6
-    # Whether to spin up the in-process Wednesday scheduler on startup.
-    # Set to false when an external cron drives the dispatch endpoint
-    # instead, or when running ad-hoc scripts/tests.
-    FEE_REMINDER_SCHEDULER_ENABLED: bool = True
+    # Whether to spin up the in-process fee-reminder scheduler on startup.
+    # Default: False — must be explicitly opted in.
+    #
+    # In a multi-worker Gunicorn setup every worker runs its own lifespan, so
+    # setting this to True on all workers wastes DB connections on redundant
+    # ticks.  The scheduler itself handles this with a tick-level leader
+    # election (CronLock), but the cleaner operational approach is:
+    #
+    #   • Web workers  → FEE_REMINDER_SCHEDULER_ENABLED=false (default)
+    #   • One dedicated container/systemd unit → FEE_REMINDER_SCHEDULER_ENABLED=true
+    #
+    # On a single-instance EC2 deploy you may enable it here; the leader
+    # election ensures only one Gunicorn worker actually runs each tick.
+    FEE_REMINDER_SCHEDULER_ENABLED: bool = False
     # 24-hour clock — when in the day the reminder should fire on Wednesdays.
     FEE_REMINDER_SEND_HOUR: int = 9
     # Whether to additionally place a voice call (via Twilio) to the parent's

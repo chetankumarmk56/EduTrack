@@ -24,6 +24,19 @@ Why a poll loop instead of cron expressions / APScheduler:
   * No extra dependency; the existing FastAPI lifespan + asyncio is enough.
   * Self-heals after process restart — re-reads settings on every tick.
 
+Multi-worker safety
+-------------------
+Gunicorn pre-forks N workers; each runs its own lifespan and therefore its
+own scheduler loop. To prevent N concurrent ticks (wasted DB work) each
+`_tick()` begins with a **tick-level leader election** using the `cron_locks`
+table. The first worker to INSERT the `_TICK_LEADER_LOCK_NAME` row wins; the
+others see a PK-violation, log at DEBUG, and return immediately. The lock is
+released at the end of the tick, so every 5 minutes a fresh election takes
+place — if the leader worker is recycled by Gunicorn mid-tick the lock goes
+stale after `_TICK_LEADER_STALE_MINUTES` and any survivor picks it up.
+
+Set ``FEE_REMINDER_SCHEDULER_ENABLED=false`` (the default) on all web replicas
+and enable it on exactly one dedicated worker/container if you want the loop.
 Disabled entirely when `FEE_REMINDER_SCHEDULER_ENABLED=false`.
 """
 from __future__ import annotations
@@ -54,6 +67,14 @@ _TICK_INTERVAL_SECONDS = 300
 # again in the same loop pass — defence-in-depth on top of the per-row
 # `last_notified_at` cooldown.
 _MIN_RUN_GAP = timedelta(hours=22)
+
+# Tick-level leader-election lock.  One row in cron_locks; the first worker
+# to INSERT it each tick becomes the leader.  The lock is explicitly deleted
+# at the end of the tick so the next cycle is a fresh election.  Stale
+# threshold is slightly longer than a tick so a crashed leader's lock expires
+# before the surviving workers have slept through two full intervals.
+_TICK_LEADER_LOCK_NAME = "fee-reminder-tick-leader"
+_TICK_LEADER_STALE_MINUTES = 7  # > _TICK_INTERVAL_SECONDS / 60 = 5
 
 
 async def _is_due(s, now_utc: datetime) -> bool:
@@ -99,59 +120,125 @@ async def _is_due(s, now_utc: datetime) -> bool:
     return True
 
 
+async def _try_acquire_tick_leader(session) -> bool:
+    """
+    Attempt to win the per-tick leader election.
+
+    Uses the same CronLock table as per-institution dispatch locks.  The
+    primary key uniqueness is the mutex: the first worker to INSERT the row
+    wins; all others get an IntegrityError and return False.
+
+    A stale lock (leader crashed mid-tick) is deleted first so a surviving
+    worker can take over within _TICK_LEADER_STALE_MINUTES.
+    """
+    from app.models.communication import CronLock
+
+    stale_cutoff = datetime.now(timezone.utc) - timedelta(minutes=_TICK_LEADER_STALE_MINUTES)
+    from sqlalchemy import delete as sa_delete
+    await session.execute(
+        sa_delete(CronLock).where(
+            CronLock.name == _TICK_LEADER_LOCK_NAME,
+            CronLock.locked_at < stale_cutoff,
+        )
+    )
+    await session.commit()
+
+    try:
+        session.add(CronLock(name=_TICK_LEADER_LOCK_NAME))
+        await session.commit()
+        return True
+    except Exception:
+        await session.rollback()
+        return False
+
+
+async def _release_tick_leader(session) -> None:
+    """Release the tick-leader lock so the next interval starts fresh."""
+    from app.models.communication import CronLock
+    from sqlalchemy import delete as sa_delete
+    try:
+        await session.execute(
+            sa_delete(CronLock).where(CronLock.name == _TICK_LEADER_LOCK_NAME)
+        )
+        await session.commit()
+    except Exception:
+        logger.warning("[fee-reminder] tick-leader lock release failed (will expire naturally)")
+        await session.rollback()
+
+
 async def _tick() -> None:
-    """One pass of the scheduler. Opens its own DB session."""
+    """
+    One pass of the scheduler.
+
+    Opens its own DB session, wins the tick-level leader election, then
+    iterates over all institutions with automation enabled.  Non-leader
+    workers return immediately after a single failed INSERT, adding only
+    microseconds of overhead per tick.
+    """
     from app.core.database import AsyncSessionLocal
     from app.models.finance import FeeReminderSettings, FeeReminderAutomationMode
 
     async with AsyncSessionLocal() as session:
+        # ── leader election ───────────────────────────────────────────────
+        am_leader = await _try_acquire_tick_leader(session)
+        if not am_leader:
+            logger.debug(
+                "[fee-reminder] tick skipped — another worker holds tick leadership"
+            )
+            return
+
         try:
-            res = await session.execute(
-                select(FeeReminderSettings).where(
-                    FeeReminderSettings.automation_mode
-                    != FeeReminderAutomationMode.DISABLED.value
-                )
-            )
-            candidates = list(res.scalars().all())
-        except Exception:
-            logger.exception("[fee-reminder] settings lookup failed — skipping tick")
-            return
-
-        if not candidates:
-            return
-
-        now_utc = datetime.now(timezone.utc)
-        for s in candidates:
+            # ── institution scan ──────────────────────────────────────────
             try:
-                due = await _is_due(s, now_utc)
+                res = await session.execute(
+                    select(FeeReminderSettings).where(
+                        FeeReminderSettings.automation_mode
+                        != FeeReminderAutomationMode.DISABLED.value
+                    )
+                )
+                candidates = list(res.scalars().all())
             except Exception:
-                logger.exception(
-                    "[fee-reminder] schedule check failed for institution %s",
-                    s.institution_id,
-                )
-                continue
-            if not due:
-                continue
+                logger.exception("[fee-reminder] settings lookup failed — skipping tick")
+                return
 
-            logger.info(
-                "[fee-reminder] automation firing for institution %s (mode=%s)",
-                s.institution_id, s.automation_mode,
-            )
-            try:
-                summary = await fee_reminder_service.dispatch_due_reminders(
-                    session,
-                    institution_id=s.institution_id,
-                    triggered_by="automatic",
-                )
+            if not candidates:
+                return
+
+            now_utc = datetime.now(timezone.utc)
+            for s in candidates:
+                try:
+                    due = await _is_due(s, now_utc)
+                except Exception:
+                    logger.exception(
+                        "[fee-reminder] schedule check failed for institution %s",
+                        s.institution_id,
+                    )
+                    continue
+                if not due:
+                    continue
+
                 logger.info(
-                    "[fee-reminder] automatic run finished for institution %s: %s",
-                    s.institution_id, summary.as_dict(),
+                    "[fee-reminder] automation firing for institution %s (mode=%s)",
+                    s.institution_id, s.automation_mode,
                 )
-            except Exception:
-                logger.exception(
-                    "[fee-reminder] automatic run errored for institution %s",
-                    s.institution_id,
-                )
+                try:
+                    summary = await fee_reminder_service.dispatch_due_reminders(
+                        session,
+                        institution_id=s.institution_id,
+                        triggered_by="automatic",
+                    )
+                    logger.info(
+                        "[fee-reminder] automatic run finished for institution %s: %s",
+                        s.institution_id, summary.as_dict(),
+                    )
+                except Exception:
+                    logger.exception(
+                        "[fee-reminder] automatic run errored for institution %s",
+                        s.institution_id,
+                    )
+        finally:
+            # Always release so the next tick starts a fresh election.
+            await _release_tick_leader(session)
 
 
 async def _scheduler_loop() -> None:

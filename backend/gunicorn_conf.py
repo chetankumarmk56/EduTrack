@@ -16,8 +16,11 @@ Per-worker in-process state to keep in mind:
 * Redis pub/sub broadcaster — every worker subscribes independently.
   Acceptable up to ~16 workers; beyond that, consider a single sidecar
   that owns the subscription and forwards via local socket.
-* Fee-reminder scheduler — already disabled on web replicas
-  (FEE_REMINDER_SCHEDULER_ENABLED=false). The worker container owns it.
+* Fee-reminder scheduler — default is FEE_REMINDER_SCHEDULER_ENABLED=false.
+  When enabled, the scheduler uses a tick-level leader election (CronLock)
+  so only one worker executes each 5-minute tick regardless of worker count.
+  Safe to enable in .env on a single-EC2 deployment; on multi-replica
+  deployments enable it only in a dedicated worker service.
 
 Worker count formula:
   WEB_CONCURRENCY override → respect it.
