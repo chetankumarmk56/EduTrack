@@ -661,11 +661,62 @@ class AcademicService:
             return None
 
         update_data = class_in.model_dump(exclude_unset=True)
+        fee_fields_changed = any(
+            k in update_data for k in ("tuition_fee", "transport_fee", "other_fee", "fee_due_date")
+        )
         for k, v in update_data.items():
             setattr(db_class, k, v)
 
         # Recalculate total_fee
         db_class.total_fee = (db_class.tuition_fee or 0.0) + (db_class.transport_fee or 0.0) + (db_class.other_fee or 0.0)
+
+        if fee_fields_changed:
+            from datetime import date as date_type
+            from app.models.finance import StudentFee, StudentFeeStatus
+            from app.models.directory import Student as _Student
+
+            new_fee = db_class.total_fee
+            new_due_date = db_class.fee_due_date
+
+            sf_res = await db.execute(
+                select(StudentFee).where(StudentFee.class_id == db_class.id)
+            )
+            existing_fees = sf_res.scalars().all()
+            existing_student_ids = set()
+
+            for sf in existing_fees:
+                existing_student_ids.add(sf.student_id)
+                if "tuition_fee" in update_data or "transport_fee" in update_data or "other_fee" in update_data:
+                    sf.total_amount = new_fee
+                    sf.due_amount = max(0.0, sf.total_amount - sf.amount_paid)
+                if "fee_due_date" in update_data and new_due_date:
+                    sf.due_date = new_due_date
+                if sf.due_amount <= 0 and sf.total_amount > 0:
+                    sf.status = StudentFeeStatus.PAID
+                elif sf.amount_paid > 0:
+                    sf.status = StudentFeeStatus.PARTIAL
+                else:
+                    sf.status = StudentFeeStatus.UNPAID
+
+            if new_fee > 0 and ("tuition_fee" in update_data or "transport_fee" in update_data or "other_fee" in update_data):
+                all_res = await db.execute(
+                    select(_Student).where(
+                        _Student.school_class_id == db_class.id,
+                        _Student.is_active == True,
+                    )
+                )
+                for student in all_res.scalars().all():
+                    if student.id not in existing_student_ids:
+                        db.add(StudentFee(
+                            student_id=student.id,
+                            class_id=db_class.id,
+                            institution_id=institution_id,
+                            total_amount=new_fee,
+                            due_amount=new_fee,
+                            amount_paid=0.0,
+                            due_date=new_due_date if new_due_date else date_type.today(),
+                            status=StudentFeeStatus.UNPAID,
+                        ))
 
         await db.commit()
         await db.refresh(db_class)

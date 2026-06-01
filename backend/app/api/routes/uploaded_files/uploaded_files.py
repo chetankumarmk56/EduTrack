@@ -206,7 +206,7 @@ async def delete_file(
 async def touch_file(
     file_id: int,
     db: AsyncSession = Depends(get_db),
-    user: UserContext = Depends(get_current_user),
+    user: UserContext = Depends(require_teacher_strict),
 ):
     """Mark a file as recently used (no-op for read access)."""
     out = await uploaded_file_service.get_metadata(db, user, file_id)

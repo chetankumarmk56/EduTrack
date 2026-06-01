@@ -195,7 +195,7 @@ export interface SubjectSummary {
   [key: string]: unknown;
 }
 
-/** Fee record returned by GET /api/parent/fees (parents.py route) */
+/** Fee record shape used by the parent dashboard. Source: GET /api/finance/my-dues (mapped). */
 export interface ParentFeeItem {
   student_name: string;
   total_amount: number;

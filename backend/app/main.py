@@ -36,7 +36,6 @@ from app.api.routes.question_bank import router as question_bank_router
 from app.api.routes.lesson_plan import router as lesson_plan_router
 from app.api.routes.uploaded_files import router as uploaded_files_router
 from app.api.routes.documents import router as documents_router
-from app.api.routes.parents import router as parents_router
 from app.api.routes.reports import router as reports_router
 from app.api.routes.system import router as system_router
 from app.api.routes.timetable import router as timetable_router
@@ -85,7 +84,14 @@ async def lifespan(app: FastAPI):
         await broadcaster.stop()
 
 
-app = FastAPI(title=settings.APP_NAME, version=settings.VERSION, lifespan=lifespan)
+app = FastAPI(
+    title=settings.APP_NAME,
+    version=settings.VERSION,
+    lifespan=lifespan,
+    docs_url="/docs" if settings.ENVIRONMENT != "prod" else None,
+    redoc_url="/redoc" if settings.ENVIRONMENT != "prod" else None,
+    openapi_url="/openapi.json" if settings.ENVIRONMENT != "prod" else None,
+)
 
 # ✅ NEW: Register rate limiter with app
 app.state.limiter = limiter
@@ -401,7 +407,6 @@ app.include_router(question_bank_router)
 app.include_router(lesson_plan_router)
 app.include_router(uploaded_files_router)
 app.include_router(documents_router)
-app.include_router(parents_router)
 app.include_router(reports_router)
 app.include_router(system_router)
 app.include_router(timetable_router)

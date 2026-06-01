@@ -282,7 +282,7 @@ export default function Landing() {
           <motion.h1 
             className="text-5xl sm:text-7xl md:text-8xl lg:text-9xl font-black text-white tracking-tighter mb-6 sm:mb-8 leading-none select-none"
           >
-            {"EduTrack".split("").map((char, i) => (
+            {"Arken Edu".split("").map((char, i) => (
               <motion.span
                 key={i}
                 initial={{ opacity: 0, y: 50, filter: "blur(10px)" }}

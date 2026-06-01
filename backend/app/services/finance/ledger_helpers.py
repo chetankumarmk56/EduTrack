@@ -50,20 +50,35 @@ async def generate_receipt_number(
 ) -> str:
     """
     Format: RCPT-{INST}-{YYYYMM}-{SEQ}
-    SEQ is per (institution, year-month), zero-padded.
+    SEQ is per (institution, year-month). Uses SELECT … FOR UPDATE on the
+    max existing sequence value so concurrent payments in the same month can
+    never produce duplicate receipt numbers.
     """
+    from sqlalchemy import text
+
     pd = payment_date or datetime.utcnow()
     yyyymm = pd.strftime("%Y%m")
     prefix = f"RCPT-{institution_id}-{yyyymm}-"
 
+    # Lock the latest row for this prefix so no two concurrent writers can
+    # both read the same COUNT and collide on the UNIQUE constraint.
     res = await db.execute(
-        select(func.count(FinanceLedger.id)).where(
+        select(func.max(FinanceLedger.receipt_number))
+        .where(
             FinanceLedger.institution_id == institution_id,
             FinanceLedger.receipt_number.like(f"{prefix}%"),
         )
+        .with_for_update()
     )
-    count = res.scalar() or 0
-    return f"{prefix}{count + 1:05d}"
+    latest = res.scalar()  # e.g. "RCPT-1-202506-00004" or None
+    if latest:
+        try:
+            last_seq = int(latest.rsplit("-", 1)[-1])
+        except (ValueError, IndexError):
+            last_seq = 0
+    else:
+        last_seq = 0
+    return f"{prefix}{last_seq + 1:05d}"
 
 
 async def write_ledger_entry(

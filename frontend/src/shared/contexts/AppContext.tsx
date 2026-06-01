@@ -154,7 +154,7 @@ const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
     return saved ? Number(saved) : 1;
   });
   const [institutionName, setInstitutionName] = useState<string>(() => {
-    return localStorage.getItem('edu_institution_name') || 'EduTrack Academy';
+    return localStorage.getItem('edu_institution_name') || 'Arken Edu Academy';
   });
   const [institutionLogoUrl, setInstitutionLogoUrl] = useState<string | null>(() => {
     return localStorage.getItem('edu_institution_logo_url') || null;

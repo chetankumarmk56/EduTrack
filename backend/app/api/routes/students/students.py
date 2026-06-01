@@ -1,9 +1,8 @@
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from typing import Optional, List
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
-from typing import List
 
 from app.core.database import get_db
 from app.core.limiter import limiter, RATE_LIMITS
@@ -11,6 +10,7 @@ from app.core.dependencies import (
     get_current_user, UserContext,
     require_institution_admin, require_faculty
 )
+from app.models.directory import Student, Parent
 from app.schemas import directory as schemas
 from app.schemas.auth import Token
 from app.services.student import student_service
@@ -210,10 +210,50 @@ async def get_my_students(
 
 @router.get("/students/{student_id}", response_model=schemas.StudentResponse)
 async def read_student(
-    student_id: int, 
+    student_id: int,
     db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(get_current_user)
 ):
+    # Faculty can see any student in their institution.
+    if user.role not in ("super_admin", "admin", "teacher", "finance"):
+        # Student viewing themselves.
+        if user.role == "student":
+            own = await db.execute(
+                select(Student).where(Student.user_id == user.id, Student.id == student_id,
+                                      Student.institution_id == user.institution_id)
+            )
+            if not own.scalars().first():
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                    detail="Access denied.")
+        elif user.role == "parent":
+            # Parent viewing their registered child.
+            p_res = await db.execute(
+                select(Parent).where(Parent.user_id == user.id,
+                                     Parent.institution_id == user.institution_id)
+            )
+            parent = p_res.scalars().first()
+            authorised = False
+            if parent:
+                ch = await db.execute(
+                    select(Student).where(Student.id == student_id,
+                                          Student.parent_id == parent.id,
+                                          Student.institution_id == user.institution_id)
+                )
+                authorised = ch.scalars().first() is not None
+            if not authorised:
+                # Fallback: shared student-as-parent login.
+                fb = await db.execute(
+                    select(Student).where(Student.user_id == user.id, Student.id == student_id,
+                                          Student.institution_id == user.institution_id)
+                )
+                authorised = fb.scalars().first() is not None
+            if not authorised:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                    detail="Access denied.")
+        else:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail="Access denied.")
+
     student = await student_service.get_student(db, user.institution_id, student_id)
     if not student:
         raise HTTPException(status_code=404, detail="Student not found or access denied")

@@ -39,7 +39,10 @@ class PaymentServiceMixin:
 
         fee_stmt = (
             select(StudentFee)
-            .where(StudentFee.student_id == payment.student_id)
+            .where(
+                StudentFee.student_id == payment.student_id,
+                StudentFee.institution_id == payment.institution_id,
+            )
             .order_by(StudentFee.class_id.asc())
         )
         fee_result = await db.execute(fee_stmt)
@@ -85,10 +88,6 @@ class PaymentServiceMixin:
         )
         await db.flush()
 
-    async def allocate_payment_to_fees(self, db: AsyncSession, payment_id: int):
-        # Deprecated alias — use allocate_payment
-        await self.allocate_payment(db, payment_id)
-
     async def record_manual_payment(
         self,
         db: AsyncSession,
@@ -101,6 +100,9 @@ class PaymentServiceMixin:
     ) -> Payment:
         """Record a manual payment (Cash / Manual UPI) and allocate it."""
         from app.models.directory import Student
+
+        if amount <= 0:
+            raise ValueError(f"Payment amount must be greater than zero (got {amount}).")
 
         student_check = await db.execute(
             select(Student.id).where(

@@ -387,7 +387,7 @@ class AuthService:
                     _joinedload(Student.institution),
                 )
                 .where(
-                    Student.name.ilike(f"%{name.strip()}%"),
+                    Student.name.ilike(name.strip()),
                     Student.school_class_id == school_class_id,
                     (Student.dob == dob) | (dob == "2010-01-01"),
                     Student.institution_id == institution_id,
@@ -396,6 +396,15 @@ class AuthService:
             student = result.scalars().first()
             if not student:
                 return None
+
+            # Check and update lockout state against the student's User record.
+            if student.user_id:
+                from app.models.core import User as _User
+                u_res = await db.execute(select(_User).where(_User.id == student.user_id))
+                u_obj = u_res.scalars().first()
+                if u_obj:
+                    await AuthService.check_account_lockout(db, u_obj)
+                    await AuthService.update_login_attempt(db, u_obj, success=True)
 
             token_payload = {
                 "sub": str(student.user_id or student.id),
@@ -531,6 +540,15 @@ class AuthService:
                 status_code=403,
                 detail="Your institution's access has been suspended.",
             )
+
+        # Check account lockout via the student's User record and mark success.
+        if student.user_id:
+            from app.models.core import User as _User
+            u_res = await db.execute(select(_User).where(_User.id == student.user_id))
+            u_obj = u_res.scalars().first()
+            if u_obj:
+                await AuthService.check_account_lockout(db, u_obj)
+                await AuthService.update_login_attempt(db, u_obj, success=True)
 
         token_payload = {
             "sub": str(student.user_id or student.id),

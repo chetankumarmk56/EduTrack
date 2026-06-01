@@ -6,7 +6,7 @@ from app.models.mark import Mark, Exam
 from app.models.event import Event
 from app.models.communication import Announcement, DeviceToken, DevicePlatform, PushDeliveryLog
 from app.models.transport import Bus, Route, Stop, StudentTransport, BusLocation, NotificationLog
-from app.models.finance import FeeStructure, Payment, PaymentAllocation, FinanceLedger, LedgerEntryType
+from app.models.finance import Payment, PaymentAllocation, FinanceLedger, LedgerEntryType
 from app.models.manual_payment import (
     ManualPaymentRequest, ManualPaymentAuditLog,
     ManualPaymentStatus, ManualPaymentAuditEvent,
@@ -28,7 +28,7 @@ __all__ = [
     "Attendance", "Mark", "Exam",
     "Event", "Announcement", "DeviceToken", "DevicePlatform", "PushDeliveryLog", "Base",
     "Bus", "Route", "Stop", "StudentTransport", "BusLocation", "NotificationLog",
-    "FeeStructure", "Payment", "PaymentAllocation", "FinanceLedger", "LedgerEntryType",
+    "Payment", "PaymentAllocation", "FinanceLedger", "LedgerEntryType",
     "ManualPaymentRequest", "ManualPaymentAuditLog",
     "ManualPaymentStatus", "ManualPaymentAuditEvent",
     "InstitutionPaymentSettings",

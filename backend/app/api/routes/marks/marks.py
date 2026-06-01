@@ -1,14 +1,55 @@
 from datetime import date, datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user, require_faculty, UserContext
+from app.core.limiter import limiter, RATE_LIMITS
+from app.models.directory import Student, Parent
 from app.schemas import mark as schemas
 from app.services.marks import marks_service
 
 router = APIRouter(prefix="/api/marks", tags=["Assessment & Marks"])
+
+
+async def _check_student_access(user: UserContext, student_id: int, db: AsyncSession) -> None:
+    """Raise 403 unless the caller may view this student's academic data."""
+    if user.role in ("super_admin", "admin", "teacher", "finance"):
+        return
+    # Student viewing own record
+    if user.role == "student":
+        res = await db.execute(
+            select(Student).where(Student.user_id == user.id, Student.id == student_id,
+                                  Student.institution_id == user.institution_id)
+        )
+        if res.scalars().first():
+            return
+    # Parent viewing their child — or shared student-as-parent account
+    if user.role == "parent":
+        p_res = await db.execute(
+            select(Parent).where(Parent.user_id == user.id, Parent.institution_id == user.institution_id)
+        )
+        parent = p_res.scalars().first()
+        if parent:
+            ch_res = await db.execute(
+                select(Student).where(Student.id == student_id, Student.parent_id == parent.id,
+                                      Student.institution_id == user.institution_id)
+            )
+            if ch_res.scalars().first():
+                return
+        # Fallback: shared login where the User row IS the student row
+        fb_res = await db.execute(
+            select(Student).where(Student.user_id == user.id, Student.id == student_id,
+                                  Student.institution_id == user.institution_id)
+        )
+        if fb_res.scalars().first():
+            return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Access denied. You may only view marks for your own child.",
+    )
 
 # Default look-back for marks. An academic year is ~10 months; 365 days
 # covers the whole year and a buffer for late entries. Set explicit
@@ -28,8 +69,10 @@ async def record_mark(
     return result
 
 @router.post("/batch", response_model=List[schemas.MarkResponse])
+@limiter.limit(RATE_LIMITS["marks_batch"])
 async def record_marks_batch(
-    marks: List[schemas.MarkCreate], 
+    request: Request,
+    marks: List[schemas.MarkCreate],
     db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(require_faculty)
 ):
@@ -81,15 +124,7 @@ async def get_student_marks(
     db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(get_current_user),
 ):
-    """
-    Marks for a student, scoped to a date window.
-
-    Default window (last 365 days) keeps the parent dashboard fast; a
-    multi-year history would otherwise pull thousands of rows with
-    eager-loaded student/exam/subject_ref joins. Pass explicit
-    `date_from=…` for report-card / transcript exports that need full
-    history — the service still caps results at 1000 rows as a defence.
-    """
+    await _check_student_access(user, student_id, db)
     if date_from is None:
         date_from = (date.today() - timedelta(days=_DEFAULT_MARKS_WINDOW_DAYS)).isoformat()
     if date_to is None:
@@ -105,6 +140,7 @@ async def get_student_rankings(
     db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(get_current_user)
 ):
+    await _check_student_access(user, student_id, db)
     return await marks_service.get_student_rankings(db, user.institution_id, student_id)
 
 @router.post("/exams", response_model=schemas.ExamResponse)

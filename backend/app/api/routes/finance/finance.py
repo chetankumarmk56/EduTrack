@@ -750,6 +750,15 @@ async def update_fee_reminder_settings(
         raise HTTPException(status_code=400, detail="overdue_days must be >= 0.")
     if payload.cooldown_days is not None and payload.cooldown_days < 0:
         raise HTTPException(status_code=400, detail="cooldown_days must be >= 0.")
+    if payload.timezone is not None:
+        try:
+            import zoneinfo
+            zoneinfo.ZoneInfo(payload.timezone)
+        except (zoneinfo.ZoneInfoNotFoundError, KeyError, Exception):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid timezone '{payload.timezone}'. Use an IANA name such as 'Asia/Kolkata'.",
+            )
 
     s = await fee_reminder_service.get_or_create_settings(db, admin.institution_id)
 

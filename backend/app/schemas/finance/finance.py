@@ -1,5 +1,5 @@
-from pydantic import BaseModel
-from typing import Optional, List
+from pydantic import BaseModel, Field
+from typing import Literal, Optional, List
 from datetime import datetime, date
 from app.models.finance import StudentFeeStatus
 
@@ -30,25 +30,6 @@ class StudentFeeResponse(StudentFeeBase):
     last_called_at: Optional[datetime]
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
-
-# --- Fee Structure Schemas ---
-
-class FeeStructureBase(BaseModel):
-    fee_type: str
-    total_amount: float
-    priority: int = 0
-
-class FeeStructureCreate(FeeStructureBase):
-    student_id: int
-
-class FeeStructureResponse(FeeStructureBase):
-    id: int
-    student_id: int
-    paid_amount: float
-    created_at: datetime
 
     class Config:
         from_attributes = True
@@ -90,9 +71,9 @@ class PaymentResponse(PaymentBase):
 
 class ManualPaymentCreate(BaseModel):
     student_id: int
-    amount: float
-    mode: str  # CASH, MANUAL_UPI
-    note: Optional[str] = None
+    amount: float = Field(..., gt=0, le=1_000_000)
+    mode: Literal["CASH", "MANUAL_UPI"]
+    note: Optional[str] = Field(default=None, max_length=2000)
 
 class ManualPaymentResponse(BaseModel):
     payment: PaymentResponse
@@ -158,19 +139,6 @@ class ClassFinanceBreakdownResponse(BaseModel):
     grand_total_pending: float
     total_classes_with_fee: int
     total_students: int
-
-
-class ParentFeeResponse(BaseModel):
-    student_name: str
-    total_amount: float
-    amount_paid: float
-    due_amount: float
-    due_date: date
-    status: str
-    overdue_days: int
-
-    class Config:
-        from_attributes = True
 
 
 # --- Finance Ledger Schemas ---

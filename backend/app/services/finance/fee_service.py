@@ -320,12 +320,11 @@ class FeeServiceMixin:
             return
 
         new_paid_amount = student_fee.amount_paid + amount
-        if new_paid_amount > student_fee.total_amount:
-            logger.error(
-                f"FEE_VALIDATION: Overpayment for Student {student_id}. "
-                f"Attempted: {new_paid_amount}, Max: {student_fee.total_amount}"
+        if new_paid_amount > student_fee.total_amount + 0.001:
+            raise ValueError(
+                f"Overpayment rejected for Student {student_id}: "
+                f"attempted ₹{new_paid_amount:.2f} but total fee is ₹{student_fee.total_amount:.2f}."
             )
-            new_paid_amount = student_fee.total_amount
 
         student_fee.amount_paid = new_paid_amount
         student_fee.due_amount = max(0.0, student_fee.total_amount - student_fee.amount_paid)

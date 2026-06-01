@@ -89,9 +89,28 @@ export const financeApi = {
     return response.data;
   },
 
-  getParentFees: async () => {
-    const response = await client.get<ParentFeeItem[]>('parent/fees');
-    return response.data;
+  getParentFees: async (): Promise<ParentFeeItem[]> => {
+    const response = await client.get<StudentDuesResponse[]>('finance/my-dues');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return response.data.map((r): ParentFeeItem => {
+      let overdue_days = 0;
+      if (r.due_date) {
+        const due = new Date(r.due_date);
+        due.setHours(0, 0, 0, 0);
+        overdue_days = Math.floor((today.getTime() - due.getTime()) / 86400000);
+      }
+      const total_paid = r.total_paid ?? 0;
+      return {
+        student_name: r.student_name,
+        total_amount: total_paid + r.total_due,
+        amount_paid: total_paid,
+        due_amount: r.total_due,
+        due_date: r.due_date,
+        status: r.total_due <= 0 ? 'PAID' : total_paid > 0 ? 'PARTIAL' : 'UNPAID',
+        overdue_days,
+      };
+    });
   },
 
   getStudentPayments: async (studentId: number) => {

@@ -5,43 +5,10 @@ from app.core.database import Base
 from app.models.core import TimestampMixin
 import enum
 
-class PaymentMode(str, enum.Enum):
-    UPI = "UPI"
-    CASH = "CASH"
-    MANUAL_UPI = "MANUAL_UPI"
-
-class PaymentStatus(str, enum.Enum):
-    PENDING = "PENDING"
-    SUCCESS = "SUCCESS"
-    FAILED = "FAILED"
-    CANCELLED = "CANCELLED"
-
-class FeeType(str, enum.Enum):
-    TUITION = "TUITION"
-    SPORTS = "SPORTS"
-    TRANSPORT = "TRANSPORT"
-
 class StudentFeeStatus(str, enum.Enum):
     UNPAID = "UNPAID"
     PARTIAL = "PARTIAL"
     PAID = "PAID"
-
-class FeeStructure(Base, TimestampMixin):
-    """Defines the fee requirements and tracking for a student."""
-    __tablename__ = "fee_structure"
-
-    id = Column(Integer, primary_key=True, index=True)
-    student_id = Column(Integer, ForeignKey("students.id"), index=True)
-    fee_type = Column(String) # For Enum mapping or direct string
-    total_amount = Column(Float)
-    paid_amount = Column(Float, default=0.0)
-    priority = Column(Integer, default=0)
-
-    institution_id = Column(Integer, ForeignKey("institutions.id"), index=True)
-    institution = relationship("Institution")
-
-    # Relationship to student
-    student = relationship("Student")
 
 class StudentFee(Base, TimestampMixin):
     """Granular tracking for individual student fees (e.g. Monthly/Termly fees)."""

@@ -114,7 +114,7 @@ export default function Login() {
           </div>
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight mb-4 sm:mb-6">Empowering Parents. Navigating Success.</h1>
           <p className="text-xl text-white/80 leading-relaxed font-medium">
-            Stay connected with your child's academic journey in real-time with EduTrack's comprehensive dashboard.
+            Stay connected with your child's academic journey in real-time with Arken Edu's comprehensive dashboard.
           </p>
         </motion.div>
       </div>

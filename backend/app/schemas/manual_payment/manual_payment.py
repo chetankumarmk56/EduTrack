@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import List, Optional
 
+from typing import Literal
+
 from pydantic import BaseModel, Field, field_validator
 
 from app.models.manual_payment import ManualPaymentStatus
@@ -19,7 +21,7 @@ class ManualPaymentSubmitRequest(BaseModel):
     """
     student_id: int
     parent_name: str = Field(..., min_length=1, max_length=200)
-    fee_type: Optional[str] = Field(default="TUITION", max_length=40)
+    fee_type: Literal["TUITION", "SPORTS", "TRANSPORT"] = "TUITION"
     installment_label: Optional[str] = Field(default=None, max_length=120)
     amount: float = Field(..., gt=0, le=10_000_000)
     transaction_reference: str = Field(..., min_length=4, max_length=120)

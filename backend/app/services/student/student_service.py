@@ -250,7 +250,7 @@ class StudentService:
             removed_class_id = student.school_class_id
 
             # Explicitly delete dependent records to prevent ForeignKey constraint violations
-            from app.models.finance import StudentFee, FeeStructure, Payment, PaymentAllocation
+            from app.models.finance import StudentFee, Payment, PaymentAllocation
             from app.models.attendance import Attendance
             from app.models.mark import Mark
             from app.models.transport import StudentTransport, NotificationLog

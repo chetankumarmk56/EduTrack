@@ -1,14 +1,52 @@
 from datetime import date, timedelta
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user, require_faculty, UserContext
+from app.core.limiter import limiter, RATE_LIMITS
+from app.models.directory import Student, Parent
 from app.schemas import attendance as schemas
 from app.services.attendance import attendance_service
 
 router = APIRouter(prefix="/api/attendance", tags=["Attendance Tracking"])
+
+
+async def _check_student_access(user: UserContext, student_id: int, db: AsyncSession) -> None:
+    """Raise 403 unless the caller may view this student's attendance."""
+    if user.role in ("super_admin", "admin", "teacher", "finance"):
+        return
+    if user.role == "student":
+        res = await db.execute(
+            select(Student).where(Student.user_id == user.id, Student.id == student_id,
+                                  Student.institution_id == user.institution_id)
+        )
+        if res.scalars().first():
+            return
+    if user.role == "parent":
+        p_res = await db.execute(
+            select(Parent).where(Parent.user_id == user.id, Parent.institution_id == user.institution_id)
+        )
+        parent = p_res.scalars().first()
+        if parent:
+            ch_res = await db.execute(
+                select(Student).where(Student.id == student_id, Student.parent_id == parent.id,
+                                      Student.institution_id == user.institution_id)
+            )
+            if ch_res.scalars().first():
+                return
+        fb_res = await db.execute(
+            select(Student).where(Student.user_id == user.id, Student.id == student_id,
+                                  Student.institution_id == user.institution_id)
+        )
+        if fb_res.scalars().first():
+            return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Access denied. You may only view attendance for your own child.",
+    )
 
 # Default attendance window. A student over 3 years can accumulate
 # 600+ records per subject; the eager-loaded student/class/grade/section
@@ -30,8 +68,10 @@ async def mark_attendance(
     return result
 
 @router.post("/batch", response_model=List[schemas.AttendanceResponse])
+@limiter.limit(RATE_LIMITS["attendance_batch"])
 async def mark_attendance_batch(
-    batch: schemas.AttendanceBatch, 
+    request: Request,
+    batch: schemas.AttendanceBatch,
     db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(require_faculty)
 ):
@@ -53,6 +93,7 @@ async def get_student_attendance(
     db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(get_current_user),
 ):
+    await _check_student_access(user, student_id, db)
     if date_from is None:
         date_from = (date.today() - timedelta(days=_DEFAULT_WINDOW_DAYS)).isoformat()
     if date_to is None:

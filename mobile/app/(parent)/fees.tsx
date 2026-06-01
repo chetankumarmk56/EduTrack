@@ -68,9 +68,14 @@ function describeDueDate(due_date: string | null | undefined, is_overdue: boolea
 // The mobile app shows dues but does not submit UPI payments in-app — that
 // flow needs UTR + screenshot upload which is only built on the web portal.
 // We deep-link the parent there so they can pay & submit proof.
+if (!process.env.EXPO_PUBLIC_WEB_PORTAL_URL) {
+  console.warn(
+    '[fees] EXPO_PUBLIC_WEB_PORTAL_URL is not set. ' +
+    'Set it in .env / EAS build config so the UPI payment link works in production.'
+  );
+}
 const WEB_PORTAL_FEE_PAY_URL =
-  (process.env.EXPO_PUBLIC_WEB_PORTAL_URL || 'https://app.example.com').replace(/\/+$/, '') +
-  '/parent/fee-pay';
+  (process.env.EXPO_PUBLIC_WEB_PORTAL_URL ?? '').replace(/\/+$/, '') + '/parent/fee-pay';
 
 export default function FeesScreen() {
   const { user } = useAuth();

@@ -28,6 +28,8 @@ RATE_LIMITS = {
     "teacher_login": "5/minute",
     "parent_login": "5/minute",
     "student_login": "5/minute",
+    "marks_batch": "10/minute",      # teacher batch mark submission
+    "attendance_batch": "10/minute", # teacher batch attendance submission
 }
 
 
