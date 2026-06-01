@@ -112,7 +112,7 @@ async def test_attendance_route_passes_default_90_day_window(monkeypatch):
         date_from=None,
         date_to=None,
         db=None,  # type: ignore[arg-type]  # captured fake ignores it
-        user=type("U", (), {"institution_id": 1})(),  # stub
+        user=type("U", (), {"institution_id": 1, "role": "admin"})(),  # stub
     )
     assert result == []
 
@@ -148,7 +148,7 @@ async def test_attendance_route_honours_explicit_date_range(monkeypatch):
         date_from="2025-01-01",
         date_to="2025-06-30",
         db=None,  # type: ignore[arg-type]
-        user=type("U", (), {"institution_id": 1})(),
+        user=type("U", (), {"institution_id": 1, "role": "admin"})(),
     )
     assert captured["date_from"] == "2025-01-01"
     assert captured["date_to"] == "2025-06-30"

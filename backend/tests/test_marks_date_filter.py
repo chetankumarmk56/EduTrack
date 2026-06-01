@@ -50,7 +50,7 @@ async def test_marks_route_applies_365_day_default(monkeypatch):
         date_from=None,
         date_to=None,
         db=None,  # type: ignore[arg-type]
-        user=type("U", (), {"institution_id": 1})(),
+        user=type("U", (), {"institution_id": 1, "role": "admin"})(),
     )
 
     today = date.today()
@@ -79,7 +79,7 @@ async def test_marks_route_passes_explicit_range_through(monkeypatch):
         date_from="2024-09-01",
         date_to="2025-06-30",
         db=None,  # type: ignore[arg-type]
-        user=type("U", (), {"institution_id": 1})(),
+        user=type("U", (), {"institution_id": 1, "role": "admin"})(),
     )
     assert captured["date_from"] == "2024-09-01"
     assert captured["date_to"] == "2025-06-30"
