@@ -13,6 +13,7 @@ import { getErrorMessage } from '@/shared/lib/errorHandler';
 import ConfirmModal from '@/shared/components/ui/ConfirmModal';
 import ModalShell, { ModalHeader, ModalBody, ModalFooter } from '@/shared/components/ui/ModalShell';
 import { useToast } from '@/shared/components/ui/Toast';
+import DatePicker from '@/shared/components/ui/DatePicker';
 import type { Grade, Subject } from '@/shared/types';
 
 type FormBanner = { kind: 'error' | 'success'; text: string } | null;
@@ -457,11 +458,11 @@ export default function AdminClasses() {
                 </div>
                 <div className="space-y-1">
                   <label className="text-[8px] font-black uppercase tracking-widest ml-2 text-text-secondary">Fee Payment Deadline</label>
-                  <input
-                    type="date"
+                  <DatePicker
                     className="input-obsidian text-sm italic font-black"
+                    placeholder="Select deadline"
                     value={classForm.fee_due_date || ''}
-                    onChange={e => setClassForm({ ...classForm, fee_due_date: e.target.value })}
+                    onChange={v => setClassForm({ ...classForm, fee_due_date: v })}
                   />
                 </div>
                 <button

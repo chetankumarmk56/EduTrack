@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ArrowRight, AlertCircle, Loader, UserPlus, User } from 'lucide-react';
 import { directoryApi } from '@/features/directory/api';
+import DatePicker from '@/shared/components/ui/DatePicker';
 import { cn } from '@/shared/lib/utils';
 import { getErrorMessage } from '@/shared/lib/errorHandler';
 import type { Student } from '@/shared/types';
@@ -127,7 +128,7 @@ export default function EditStudentModal({ student, onClose, onUpdated }: EditSt
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1.5">
                         <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Date of Birth</label>
-                        <input type="date" className="input-obsidian" value={localStudent.dob} onChange={e => update('dob', e.target.value)} required />
+                        <DatePicker className="input-obsidian" placeholder="Select date of birth" value={localStudent.dob} onChange={v => update('dob', v)} />
                       </div>
                       <div className="space-y-1.5">
                         <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">WhatsApp</label>

@@ -10,6 +10,7 @@ import { cn } from '@/shared/lib/utils';
 import { getErrorMessage } from '@/shared/lib/errorHandler';
 import { teacherAttendanceApi, type TeacherAttendanceRecord, type TeacherLeaveRecord, type AuditLogRecord, type AttendanceSummary } from '@/features/teacher-attendance/api';
 import { useApp } from '@/shared/contexts/AppContext';
+import DatePicker from '@/shared/components/ui/DatePicker';
 
 type Tab = 'attendance' | 'leave' | 'summary' | 'audit';
 
@@ -1350,19 +1351,19 @@ function DateRangeFilter({
           </button>
         ))}
         <div className="flex items-center gap-1.5">
-          <input
-            type="date"
+          <DatePicker
             value={from}
             max={to || undefined}
-            onChange={e => onChange(e.target.value, to)}
+            placeholder="From"
+            onChange={v => onChange(v, to)}
             className="h-[42px] px-3 rounded-xl bg-slate-800 border border-white/10 text-xs text-white focus:outline-none focus:border-primary/50"
           />
           <span className="text-slate-500 text-[10px] font-black">→</span>
-          <input
-            type="date"
+          <DatePicker
             value={to}
             min={from || undefined}
-            onChange={e => onChange(from, e.target.value)}
+            placeholder="To"
+            onChange={v => onChange(from, v)}
             className="h-[42px] px-3 rounded-xl bg-slate-800 border border-white/10 text-xs text-white focus:outline-none focus:border-primary/50"
           />
         </div>

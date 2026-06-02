@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   RefreshControl, Modal, TextInput, Alert, ActivityIndicator,
 } from 'react-native';
+import { CalendarPicker } from '@/shared/components/ui/CalendarPicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
@@ -584,26 +585,23 @@ export default function MyAttendanceScreen() {
             </ScrollView>
 
             {/* Start date */}
-            <Text style={styles.fieldLabel}>START DATE (YYYY-MM-DD)</Text>
-            <TextInput
-              style={styles.input}
+            <CalendarPicker
+              label="START DATE"
               value={startDate}
-              onChangeText={setStartDate}
-              placeholder="2026-05-14"
-              placeholderTextColor={Colors.textMuted}
-              autoCapitalize="none"
+              onChange={setStartDate}
+              placeholder="Pick a start date"
             />
 
             {/* End date */}
-            <Text style={styles.fieldLabel}>END DATE (YYYY-MM-DD)</Text>
-            <TextInput
-              style={styles.input}
-              value={endDate}
-              onChangeText={setEndDate}
-              placeholder="2026-05-14"
-              placeholderTextColor={Colors.textMuted}
-              autoCapitalize="none"
-            />
+            <View style={{ marginTop: 16 }}>
+              <CalendarPicker
+                label="END DATE"
+                value={endDate}
+                onChange={setEndDate}
+                placeholder="Pick an end date"
+                minDate={startDate}
+              />
+            </View>
 
             {/* Reason */}
             <Text style={styles.fieldLabel}>REASON</Text>

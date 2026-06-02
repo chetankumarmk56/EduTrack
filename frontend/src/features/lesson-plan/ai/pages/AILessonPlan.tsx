@@ -28,6 +28,7 @@ import {
   type TimetableScheduleResult,
 } from '@/features/lesson-plan/services/calculateScheduleFromTimetable';
 import { cn } from '@/shared/lib/utils';
+import DatePicker from '@/shared/components/ui/DatePicker';
 
 import { lessonPlanAIApi } from '@/features/lesson-plan/ai/api';
 import type {
@@ -581,22 +582,24 @@ export default function AILessonPlan() {
                   </div>
 
                   <Field label="Start Date">
-                    <input
-                      type="date"
+                    <DatePicker
                       value={chapter.startDate}
-                      onChange={(e) => {
-                        updateChapter(chapter.id, { startDate: e.target.value });
+                      placeholder="Start date"
+                      max={chapter.endDate || undefined}
+                      onChange={(v) => {
+                        updateChapter(chapter.id, { startDate: v });
                         invalidateChapter(chapter.id);
                       }}
                       className={inputCls}
                     />
                   </Field>
                   <Field label="End Date">
-                    <input
-                      type="date"
+                    <DatePicker
                       value={chapter.endDate}
-                      onChange={(e) => {
-                        updateChapter(chapter.id, { endDate: e.target.value });
+                      placeholder="End date"
+                      min={chapter.startDate || undefined}
+                      onChange={(v) => {
+                        updateChapter(chapter.id, { endDate: v });
                         invalidateChapter(chapter.id);
                       }}
                       className={inputCls}

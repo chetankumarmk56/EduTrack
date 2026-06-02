@@ -6,6 +6,7 @@ import {
   AlertCircle, Loader, CheckCircle2,
 } from 'lucide-react';
 import { directoryApi } from '@/features/directory/api';
+import DatePicker from '@/shared/components/ui/DatePicker';
 import { cn } from '@/shared/lib/utils';
 import { getErrorMessage } from '@/shared/lib/errorHandler';
 import { useToast } from '@/shared/components/ui/Toast';
@@ -313,13 +314,12 @@ export default function EnrollStudentModal({
                         required
                         error={errors.dob}
                       >
-                        <input
-                          type="date"
+                        <DatePicker
                           max={maxDobToday()}
+                          placeholder="Select date of birth"
                           className={cn('input-obsidian', errors.dob && 'border-rose-500/50 bg-rose-500/[0.02]')}
                           value={form.dob}
-                          onChange={e => setField('dob', e.target.value)}
-                          onBlur={() => blurValidate('dob')}
+                          onChange={v => { setField('dob', v); setErrors(prev => ({ ...prev, dob: validateField('dob', v) })); }}
                         />
                       </Field>
                       <Field

@@ -11,6 +11,7 @@ import { cn } from '@/shared/lib/utils';
 import { getErrorMessage } from '@/shared/lib/errorHandler';
 import ConfirmModal from '@/shared/components/ui/ConfirmModal';
 import ModalShell, { ModalHeader, ModalBody, ModalFooter } from '@/shared/components/ui/ModalShell';
+import DatePicker from '@/shared/components/ui/DatePicker';
 import { useToast } from '@/shared/components/ui/Toast';
 import type { Event } from '@/shared/types';
 
@@ -378,12 +379,11 @@ export default function AdminEvents() {
 
             {/* Date, Time, Location — single row on desktop */}
             <CompactField label="Date" required className="md:col-span-4">
-              <input
-                type="date"
+              <DatePicker
                 className="input-modal"
+                placeholder="Select date"
                 value={form.date}
-                onChange={e => setForm({ ...form, date: e.target.value })}
-                required
+                onChange={v => setForm({ ...form, date: v })}
               />
             </CompactField>
             <CompactField label="Time" required className="md:col-span-3">

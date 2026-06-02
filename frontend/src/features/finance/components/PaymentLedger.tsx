@@ -8,6 +8,7 @@ import { cn } from '@/shared/lib/utils';
 import { financeApi } from '@/features/finance/api';
 import { getErrorMessage } from '@/shared/lib/errorHandler';
 import { Skeleton } from '@/shared/components/ui/Skeleton';
+import DatePicker from '@/shared/components/ui/DatePicker';
 import type {
   LedgerEntry, LedgerListParams, LedgerSummary, LedgerFilterOptions,
 } from '@/features/finance/api';
@@ -365,12 +366,12 @@ export default function PaymentLedger() {
             <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
               <Calendar className="w-3 h-3" /> From
             </label>
-            <input
-              type="date"
+            <DatePicker
               value={filters.date_from || ''}
               min={facets?.earliest_payment_date ? toDateInput(facets.earliest_payment_date) : undefined}
               max={filters.date_to || undefined}
-              onChange={(e) => setFilters((f) => ({ ...f, date_from: e.target.value }))}
+              placeholder="From date"
+              onChange={(v) => setFilters((f) => ({ ...f, date_from: v }))}
               className="px-3 py-2 bg-slate-900/40 rounded-lg border border-white/10 text-sm font-semibold text-foreground outline-none focus:ring-2 focus:ring-primary/30"
             />
           </div>
@@ -378,12 +379,12 @@ export default function PaymentLedger() {
             <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
               <Calendar className="w-3 h-3" /> To
             </label>
-            <input
-              type="date"
+            <DatePicker
               value={filters.date_to || ''}
               min={filters.date_from || undefined}
               max={todayStr()}
-              onChange={(e) => setFilters((f) => ({ ...f, date_to: e.target.value }))}
+              placeholder="To date"
+              onChange={(v) => setFilters((f) => ({ ...f, date_to: v }))}
               className="px-3 py-2 bg-slate-900/40 rounded-lg border border-white/10 text-sm font-semibold text-foreground outline-none focus:ring-2 focus:ring-primary/30"
             />
           </div>

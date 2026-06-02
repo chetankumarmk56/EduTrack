@@ -7,7 +7,7 @@ import {
   FileText, ImageIcon, Film, File,
   Loader2, AlertCircle, RefreshCw,
   Paperclip, CheckCircle2, Clock,
-  Search, CalendarDays, Filter, AlertTriangle,
+  Search, Filter, AlertTriangle,
 } from 'lucide-react';
 import { useAuth } from '@/shared/contexts/AuthContext';
 import { useApp } from '@/shared/contexts/AppContext';
@@ -18,6 +18,7 @@ import { cn } from '@/shared/lib/utils';
 import { SkeletonList } from '@/shared/components/ui/Skeleton';
 import ConfirmModal from '@/shared/components/ui/ConfirmModal';
 import { useToast } from '@/shared/components/ui/Toast';
+import DatePicker from '@/shared/components/ui/DatePicker';
 import { HomeworkFields } from '@/features/announcements/components/HomeworkFields';
 import { CategoryBadge } from '@/features/announcements/components/CategoryBadge';
 import { ANNOUNCEMENT_CATEGORIES } from '@/features/announcements/constants';
@@ -308,12 +309,11 @@ export default function TeacherAnnouncements() {
             </div>
 
             <div className="relative">
-              <CalendarDays className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary opacity-50 pointer-events-none" />
-              <input
-                type="date"
+              <DatePicker
                 value={filterDate}
-                onChange={e => setFilterDate(e.target.value)}
-                className="input-obsidian h-12 pl-11 w-full sm:w-48 [color-scheme:dark]"
+                placeholder="Filter by date"
+                onChange={v => setFilterDate(v)}
+                className="input-obsidian h-12 w-full sm:w-48"
               />
             </div>
 

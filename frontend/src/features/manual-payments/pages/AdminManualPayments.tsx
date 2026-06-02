@@ -7,6 +7,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/shared/lib/utils';
 import { SkeletonHeader, SkeletonStatGrid, SkeletonTable } from '@/shared/components/ui/Skeleton';
+import DatePicker from '@/shared/components/ui/DatePicker';
 
 import { manualPaymentsApi } from '../api';
 import type {
@@ -360,18 +361,20 @@ export default function AdminManualPayments() {
                   />
                 </FilterField>
                 <FilterField label="From date">
-                  <input
-                    type="date"
+                  <DatePicker
                     value={dateFrom}
-                    onChange={(e) => setDateFrom(e.target.value)}
+                    max={dateTo || undefined}
+                    placeholder="From date"
+                    onChange={(v) => setDateFrom(v)}
                     className="filter-input"
                   />
                 </FilterField>
                 <FilterField label="To date">
-                  <input
-                    type="date"
+                  <DatePicker
                     value={dateTo}
-                    onChange={(e) => setDateTo(e.target.value)}
+                    min={dateFrom || undefined}
+                    placeholder="To date"
+                    onChange={(v) => setDateTo(v)}
                     className="filter-input"
                   />
                 </FilterField>

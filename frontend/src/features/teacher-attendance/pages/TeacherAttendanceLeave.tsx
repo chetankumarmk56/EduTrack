@@ -8,6 +8,7 @@ import { cn } from '@/shared/lib/utils';
 import { getErrorMessage } from '@/shared/lib/errorHandler';
 import { teacherAttendanceApi, type TeacherAttendanceRecord, type TeacherLeaveRecord } from '@/features/teacher-attendance/api';
 import { SkeletonStatGrid, SkeletonTable, SkeletonList } from '@/shared/components/ui/Skeleton';
+import DatePicker from '@/shared/components/ui/DatePicker';
 import { useToast } from '@/shared/components/ui/Toast';
 
 type DisplayStatus = 'PRESENT' | 'ABSENT' | 'HALF_DAY' | 'ON_LEAVE';
@@ -520,20 +521,21 @@ export default function TeacherAttendanceLeave() {
                     <div />
                     <div>
                       <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Start Date</label>
-                      <input
-                        type="date"
+                      <DatePicker
                         value={leaveForm.start_date}
-                        onChange={e => setLeaveForm(f => ({ ...f, start_date: e.target.value }))}
+                        max={leaveForm.end_date || undefined}
+                        placeholder="Start date"
+                        onChange={v => setLeaveForm(f => ({ ...f, start_date: v }))}
                         className="w-full px-3 py-2.5 rounded-xl bg-slate-800 border border-white/10 text-xs text-white focus:outline-none focus:border-primary/50"
                       />
                     </div>
                     <div>
                       <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">End Date</label>
-                      <input
-                        type="date"
+                      <DatePicker
                         value={leaveForm.end_date}
-                        min={leaveForm.start_date}
-                        onChange={e => setLeaveForm(f => ({ ...f, end_date: e.target.value }))}
+                        min={leaveForm.start_date || undefined}
+                        placeholder="End date"
+                        onChange={v => setLeaveForm(f => ({ ...f, end_date: v }))}
                         className="w-full px-3 py-2.5 rounded-xl bg-slate-800 border border-white/10 text-xs text-white focus:outline-none focus:border-primary/50"
                       />
                     </div>

@@ -2,12 +2,13 @@ import { useState, useEffect, useMemo } from 'react';
 import { useApp } from '@/shared/contexts/AppContext';
 import { useAuth } from '@/shared/contexts/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle2, Save, AlertCircle, Check, ChevronDown, Hash, UserCircle, Clock, Calendar as CalendarIcon, Users, PieChart } from 'lucide-react';
+import { CheckCircle2, Save, AlertCircle, Check, ChevronDown, Hash, UserCircle, Clock, Users, PieChart } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import { attendanceApi } from '@/features/attendance/api';
 import { directoryApi } from '@/features/directory/api';
 import { getErrorMessage } from '@/shared/lib/errorHandler';
 import ConfirmModal from '@/shared/components/ui/ConfirmModal';
+import DatePicker from '@/shared/components/ui/DatePicker';
 import { useToast } from '@/shared/components/ui/Toast';
 import type { Student } from '@/shared/types';
 
@@ -255,15 +256,11 @@ export default function TeacherAttendance() {
         </div>
 
         <div className="flex flex-wrap gap-4 items-center">
-          <div className="relative group">
-            <CalendarIcon className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-primary group-hover:scale-110 transition-transform" />
-            <input 
-              type="date" 
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="pl-12 pr-6 py-4 border border-white/10 rounded-2xl bg-muted/30 text-sm font-black focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all hover:border-primary/30"
-            />
-          </div>
+          <DatePicker
+            value={selectedDate}
+            onChange={(v) => setSelectedDate(v)}
+            className="px-4 py-4 border border-white/10 rounded-2xl bg-muted/30 text-sm font-black focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all hover:border-primary/30"
+          />
 
           <motion.button
             whileHover={!isDirty || isSaving ? undefined : { scale: 1.02, translateY: -2 }}
