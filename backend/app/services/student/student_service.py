@@ -253,13 +253,10 @@ class StudentService:
             from app.models.finance import StudentFee, Payment, PaymentAllocation
             from app.models.attendance import Attendance
             from app.models.mark import Mark
-            from app.models.transport import StudentTransport, NotificationLog
             from app.models.communication import Announcement
             from app.models.core import User
 
-            # Delete transport and communication records
-            await db.execute(delete(StudentTransport).where(StudentTransport.student_id == student_id))
-            await db.execute(delete(NotificationLog).where(NotificationLog.student_id == student_id))
+            # Delete communication records
             await db.execute(delete(Announcement).where(Announcement.student_id == student_id))
             
             # Delete payment allocations and payments

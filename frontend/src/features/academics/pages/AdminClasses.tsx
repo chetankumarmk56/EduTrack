@@ -331,7 +331,7 @@ export default function AdminClasses() {
           </div>
           <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight text-gradient-indigo">Academic Setup</h1>
           <p className="text-text-secondary text-lg font-medium max-w-2xl">
-            Configure the institutional framework by defining scholastic classes, operational segments, and disciplinary fields.
+            Configure the institutional framework by defining scholastic classes, sections, and subjects.
           </p>
         </div>
       </div>
@@ -485,7 +485,7 @@ export default function AdminClasses() {
           <div className="h-full flex flex-col gap-6">
             <div className="flex items-center justify-between px-2">
               <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary flex items-center gap-2">
-                <Layers className="w-3.5 h-3.5" /> Segments
+                <Layers className="w-3.5 h-3.5" /> Sections
               </h3>
               {selectedGradeId && (
                 <button 
@@ -578,7 +578,7 @@ export default function AdminClasses() {
                   {filteredSections.length === 0 && !isAddingSection && (
                     <div className="py-24 obsidian-card border-dashed border-glass-border flex flex-col items-center justify-center gap-4 opacity-20 grayscale transition-all hover:opacity-40">
                       <Hash className="w-12 h-12 rotate-12" />
-                      <p className="text-[10px] font-black uppercase tracking-[0.3em]">Zero Segments Mapped</p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.3em]">Zero Sections Mapped</p>
                     </div>
                   )}
                 </>
@@ -587,7 +587,7 @@ export default function AdminClasses() {
                   <div className="w-20 h-20 rounded-full border-2 border-dashed border-glass-border flex items-center justify-center animate-pulse">
                     <Hash className="w-8 h-8 opacity-30" />
                   </div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.25em] max-w-[180px] leading-relaxed">Select a Scholastic Class to calibrate operational segments</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.25em] max-w-[180px] leading-relaxed">Select a Scholastic Class to calibrate sections</p>
                 </div>
               )}
             </div>
@@ -598,7 +598,7 @@ export default function AdminClasses() {
         <div className="lg:col-span-5 flex flex-col gap-6">
           <div className="flex items-center justify-between px-2">
             <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-text-secondary flex items-center gap-2">
-              <Library className="w-3.5 h-3.5" /> Disciplines
+              <Library className="w-3.5 h-3.5" /> Subjects
             </h3>
             <button 
               onClick={() => setIsAddingSubject(true)}
@@ -684,7 +684,7 @@ export default function AdminClasses() {
             {subjects.length === 0 && !isAddingSubject && (
               <div className="py-24 obsidian-card border-dashed border-glass-border flex flex-col items-center justify-center gap-6 opacity-10">
                 <BookOpen className="w-16 h-16 opacity-30" />
-                <p className="text-[10px] font-black uppercase tracking-[0.3em]">Zero Disciplines Configured</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.3em]">Zero Subjects Configured</p>
               </div>
             )}
           </div>

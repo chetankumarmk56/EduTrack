@@ -4,7 +4,7 @@ import { useAuth } from '@/shared/contexts/AuthContext';
 
 interface ProtectedRouteProps {
   children: ReactNode;
-  allowedRoles?: ('super_admin' | 'admin' | 'teacher' | 'student' | 'parent' | 'finance')[];
+  allowedRoles?: ('super_admin' | 'admin' | 'teacher' | 'student' | 'parent')[];
 }
 
 const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
@@ -36,9 +36,8 @@ const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     // If authenticated but role not allowed, redirect to their default dashboard
     const defaultPath = user.role === 'super_admin' ? '/superadmin/dashboard' :
-                        user.role === 'teacher' ? '/teacher/dashboard' : 
-                        user.role === 'finance' ? '/admin/finance' : 
-                        user.role === 'admin' ? '/admin/directory' : 
+                        user.role === 'teacher' ? '/teacher/dashboard' :
+                        user.role === 'admin' ? '/admin/directory' :
                         '/parent/dashboard';
     
     return <Navigate to={defaultPath} replace />;

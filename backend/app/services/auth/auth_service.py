@@ -582,7 +582,7 @@ class AuthService:
 
     # Roles permitted to change their own password through the self-service endpoint.
     # Parents are intentionally excluded.
-    CHANGE_PASSWORD_ALLOWED_ROLES = frozenset({"super_admin", "admin", "teacher", "finance"})
+    CHANGE_PASSWORD_ALLOWED_ROLES = frozenset({"super_admin", "admin", "teacher"})
 
     @staticmethod
     async def change_password(

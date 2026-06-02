@@ -215,7 +215,7 @@ async def read_student(
     user: UserContext = Depends(get_current_user)
 ):
     # Faculty can see any student in their institution.
-    if user.role not in ("super_admin", "admin", "teacher", "finance"):
+    if user.role not in ("super_admin", "admin", "teacher"):
         # Student viewing themselves.
         if user.role == "student":
             own = await db.execute(

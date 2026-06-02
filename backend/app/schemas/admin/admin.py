@@ -50,6 +50,58 @@ class TrashedInstitutionResponse(InstitutionResponse):
     deleted_at: datetime
     days_until_purge: int
 
+# --- Schools Overview Schemas ---
+# Powers the Super-Admin "Schools Overview" page: a paginated grid of every
+# school plus platform-wide rollup totals. Student / teacher counts are
+# aggregated at the database level (see admin_service.get_schools_overview)
+# so this stays N+1-free regardless of how many schools exist.
+
+class SchoolOverviewRow(BaseModel):
+    """One row in the schools data grid."""
+    id: int
+    name: str
+    # School Code — we surface the institution slug as the human-facing code.
+    code: Optional[str] = None
+    principal_name: Optional[str] = None
+    total_students: int = 0
+    total_teachers: int = 0
+    is_active: bool = True
+    created_at: Optional[datetime] = None
+
+class SchoolsOverviewSummary(BaseModel):
+    """Dashboard summary cards across all (non-trashed) schools."""
+    total_schools: int = 0
+    total_students: int = 0
+    total_teachers: int = 0
+    active_schools: int = 0
+    inactive_schools: int = 0
+
+class SchoolsOverviewResponse(BaseModel):
+    """Paginated grid payload + the always-global summary block."""
+    items: List[SchoolOverviewRow]
+    summary: SchoolsOverviewSummary
+    total: int          # total rows matching the current filters (pre-pagination)
+    skip: int
+    limit: int
+
+class SchoolAdminInfo(BaseModel):
+    id: int
+    name: str
+    email: Optional[str] = None
+    is_active: bool = True
+
+class SchoolDetailResponse(BaseModel):
+    """Expanded profile shown in the 'View Details' drawer."""
+    id: int
+    name: str
+    code: Optional[str] = None
+    is_active: bool = True
+    created_at: Optional[datetime] = None
+    logo_url: Optional[str] = None
+    total_students: int = 0
+    total_teachers: int = 0
+    admins: List[SchoolAdminInfo] = []
+
 # --- Admin User Schemas ---
 class UserBase(BaseModel):
     email: EmailStr

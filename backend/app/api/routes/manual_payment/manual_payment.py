@@ -160,7 +160,7 @@ async def admin_get_school_info(
     db: AsyncSession = Depends(get_db),
     admin: UserContext = Depends(require_payment_admin),
 ):
-    """Admin / finance view of their institution's payment settings."""
+    """Admin view of their institution's payment settings."""
     return await get_admin_settings(db, institution_id=admin.institution_id)
 
 
@@ -238,7 +238,7 @@ async def get_my_students(
     * Parent/student account where the user is bound to a student row: just
       that student.
     """
-    if user.role in ("super_admin", "admin", "finance"):
+    if user.role in ("super_admin", "admin"):
         res = await db.execute(
             select(Student.id, Student.name, Student.school_class_id).where(
                 Student.institution_id == user.institution_id,
@@ -632,7 +632,7 @@ async def download_receipt(
             detail="Receipt is only available after admin approval.",
         )
 
-    if user.role not in ("super_admin", "admin", "finance") and req.submitted_by_user_id != user.id:
+    if user.role not in ("super_admin", "admin") and req.submitted_by_user_id != user.id:
         raise HTTPException(status_code=403, detail="Not your receipt.")
 
     inst_res = await db.execute(

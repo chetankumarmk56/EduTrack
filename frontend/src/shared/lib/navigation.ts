@@ -10,7 +10,6 @@ import {
   PenTool,
   FolderOpen,
   UserCheck,
-  MapPin,
   CreditCard,
   Building2,
   BookOpen,
@@ -46,7 +45,6 @@ export const teacherNavItems: NavItem[] = [
   { name: 'Lesson Plan', path: '/teacher/lesson-plan', icon: Book },
   { name: 'Question Bank', path: '/teacher/question-bank', icon: PenTool },
   { name: 'My Files', path: '/teacher/files', icon: FolderOpen },
-  { name: 'Transport Roster', path: '/teacher/transport', icon: MapPin },
 ];
 
 export const parentNavItems: NavItem[] = [
@@ -57,24 +55,23 @@ export const parentNavItems: NavItem[] = [
   { name: 'Announcements', path: '/parent/announcements', icon: Bell },
   { name: 'Teachers', path: '/parent/teachers', icon: Users },
   { name: 'Events', path: '/parent/events', icon: Bell },
-  { name: 'Bus Tracking', path: '/parent/bus-tracking', icon: MapPin },
   { name: 'Fees & Payments', path: '/parent/fee-pay', icon: Wallet },
 ];
 
 export const adminNavItems: NavItem[] = [
   { name: 'Academic Setup', path: '/admin/classes', icon: Building2 },
-  { name: 'Student Roster', path: '/admin/directory', icon: Users },
-  { name: 'Teacher Directory', path: '/admin/teachers', icon: BookOpen },
+  { name: 'Students', path: '/admin/directory', icon: Users },
+  { name: 'Teacher', path: '/admin/teachers', icon: BookOpen },
   { name: 'Timetable', path: '/admin/timetable', icon: CalendarRange },
   { name: 'Events', path: '/admin/events', icon: Bell },
   { name: 'Staff Attendance', path: '/admin/teacher-attendance', icon: UserCheck },
-  { name: 'Bus Directory', path: '/admin/transport', icon: MapPin },
   { name: 'Finance', path: '/admin/finance', icon: CreditCard },
-  { name: 'Manual Payments', path: '/admin/manual-payments', icon: Landmark },
+  { name: 'Payment Verification', path: '/admin/manual-payments', icon: Landmark },
 ];
 
 export const superAdminNavItems: NavItem[] = [
   { name: 'Schools', path: '/superadmin/dashboard', icon: Building2 },
+  { name: 'Schools Overview', path: '/superadmin/schools-overview', icon: Globe },
   { name: 'Admins', path: '/superadmin/admins', icon: Users },
 ];
 

@@ -29,11 +29,11 @@ from app.api.routes.marks import router as marks_router
 from app.api.routes.events import router as events_router
 from app.api.routes.announcements import router as announcements_router
 from app.api.routes.academic import router as academic_router
-from app.api.routes.transport import router as transport_router
 from app.api.routes.finance import router as finance_router
 from app.api.routes.manual_payment import router as manual_payment_router
-from app.api.routes.question_bank import router as question_bank_router
-from app.api.routes.lesson_plan import router as lesson_plan_router
+# Question Bank + Lesson Plan now live in the self-contained AI package
+# (backend/AI). See AI/README.md for the microservice-extraction guide.
+from AI import question_bank_router, lesson_plan_router
 from app.api.routes.uploaded_files import router as uploaded_files_router
 from app.api.routes.documents import router as documents_router
 from app.api.routes.reports import router as reports_router
@@ -400,7 +400,6 @@ app.include_router(marks_router)
 app.include_router(events_router)
 app.include_router(announcements_router)
 app.include_router(academic_router)
-app.include_router(transport_router)
 app.include_router(finance_router)
 app.include_router(manual_payment_router)
 app.include_router(question_bank_router)

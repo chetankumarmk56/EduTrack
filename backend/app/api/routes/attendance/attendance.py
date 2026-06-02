@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api/attendance", tags=["Attendance Tracking"])
 
 async def _check_student_access(user: UserContext, student_id: int, db: AsyncSession) -> None:
     """Raise 403 unless the caller may view this student's attendance."""
-    if user.role in ("super_admin", "admin", "teacher", "finance"):
+    if user.role in ("super_admin", "admin", "teacher"):
         return
     if user.role == "student":
         res = await db.execute(

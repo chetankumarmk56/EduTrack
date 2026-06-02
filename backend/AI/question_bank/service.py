@@ -1,20 +1,21 @@
 """Question Bank S3 orchestration service.
 
-Storage + orchestration only. No AI generation runs in this repo — the
-external microservice (shared with Lesson Plan) reads metadata from S3,
-generates the question bank, and writes ``output/question_bank.json``
-back to S3. This service:
+Storage + orchestration. Generation runs **in-process** via
+:mod:`AI.question_bank.generator` (an optional remote offload is kept as a
+microservice-ready seam — see ``_generate_via_http``). This service:
 
 * :py:meth:`upload_resources` — write uploaded files + ``metadata.json``
   to S3 under the canonical scope.
-* :py:meth:`generate` — load ``metadata.json`` from S3, dispatch to the
-  external AI microservice with ``type="question_bank"``, then read and
-  return the ``output/question_bank.json`` the service wrote to S3.
+* :py:meth:`generate` — load ``metadata.json`` from S3, generate the
+  question bank (in-process by default, or via the remote AI service when
+  ``QUESTION_BANK_AI_SERVICE_URL`` is set), write
+  ``output/question_bank.json`` to S3, and return it.
 * :py:meth:`get_output` — read ``output/question_bank.json`` from S3
-  without calling the AI service.
+  without regenerating.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import List, Optional, Tuple
 
@@ -22,10 +23,11 @@ import httpx
 from fastapi import HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.core.dependencies import UserContext
 from app.core.logger import logger
-from app.schemas.question_bank import (
+from AI.config import ai_settings
+from AI.question_bank.generator import generate_question_bank
+from AI.question_bank.schemas import (
     DiagramUploadResponse,
     GeneratedQuestionBank,
     QuestionBankIdentity,
@@ -35,13 +37,13 @@ from app.schemas.question_bank import (
     QuestionBankOutputResponse,
     QuestionBankUploadResponse,
 )
-from app.services.storage.question_bank_s3 import (
+from AI.question_bank.storage import (
     QuestionBankScope,
     question_bank_s3,
     unique_input_keys,
     validate_upload,
 )
-from app.services.uploaded_file import uploaded_file_service
+from app.services.uploaded_file import uploaded_file_service  # "My Files" library (host app)
 
 
 def _scope(identity: QuestionBankIdentity) -> QuestionBankScope:
@@ -241,37 +243,7 @@ class QuestionBankAIService:
                 detail="Could not read the question bank details.",
             )
 
-        # 2. Resolve AI service URL — same microservice as lesson plan,
-        # optionally overridden via QUESTION_BANK_AI_SERVICE_URL.
-        ai_url = (
-            settings.QUESTION_BANK_AI_SERVICE_URL
-            or settings.LESSON_PLAN_AI_SERVICE_URL
-        )
-        if not ai_url:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=(
-                    "AI service URL is not configured. Set "
-                    "QUESTION_BANK_AI_SERVICE_URL (or LESSON_PLAN_AI_SERVICE_URL) "
-                    "in your environment to enable AI generation."
-                ),
-            )
-
-        ai_timeout = (
-            settings.QUESTION_BANK_AI_SERVICE_TIMEOUT
-            or settings.LESSON_PLAN_AI_SERVICE_TIMEOUT
-        )
-
-        # 3. Dispatch.
-        #
-        # The microservice has a strict request schema (additionalProperties=false):
-        #     pdf_bucket    (str, required)
-        #     pdf_key       (str, required)
-        #     metadata_key  (str, required)
-        #     metadata_bucket (str, optional)
-        #     output_bucket   (str, optional)
-        # Any unknown field — including ``type``/``metadata``/``output_key`` —
-        # triggers a 422 validation error before generation begins.
+        # 2. Confirm at least one source document is attached.
         resources = metadata_dict.get("resources") or []
         if not resources:
             # The save step always writes at least one resource; if we get
@@ -284,13 +256,179 @@ class QuestionBankAIService:
                 ),
             )
 
-        bucket = settings.AWS_S3_BUCKET or ""
+        # 3. Generate.
+        #
+        # Default: in-process via :mod:`AI.question_bank.generator` (no
+        # external dependency). Microservice-ready seam: when
+        # QUESTION_BANK_AI_SERVICE_URL (or LESSON_PLAN_AI_SERVICE_URL) is
+        # set, generation is offloaded over HTTP to a remote copy of this
+        # package. Both paths return the same flat output payload, which is
+        # also written to ``output/question_bank.json`` in S3.
+        ai_url = ai_settings.question_bank_service_url
+        if ai_url:
+            payload = await self._generate_via_http(
+                ai_url=ai_url, scope=scope, resources=resources, user=user
+            )
+        else:
+            payload = await self._generate_in_process(
+                scope=scope,
+                metadata_dict=metadata_dict,
+                resources=resources,
+                user=user,
+            )
+
+        result = self._parse_output_payload(
+            payload, identity, scope, meta_dict=metadata_dict
+        )
+
+        # 5. Register this generation in My Files (best-effort).
+        if db is not None:
+            try:
+                await self._register_in_my_files(
+                    db=db,
+                    user=user,
+                    metadata=result.metadata,
+                    output_key=scope.output_key,
+                    payload=payload,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "My Files registration failed scope=%s: %s",
+                    scope.base_prefix,
+                    exc,
+                )
+
+        return result
+
+    # ── Generation paths ──────────────────────────────────────────────
+    async def _generate_in_process(
+        self,
+        *,
+        scope: QuestionBankScope,
+        metadata_dict: dict,
+        resources: List[str],
+        user: UserContext,
+    ) -> dict:
+        """Generate the question bank locally and persist it to S3.
+
+        Reads the first uploaded PDF from storage, runs the OpenAI call on
+        a worker thread (the OpenAI SDK call is blocking), writes the flat
+        output JSON to ``output/question_bank.json``, and returns it so the
+        caller can reuse it inline (no extra S3 read).
+        """
+        if not ai_settings.question_bank_api_key:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "OPENAI_API_KEY (or QUESTION_BANK_OPENAI_API_KEY) is not "
+                    "configured. Set it in the backend environment to enable "
+                    "Question Bank generation."
+                ),
+            )
+
+        try:
+            pdf_bytes = await question_bank_s3.read_object(resources[0])
+        except FileNotFoundError:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "The uploaded source document is missing from storage. "
+                    "Re-upload the chapter PDF and try again."
+                ),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception(
+                "QB read source failed scope=%s key=%s: %s",
+                scope.base_prefix,
+                resources[0],
+                exc,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Could not read the uploaded document.",
+            )
+
+        source = {"pdf_key": resources[0], "metadata_key": scope.metadata_key}
+        try:
+            payload = await asyncio.to_thread(
+                generate_question_bank,
+                metadata_dict=metadata_dict,
+                pdf_bytes=pdf_bytes,
+                source=source,
+            )
+        except HTTPException:
+            raise
+        except RuntimeError as exc:
+            # Empty/invalid model output, or OpenAI misconfiguration.
+            logger.exception(
+                "In-process QB generation failed scope=%s: %s",
+                scope.base_prefix,
+                exc,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Question generation failed: {exc}",
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception(
+                "In-process QB generation crashed scope=%s: %s",
+                scope.base_prefix,
+                exc,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Question generation failed. Please try again.",
+            )
+
+        # Persist the output at the canonical key so GET /output and the
+        # My Files entry resolve to the same artifact the microservice wrote.
+        try:
+            await question_bank_s3.write_output(scope=scope, payload=payload)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception(
+                "S3 output write failed after in-process generation: %s", exc
+            )
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Could not save the generated question bank.",
+            )
+
+        logger.info(
+            "Question bank GENERATE in-process user=%s scope=%s questions=%d",
+            user.id,
+            scope.base_prefix,
+            len(payload.get("questions") or []),
+        )
+        return payload
+
+    async def _generate_via_http(
+        self,
+        *,
+        ai_url: str,
+        scope: QuestionBankScope,
+        resources: List[str],
+        user: UserContext,
+    ) -> dict:
+        """Offload generation to a remote copy of this package over HTTP.
+
+        Kept as the microservice-ready seam: set
+        ``QUESTION_BANK_AI_SERVICE_URL`` (or ``LESSON_PLAN_AI_SERVICE_URL``)
+        to route generation to a standalone service instead of running it
+        in-process. The remote service reads the PDF + metadata from S3,
+        writes ``output/question_bank.json`` back, and returns it inline.
+        """
+        ai_timeout = ai_settings.question_bank_service_timeout
+
+        # The remote service has a strict request schema
+        # (additionalProperties=false): pdf_bucket, pdf_key, metadata_key
+        # required; metadata_bucket, output_bucket optional.
+        bucket = ai_settings.s3_bucket or ""
         if not bucket:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=(
-                    "AWS_S3_BUCKET is not configured. The AI microservice needs "
-                    "an S3 bucket to read the uploaded PDF and metadata."
+                    "AWS_S3_BUCKET is not configured. The remote AI service "
+                    "needs an S3 bucket to read the uploaded PDF and metadata."
                 ),
             )
 
@@ -324,8 +462,6 @@ class QuestionBankAIService:
                 ai_payload,
                 body_preview,
             )
-            # Surface the microservice's validation message verbatim so the
-            # frontend can show the teacher exactly what was rejected.
             detail = (
                 f"External AI service returned {exc.response.status_code}. "
                 f"{body_preview}"
@@ -350,15 +486,18 @@ class QuestionBankAIService:
                 detail=f"Could not reach external AI service: {exc}",
             )
 
-        # 4. The microservice returns the full question bank inline AND
-        # writes it to S3. Prefer the inline payload (one less S3 round
-        # trip) and fall back to reading from S3 if the response omits it.
+        # Prefer the inline payload (one less S3 round trip); fall back to
+        # reading the file the remote service wrote.
         try:
             response_json = response.json()
         except Exception:  # noqa: BLE001
             response_json = {}
 
-        inline_qb = response_json.get("question_bank") if isinstance(response_json, dict) else None
+        inline_qb = (
+            response_json.get("question_bank")
+            if isinstance(response_json, dict)
+            else None
+        )
         if inline_qb:
             logger.info(
                 "Question bank GENERATE inline payload user=%s scope=%s output_key=%s",
@@ -366,47 +505,24 @@ class QuestionBankAIService:
                 scope.base_prefix,
                 response_json.get("output_key") or scope.output_key,
             )
-            payload = inline_qb
-        else:
-            try:
-                payload = await question_bank_s3.read_output(scope=scope)
-            except FileNotFoundError:
-                raise HTTPException(
-                    status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail=(
-                        "Generation finished but the question bank output is missing. "
-                        "Please try again."
-                    ),
-                )
-            except Exception as exc:  # noqa: BLE001
-                logger.exception("S3 output read failed after generation: %s", exc)
-                raise HTTPException(
-                    status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail="Could not read the generated question bank.",
-                )
+            return inline_qb
 
-        result = self._parse_output_payload(
-            payload, identity, scope, meta_dict=metadata_dict
-        )
-
-        # 5. Register this generation in My Files (best-effort).
-        if db is not None:
-            try:
-                await self._register_in_my_files(
-                    db=db,
-                    user=user,
-                    metadata=result.metadata,
-                    output_key=scope.output_key,
-                    payload=payload,
-                )
-            except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "My Files registration failed scope=%s: %s",
-                    scope.base_prefix,
-                    exc,
-                )
-
-        return result
+        try:
+            return await question_bank_s3.read_output(scope=scope)
+        except FileNotFoundError:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=(
+                    "Generation finished but the question bank output is missing. "
+                    "Please try again."
+                ),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("S3 output read failed after generation: %s", exc)
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Could not read the generated question bank.",
+            )
 
     async def _register_in_my_files(
         self,

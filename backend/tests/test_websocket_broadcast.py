@@ -11,10 +11,6 @@ Three layers under test:
    delivered to a manager in pod B, proving the multi-instance design
    actually crosses processes (fakeredis emulates the same pub/sub
    protocol the real broker uses).
-
-The auth route guard is exercised with a smoke test that asserts the
-endpoint exists and rejects on a bad token (no full WS protocol drive —
-that requires a live ASGI server, beyond CI scope).
 """
 import asyncio
 import os
@@ -70,11 +66,11 @@ async def test_manager_first_and_last_signals():
 async def test_manager_broadcast_local_delivers_to_subscribers_only():
     m = ConnectionManager()
     a, b, c = _FakeWebSocket(), _FakeWebSocket(), _FakeWebSocket()
-    await m.connect(a, "bus:1:7")
-    await m.connect(b, "bus:1:7")
-    await m.connect(c, "bus:1:8")  # different channel
+    await m.connect(a, "ch:1:7")
+    await m.connect(b, "ch:1:7")
+    await m.connect(c, "ch:1:8")  # different channel
 
-    await m.broadcast_local("bus:1:7", {"lat": 1.0})
+    await m.broadcast_local("ch:1:7", {"lat": 1.0})
 
     assert a.received == [{"lat": 1.0}]
     assert b.received == [{"lat": 1.0}]
@@ -149,7 +145,7 @@ async def test_broadcaster_redis_fanout_crosses_pods():
     broadcaster_b._reader_task = asyncio.create_task(broadcaster_b._reader_loop())
 
     ws_on_pod_b = _FakeWebSocket()
-    channel = "bus:42:99"
+    channel = "ch:42:99"
 
     # Pod B registers a local socket and subscribes upstream.
     first = await manager_b.connect(ws_on_pod_b, channel)
@@ -169,24 +165,3 @@ async def test_broadcaster_redis_fanout_crosses_pods():
 
     await broadcaster_a.stop()
     await broadcaster_b.stop()
-
-
-# ─── Endpoint smoke test ───────────────────────────────────────────────────
-
-
-def test_ws_route_registered_and_rejects_missing_token():
-    """
-    Smoke: the route must exist (it didn't, pre-fix) and must require a
-    token query param. Full WS-handshake testing requires a live server;
-    here we just check FastAPI's routing table + OpenAPI surface.
-    """
-    from app.main import app
-
-    ws_routes = [
-        r for r in app.routes
-        if getattr(r, "path", "") == "/api/transport/ws/transport/{bus_id}"
-    ]
-    assert ws_routes, (
-        "WebSocket route /api/transport/ws/transport/{bus_id} not registered — "
-        "the frontend's bus tracking would fail to connect."
-    )

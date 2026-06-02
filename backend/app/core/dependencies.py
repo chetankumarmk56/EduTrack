@@ -208,7 +208,7 @@ require_institution_admin = require_admin
 require_teacher = RoleChecker(["super_admin", "admin", "teacher"])
 require_parent = RoleChecker(["super_admin", "admin", "parent"])
 require_student = RoleChecker(["super_admin", "admin", "student"])
-require_payment_admin = RoleChecker(["super_admin", "admin", "finance"])
+require_payment_admin = RoleChecker(["super_admin", "admin"])
 
 async def require_teacher_strict(user: UserContext = Depends(get_current_active_user)) -> UserContext:
     if user.role != "teacher":
@@ -298,7 +298,7 @@ async def require_cron_or_admin(
 
     * ``X-Cron-Secret`` header matching ``settings.CRON_SECRET`` (preferred
       for unattended schedulers — no JWT lifecycle to manage), OR
-    * a JWT for an admin / super-admin / finance user (interactive
+    * a JWT for an admin / super-admin user (interactive
       operator running the dispatch ad-hoc from a browser).
 
     Returns the caller's identity tag for logging. Raises 401/403 on
@@ -330,7 +330,7 @@ async def require_cron_or_admin(
         try:
             payload = decode_access_token(token)
             role = payload.get("role")
-            if role in ("super_admin", "admin", "finance"):
+            if role in ("super_admin", "admin"):
                 return f"jwt:{payload.get('sub')}:{role}"
         except (jwt.ExpiredSignatureError, jwt.JWTError, ValueError):
             pass

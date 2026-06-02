@@ -22,7 +22,6 @@ const Teachers = lazy(() => import('@/features/directory/pages/Teachers'));
 const Profile = lazy(() => import('@/features/account/pages/Profile'));
 const Login = lazy(() => import('@/features/auth/pages/Login'));
 const ParentManualPayment = lazy(() => import('@/features/manual-payments/pages/ParentManualPayment'));
-const BusTracking = lazy(() => import('@/features/transport/pages/BusTracking'));
 const ParentAnnouncements = lazy(() => import('@/features/announcements/pages/ParentAnnouncements'));
 const ParentTimetable = lazy(() => import('@/features/timetable/pages/ParentTimetable'));
 
@@ -40,7 +39,6 @@ const MyFiles = lazy(() => import('@/features/my-files/pages/MyFiles'));
 const TeacherProfile = lazy(() => import('@/features/account/pages/TeacherProfile'));
 const TeacherEvents = lazy(() => import('@/features/events/pages/TeacherEvents'));
 const ContactList = lazy(() => import('@/features/contacts/pages/ContactList'));
-const TeacherTransport = lazy(() => import('@/features/transport/pages/TeacherTransport'));
 const TeacherAnnouncements = lazy(() => import('@/features/announcements/pages/TeacherAnnouncements'));
 const TeacherTimetable = lazy(() => import('@/features/timetable/pages/TeacherTimetable'));
 const TeacherAttendanceLeave = lazy(() => import('@/features/teacher-attendance/pages/TeacherAttendanceLeave'));
@@ -53,7 +51,6 @@ const TeacherDirectory = lazy(() => import('@/features/directory/pages/TeacherDi
 const AdminEvents = lazy(() => import('@/features/events/pages/AdminEvents'));
 const AdminClasses = lazy(() => import('@/features/academics/pages/AdminClasses'));
 const AdminTimetable = lazy(() => import('@/features/timetable/pages/AdminTimetable'));
-const AdminTransport = lazy(() => import('@/features/transport/pages/AdminTransport'));
 const FinanceDashboard = lazy(() => import('@/features/finance/pages/FinanceDashboard'));
 const AdminManualPayments = lazy(() => import('@/features/manual-payments/pages/AdminManualPayments'));
 const AdminProfile = lazy(() => import('@/features/account/pages/AdminProfile'));
@@ -63,6 +60,7 @@ const TeacherAttendanceAdmin = lazy(() => import('@/features/teacher-attendance/
 const SuperAdminLayout = lazy(() => import('@/shared/components/layout/SuperAdminLayout'));
 const SuperAdminLogin = lazy(() => import('@/features/auth/pages/SuperAdminLogin'));
 const SuperAdminDashboard = lazy(() => import('@/features/super-admin/pages/SuperAdminDashboard'));
+const SchoolsOverview = lazy(() => import('@/features/super-admin/pages/SchoolsOverview'));
 const SuperAdminCredentials = lazy(() => import('@/features/super-admin/pages/SuperAdminCredentials'));
 const SuperAdminProfile = lazy(() => import('@/features/account/pages/SuperAdminProfile'));
 
@@ -132,7 +130,6 @@ function App() {
                   still resolve to the current UPI flow. */}
               <Route path="payments" element={<Navigate to="/parent/fee-pay" replace />} />
               <Route path="fee-pay" element={<ParentManualPayment />} />
-              <Route path="bus-tracking" element={<BusTracking />} />
               <Route path="announcements" element={<ParentAnnouncements />} />
               <Route path="timetable" element={<ParentTimetable />} />
               <Route path="profile" element={<Profile />} />
@@ -156,7 +153,6 @@ function App() {
               <Route path="profile" element={<TeacherProfile />} />
               <Route path="events" element={<TeacherEvents />} />
               <Route path="contacts" element={<ContactList />} />
-              <Route path="transport" element={<TeacherTransport />} />
               <Route path="announcements" element={<TeacherAnnouncements />} />
               <Route path="timetable" element={<TeacherTimetable />} />
               <Route path="my-attendance" element={<TeacherAttendanceLeave />} />
@@ -164,7 +160,7 @@ function App() {
 
             <Route path="/admin-login" element={<GuestRoute><AdminLogin /></GuestRoute>} />
             <Route path="/admin" element={
-              <ProtectedRoute allowedRoles={['admin', 'finance', 'super_admin']}>
+              <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
                 <AdminLayout />
               </ProtectedRoute>
             }>
@@ -174,7 +170,6 @@ function App() {
               <Route path="timetable" element={<AdminTimetable />} />
               <Route path="teachers" element={<TeacherDirectory />} />
               <Route path="events" element={<AdminEvents />} />
-              <Route path="transport" element={<AdminTransport />} />
               <Route path="finance" element={<FinanceDashboard />} />
               <Route path="manual-payments" element={<AdminManualPayments />} />
               <Route path="teacher-attendance" element={<TeacherAttendanceAdmin />} />
@@ -190,6 +185,7 @@ function App() {
             }>
               <Route index element={<Navigate to="/superadmin/dashboard" replace />} />
               <Route path="dashboard" element={<SuperAdminDashboard />} />
+              <Route path="schools-overview" element={<SchoolsOverview />} />
               <Route path="admins" element={<SuperAdminCredentials />} />
               <Route path="profile" element={<SuperAdminProfile />} />
             </Route>

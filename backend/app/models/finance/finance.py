@@ -71,7 +71,7 @@ class PaymentAllocation(Base, TimestampMixin):
 
     id = Column(Integer, primary_key=True, index=True)
     payment_id = Column(Integer, ForeignKey("payments.id"), index=True)
-    fee_type = Column(String) # TUITION, SPORTS, TRANSPORT
+    fee_type = Column(String) # TUITION, SPORTS
     allocated_amount = Column(Float)
 
     institution_id = Column(Integer, ForeignKey("institutions.id"), index=True)

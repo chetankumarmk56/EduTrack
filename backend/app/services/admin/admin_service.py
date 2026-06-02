@@ -48,11 +48,6 @@ _INSTITUTION_CASCADE = [
     "DELETE FROM announcement_reads WHERE announcement_id IN (SELECT id FROM announcements WHERE institution_id = :id)",
     "DELETE FROM announcements WHERE institution_id = :id",
     "DELETE FROM events WHERE institution_id = :id",
-    # Transport
-    "DELETE FROM transport_locations WHERE institution_id = :id",
-    "DELETE FROM transport_assignments WHERE institution_id = :id",
-    "DELETE FROM transport_stops WHERE institution_id = :id",
-    "DELETE FROM transport_routes WHERE institution_id = :id",
     # Uploaded files
     "DELETE FROM uploaded_files WHERE institution_id = :id",
     # Core directory (students before parents because students.parent_id → parents.id)

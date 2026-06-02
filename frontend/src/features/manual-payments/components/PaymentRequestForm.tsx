@@ -16,7 +16,7 @@ interface Props {
   onSubmit: (s: ParentFormState) => Promise<void>;
 }
 
-const FEE_TYPES = ['TUITION', 'TRANSPORT', 'SPORTS'] as const;
+const FEE_TYPES = ['TUITION', 'SPORTS'] as const;
 
 const initialState = (parentName: string, studentId: number | null): ParentFormState => ({
   student_id: studentId,

@@ -55,7 +55,6 @@ class SchoolClassBase(BaseModel):
     display_name: Optional[str] = None
     room_number: Optional[str] = None
     tuition_fee: float = 0.0
-    transport_fee: float = 0.0
     other_fee: float = 0.0
     total_fee: float = 0.0
     fee_due_date: Optional[date] = None
@@ -70,7 +69,6 @@ class SchoolClassUpdate(BaseModel):
     grade_id: Optional[int] = None
     section_id: Optional[int] = None
     tuition_fee: Optional[float] = None
-    transport_fee: Optional[float] = None
     other_fee: Optional[float] = None
     fee_due_date: Optional[date] = None
 

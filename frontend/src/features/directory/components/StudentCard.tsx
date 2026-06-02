@@ -93,7 +93,6 @@ export default function StudentCard({ student: s, viewMode, onEdit, onDelete, de
             <div>
               <div className="flex items-center gap-2 flex-wrap mb-1">
                 <span className="text-[10px] font-black bg-brand-indigo/80 text-white px-2 py-0.5 rounded-md">#{s.roll_number}</span>
-                <span className="text-[10px] font-black bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-md border border-emerald-500/20">Enrolled</span>
               </div>
               <h4 className="font-black text-lg tracking-tight group-hover:text-brand-indigo transition-colors uppercase leading-tight">
                 {s.name}

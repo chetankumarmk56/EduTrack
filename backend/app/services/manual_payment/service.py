@@ -93,11 +93,11 @@ class ManualPaymentService:
     ) -> None:
         """
         Same access model as `ensure_student_access` in the existing finance
-        router — admins/finance bypass, parents must be linked to the student,
+        router — admins bypass, parents must be linked to the student,
         students may submit for themselves, family-portal accounts (no Parent
         record) are accepted when the user_id == student.user_id.
         """
-        if role in ("super_admin", "admin", "finance"):
+        if role in ("super_admin", "admin"):
             return
 
         if role == "student" and student.user_id == user_id:
@@ -484,10 +484,10 @@ class ManualPaymentService:
         actor_role: str,
         actor_name: str,
     ) -> ManualPaymentRequest:
-        if actor_role not in ("super_admin", "admin", "finance"):
+        if actor_role not in ("super_admin", "admin"):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only finance/admin users can review manual payments.",
+                detail="Only admin users can review manual payments.",
             )
 
         req = await self.get_request(
@@ -722,10 +722,10 @@ class ManualPaymentService:
         actor_role: str,
         actor_name: str,
     ) -> ManualPaymentRequest:
-        if actor_role not in ("super_admin", "admin", "finance"):
+        if actor_role not in ("super_admin", "admin"):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only finance/admin users can add internal notes.",
+                detail="Only admin users can add internal notes.",
             )
         req = await self.get_request(
             db, institution_id=institution_id, request_id=request_id,

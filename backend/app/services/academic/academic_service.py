@@ -150,7 +150,7 @@ class AcademicService:
             for sc in school_classes:
                 if 'tuition_fee' in update_data:
                     sc.tuition_fee = update_data['tuition_fee']
-                    sc.total_fee = sc.tuition_fee + (sc.transport_fee or 0.0) + (sc.other_fee or 0.0)
+                    sc.total_fee = sc.tuition_fee + (sc.other_fee or 0.0)
                 if 'fee_due_date' in update_data:
                     sc.fee_due_date = update_data['fee_due_date']
 
@@ -389,7 +389,6 @@ class AcademicService:
             institution_id=institution_id,
             display_name=f"{db_grade.level}-{db_section.name}",
             tuition_fee=db_grade.tuition_fee,
-            transport_fee=0.0,
             other_fee=0.0,
             total_fee=db_grade.tuition_fee,
             fee_due_date=db_grade.fee_due_date
@@ -487,7 +486,6 @@ class AcademicService:
                 institution_id=institution_id,
                 display_name=f"{db_grade.level}-{name}",
                 tuition_fee=db_grade.tuition_fee,
-                transport_fee=0.0,
                 other_fee=0.0,
                 total_fee=db_grade.tuition_fee,
                 fee_due_date=db_grade.fee_due_date,
@@ -635,7 +633,7 @@ class AcademicService:
             raise Exception("Class with this Grade and Section already exists")
 
         # Auto-calculate total_fee
-        total_fee = (class_in.tuition_fee or 0.0) + (class_in.transport_fee or 0.0) + (class_in.other_fee or 0.0)
+        total_fee = (class_in.tuition_fee or 0.0) + (class_in.other_fee or 0.0)
         
         db_class = SchoolClass(
             **class_in.model_dump(exclude={"total_fee"}), 
@@ -662,13 +660,13 @@ class AcademicService:
 
         update_data = class_in.model_dump(exclude_unset=True)
         fee_fields_changed = any(
-            k in update_data for k in ("tuition_fee", "transport_fee", "other_fee", "fee_due_date")
+            k in update_data for k in ("tuition_fee", "other_fee", "fee_due_date")
         )
         for k, v in update_data.items():
             setattr(db_class, k, v)
 
         # Recalculate total_fee
-        db_class.total_fee = (db_class.tuition_fee or 0.0) + (db_class.transport_fee or 0.0) + (db_class.other_fee or 0.0)
+        db_class.total_fee = (db_class.tuition_fee or 0.0) + (db_class.other_fee or 0.0)
 
         if fee_fields_changed:
             from datetime import date as date_type
@@ -686,7 +684,7 @@ class AcademicService:
 
             for sf in existing_fees:
                 existing_student_ids.add(sf.student_id)
-                if "tuition_fee" in update_data or "transport_fee" in update_data or "other_fee" in update_data:
+                if "tuition_fee" in update_data or "other_fee" in update_data:
                     sf.total_amount = new_fee
                     sf.due_amount = max(0.0, sf.total_amount - sf.amount_paid)
                 if "fee_due_date" in update_data and new_due_date:
@@ -698,7 +696,7 @@ class AcademicService:
                 else:
                     sf.status = StudentFeeStatus.UNPAID
 
-            if new_fee > 0 and ("tuition_fee" in update_data or "transport_fee" in update_data or "other_fee" in update_data):
+            if new_fee > 0 and ("tuition_fee" in update_data or "other_fee" in update_data):
                 all_res = await db.execute(
                     select(_Student).where(
                         _Student.school_class_id == db_class.id,

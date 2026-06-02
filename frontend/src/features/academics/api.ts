@@ -25,7 +25,6 @@ export interface SchoolClassUpdate {
   display_name?: string;
   room_number?: string;
   tuition_fee?: number;
-  transport_fee?: number;
   other_fee?: number;
   fee_due_date?: string;
 }

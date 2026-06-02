@@ -21,7 +21,7 @@ class ManualPaymentSubmitRequest(BaseModel):
     """
     student_id: int
     parent_name: str = Field(..., min_length=1, max_length=200)
-    fee_type: Literal["TUITION", "SPORTS", "TRANSPORT"] = "TUITION"
+    fee_type: Literal["TUITION", "SPORTS"] = "TUITION"
     installment_label: Optional[str] = Field(default=None, max_length=120)
     amount: float = Field(..., gt=0, le=10_000_000)
     transaction_reference: str = Field(..., min_length=4, max_length=120)

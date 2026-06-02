@@ -74,7 +74,6 @@ class SchoolClass(Base, TimestampMixin):
 
     # Fee Structure per Class
     tuition_fee = Column(Float, nullable=False, default=0.0)
-    transport_fee = Column(Float, default=0.0)
     other_fee = Column(Float, default=0.0)
     total_fee = Column(Float, default=0.0)
     fee_due_date = Column(Date, nullable=True)

@@ -5,7 +5,7 @@ from typing import List, Optional
 from app.core.database import get_db
 from app.core.dependencies import require_super_admin, UserContext
 from app.schemas import admin as schemas
-from app.services.admin import admin_service
+from app.services.admin import admin_service, schools_overview_service
 
 router = APIRouter(
     prefix="/api/admin",
@@ -150,6 +150,50 @@ async def restore_institution(
     if not inst:
         raise HTTPException(status_code=404, detail="Institution not found in trash")
     return await admin_service.serialize_institution(inst)
+
+# --- Schools Overview Routes ---
+
+@router.get("/schools-overview", response_model=schemas.SchoolsOverviewResponse)
+async def get_schools_overview(
+    skip: int = 0,
+    limit: int = 20,
+    search: Optional[str] = None,
+    status: Optional[str] = None,          # 'active' | 'inactive' | None
+    sort_by: str = "name",                 # name | code | total_students | total_teachers | created_at | status
+    sort_dir: str = "asc",                 # asc | desc
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Paginated grid of all schools with DB-aggregated student / teacher counts,
+    plus the platform-wide summary block for the dashboard cards. Super-Admin
+    only (enforced by the router-level require_super_admin dependency).
+    """
+    # Clamp pagination to sane bounds so a client can't request an unbounded page.
+    limit = max(1, min(limit, 100))
+    skip = max(0, skip)
+
+    page = await schools_overview_service.get_overview(
+        db,
+        skip=skip,
+        limit=limit,
+        search=search,
+        status=status,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+    )
+    summary = await schools_overview_service.get_summary(db)
+    return {**page, "summary": summary}
+
+@router.get("/schools-overview/{inst_id}", response_model=schemas.SchoolDetailResponse)
+async def get_school_detail(
+    inst_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Expanded profile (counts + admin contacts) for the View Details drawer."""
+    detail = await schools_overview_service.get_detail(db, inst_id)
+    if not detail:
+        raise HTTPException(status_code=404, detail="School not found")
+    return detail
 
 # --- Admin User Routes ---
 

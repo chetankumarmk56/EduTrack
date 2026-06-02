@@ -5,8 +5,8 @@ Two responsibilities split across two classes:
 
 * ``ConnectionManager`` keeps per-process state: which sockets on THIS pod
   are subscribed to which channel. Channel names are tenant-scoped
-  (``bus:{institution_id}:{bus_id}``) so a leak between schools is
-  impossible.
+  (e.g. ``{resource}:{institution_id}:{resource_id}``) so a leak between
+  schools is impossible.
 * ``RedisBroadcaster`` ferries messages between pods via Redis pub/sub.
   When REDIS_URL is set, a publish in pod A is delivered to live sockets
   in pod B. When REDIS_URL is unset (single-process dev), publishes are

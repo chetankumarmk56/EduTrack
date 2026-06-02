@@ -45,8 +45,8 @@ export interface AdminCreate {
   name: string;
   email: string;
   password: string;
-  // Backend defaults to 'admin' but the create endpoint accepts an
-  // override (e.g. 'finance') so we expose it as optional here.
+  // Backend assigns the 'admin' role on creation; exposed as optional
+  // for forward compatibility with any future role overrides.
   role?: string;
 }
 
@@ -54,6 +54,71 @@ export interface AdminUpdate {
   name?: string;
   email?: string;
   password?: string;
+}
+
+// --- Schools Overview ---
+
+/** One row in the Schools Overview data grid. */
+export interface SchoolOverviewRow {
+  id: number;
+  name: string;
+  /** Human-facing school code (the institution slug). */
+  code: string | null;
+  principal_name: string | null;
+  total_students: number;
+  total_teachers: number;
+  is_active: boolean;
+  created_at: string | null;
+}
+
+/** Platform-wide rollup powering the summary cards. */
+export interface SchoolsOverviewSummary {
+  total_schools: number;
+  total_students: number;
+  total_teachers: number;
+  active_schools: number;
+  inactive_schools: number;
+}
+
+export interface SchoolsOverviewResponse {
+  items: SchoolOverviewRow[];
+  summary: SchoolsOverviewSummary;
+  total: number;
+  skip: number;
+  limit: number;
+}
+
+export interface SchoolAdminInfo {
+  id: number;
+  name: string;
+  email: string | null;
+  is_active: boolean;
+}
+
+export interface SchoolDetailResponse {
+  id: number;
+  name: string;
+  code: string | null;
+  is_active: boolean;
+  created_at: string | null;
+  logo_url: string | null;
+  total_students: number;
+  total_teachers: number;
+  admins: SchoolAdminInfo[];
+}
+
+export type SchoolStatusFilter = 'all' | 'active' | 'inactive';
+export type SchoolSortBy =
+  | 'name' | 'code' | 'total_students' | 'total_teachers' | 'created_at' | 'status';
+export type SortDir = 'asc' | 'desc';
+
+export interface SchoolsOverviewParams {
+  skip?: number;
+  limit?: number;
+  search?: string;
+  status?: SchoolStatusFilter;
+  sortBy?: SchoolSortBy;
+  sortDir?: SortDir;
 }
 
 export const superAdminApi = {
@@ -133,5 +198,22 @@ export const superAdminApi = {
 
   deleteAdmin: async (id: number) => {
     await client.delete(`admin/admins/${id}`);
-  }
+  },
+
+  // --- Schools Overview ---
+
+  getSchoolsOverview: async (params: SchoolsOverviewParams = {}) => {
+    const { skip = 0, limit = 20, search, status, sortBy = 'name', sortDir = 'asc' } = params;
+    const query: Record<string, string | number> = { skip, limit, sort_by: sortBy, sort_dir: sortDir };
+    if (search && search.trim()) query.search = search.trim();
+    // 'all' means "no status filter" — only forward an explicit active/inactive.
+    if (status && status !== 'all') query.status = status;
+    const response = await client.get<SchoolsOverviewResponse>('admin/schools-overview', { params: query });
+    return response.data;
+  },
+
+  getSchoolDetail: async (id: number) => {
+    const response = await client.get<SchoolDetailResponse>(`admin/schools-overview/${id}`);
+    return response.data;
+  },
 };

@@ -140,7 +140,7 @@ export default function Landing() {
 
   const portalCards = [
     { 
-      title: "Family Hub", 
+      title: "Parent",
       desc: "Deep insights into academic growth and behavior for parents and students.", 
       icon: Target, 
       gradient: "from-indigo-600 to-violet-700",
@@ -150,7 +150,7 @@ export default function Landing() {
       delay: 0.6 
     },
     { 
-      title: "Faculty Forge", 
+      title: "Teacher",
       desc: "Empowering educators with AI-driven lesson planning and advanced marking.", 
       icon: BookOpen, 
       gradient: "from-emerald-500 to-teal-700",
@@ -160,7 +160,7 @@ export default function Landing() {
       delay: 0.7 
     },
     { 
-      title: "Core Admin", 
+      title: "Admin", 
       desc: "Enterprise-grade oversight of institutional operations and security.", 
       icon: ShieldAlert, 
       gradient: "from-amber-500 to-orange-700",

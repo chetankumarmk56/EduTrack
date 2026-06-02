@@ -4,17 +4,18 @@ Three primary surfaces drive the current Lesson Plan workflow:
 
 * ``POST /api/lesson-plan/upload``     — **Save** uploaded files + metadata
   to S3.
-* ``POST /api/lesson-plan/generate``   — load metadata from S3, call the
-  external AI microservice, and return the generated lesson plan.
+* ``POST /api/lesson-plan/generate``   — load metadata from S3, generate the
+  lesson plan (in-process via :mod:`AI.lesson_plan.generator`), and return it.
 * ``GET  /api/lesson-plan/output``     — read ``output/lesson_plan.json``
-  that the external microservice wrote to S3 (use for standalone viewing).
+  from S3 (use for standalone viewing).
 
 Supporting endpoints used by the dashboard:
 
 * ``GET    /api/lesson-plan/chapters`` — list every chapter saved for a teacher.
 * ``DELETE /api/lesson-plan/chapter``  — delete every S3 object for a chapter.
 
-This backend NEVER generates lesson plans locally.
+Generation runs in-process by default; set ``LESSON_PLAN_AI_SERVICE_URL`` to
+offload it to a remote copy of the AI package instead.
 """
 from __future__ import annotations
 
@@ -22,14 +23,14 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from typing import List, Optional
 
 from app.core.dependencies import require_faculty, UserContext
-from app.schemas.lesson_plan import (
+from AI.lesson_plan.schemas import (
     ChapterIdentity,
     ChapterListResponse,
     DeleteChapterResponse,
     LessonPlanOutputResponse,
     UploadResponse,
 )
-from app.services.lesson_plan import lesson_plan_ai_service
+from AI.lesson_plan.service import lesson_plan_ai_service
 
 router = APIRouter(prefix="/api/lesson-plan", tags=["Lesson Plan"])
 
@@ -103,16 +104,19 @@ async def generate_lesson_plan(
     identity: ChapterIdentity,
     user: UserContext = Depends(require_faculty),
 ) -> LessonPlanOutputResponse:
-    """Load ``metadata.json`` from S3, dispatch to the external AI
-    microservice, and return the generated lesson plan once ready.
+    """Load ``metadata.json`` from S3, generate the lesson plan, and return
+    it once ready.
 
-    The AI microservice reads the uploaded files from S3, generates the
-    plan, saves ``output/lesson_plan.json`` to S3, and returns only when
-    done. This endpoint then reads that file and returns it to the client.
+    Generation runs in-process: the service reads the uploaded files from
+    S3, extracts their text, calls OpenAI, and writes
+    ``output/lesson_plan.json`` back to S3 before returning. When
+    ``LESSON_PLAN_AI_SERVICE_URL`` is set, generation is offloaded to a
+    remote copy of the AI package instead.
 
-    503 if ``LESSON_PLAN_AI_SERVICE_URL`` is not configured.
+    503 if ``OPENAI_API_KEY`` is not configured.
     404 if metadata has not been uploaded yet.
-    502 if the AI service call fails.
+    422 if no readable text could be extracted from the uploads.
+    502 if generation fails.
     """
     return await lesson_plan_ai_service.generate(user=user, identity=identity)
 

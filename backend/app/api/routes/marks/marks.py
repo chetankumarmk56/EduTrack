@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api/marks", tags=["Assessment & Marks"])
 
 async def _check_student_access(user: UserContext, student_id: int, db: AsyncSession) -> None:
     """Raise 403 unless the caller may view this student's academic data."""
-    if user.role in ("super_admin", "admin", "teacher", "finance"):
+    if user.role in ("super_admin", "admin", "teacher"):
         return
     # Student viewing own record
     if user.role == "student":

@@ -1,6 +1,6 @@
 """S3 storage utility dedicated to the Question Bank feature.
 
-Mirrors :mod:`app.services.storage.lesson_plan_s3` but under a separate
+Mirrors :mod:`AI.lesson_plan.storage` but under a separate
 ``question-bank/`` root prefix. The underlying S3 backend + local-dev
 fallback are reused from the lesson-plan module — they are generic
 key-value adapters, not lesson-plan-specific.
@@ -20,7 +20,7 @@ from typing import Iterable, List
 
 from app.core.config import settings
 from app.core.logger import logger
-from app.services.storage.lesson_plan_s3 import (
+from AI.lesson_plan.storage import (
     KeyInfo,
     _LessonPlanLocalDevStore,
     _LessonPlanS3Backend,

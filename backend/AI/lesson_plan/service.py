@@ -1,27 +1,32 @@
 """Lesson Plan S3 orchestration service.
 
-This service is intentionally **storage + orchestration only**. No AI
-generation runs in this repo.
+Storage + orchestration. Generation runs **in-process** via
+:mod:`AI.lesson_plan.generator` (an optional remote offload is kept as a
+microservice-ready seam — see ``_generate_via_http``).
 
 * :py:meth:`upload_resources` — write uploaded files + ``metadata.json``
   to S3 under the canonical scope. Powers the **Save** button.
-* :py:meth:`generate` — load ``metadata.json`` from S3, dispatch to the
-  external AI microservice (async HTTP POST), then read and return the
-  ``output/lesson_plan.json`` the service wrote to S3.
+* :py:meth:`generate` — load ``metadata.json`` from S3, generate the plan
+  (in-process by default, or via the remote AI service when
+  ``LESSON_PLAN_AI_SERVICE_URL`` is set), write ``output/lesson_plan.json``
+  to S3, and return it.
 * :py:meth:`get_output` — read ``output/lesson_plan.json`` from S3
-  without calling the AI service. Used by the standalone result page.
+  without regenerating. Used by the standalone result page.
 """
 from __future__ import annotations
 
+import asyncio
 from typing import List, Tuple
 
 import httpx
 from fastapi import HTTPException, UploadFile, status
 
-from app.core.config import settings
 from app.core.dependencies import UserContext
 from app.core.logger import logger
-from app.schemas.lesson_plan import (
+from app.services.file_parsing import extract_text  # shared text extraction (host app)
+from AI.config import ai_settings
+from AI.lesson_plan.generator import generate_lesson_plan
+from AI.lesson_plan.schemas import (
     ChapterIdentity,
     ChapterListItem,
     GeneratedLessonPlan,
@@ -29,7 +34,7 @@ from app.schemas.lesson_plan import (
     LessonPlanOutputResponse,
     UploadResponse,
 )
-from app.services.storage.lesson_plan_s3 import (
+from AI.lesson_plan.storage import (
     ChapterScope,
     lesson_plan_s3,
     unique_input_keys,
@@ -205,21 +210,172 @@ class LessonPlanAIService:
                 detail="Could not read the chapter details.",
             )
 
-        # 2. Call external AI microservice
-        ai_url = settings.LESSON_PLAN_AI_SERVICE_URL
-        if not ai_url:
+        # 2. Generate.
+        #
+        # Default: in-process via :mod:`AI.lesson_plan.generator` (no
+        # external dependency). Microservice-ready seam: when
+        # LESSON_PLAN_AI_SERVICE_URL is set, generation is offloaded over
+        # HTTP to a remote copy of this package. Both paths write
+        # ``output/lesson_plan.json`` to S3 and return its content.
+        ai_url = ai_settings.lesson_plan_service_url
+        if ai_url:
+            payload = await self._generate_via_http(
+                ai_url=ai_url, scope=scope, metadata_dict=metadata_dict, user=user
+            )
+        else:
+            payload = await self._generate_in_process(
+                scope=scope, metadata_dict=metadata_dict, user=user
+            )
+
+        # 3. Parse and return
+        return self._parse_output_payload(payload, identity, scope)
+
+    # ── Generation paths ──────────────────────────────────────────────
+    async def _generate_in_process(
+        self,
+        *,
+        scope: ChapterScope,
+        metadata_dict: dict,
+        user: UserContext,
+    ) -> dict:
+        """Generate the lesson plan locally and persist it to S3.
+
+        Reads every uploaded resource from storage, extracts plain text via
+        the shared parser, runs the OpenAI call on a worker thread (the SDK
+        call is blocking), writes ``output/lesson_plan.json``, and returns
+        the plan so the caller can reuse it without an extra S3 read.
+        """
+        if not ai_settings.lesson_plan_api_key:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=(
-                    "LESSON_PLAN_AI_SERVICE_URL is not configured. "
-                    "Set it in your environment to enable AI generation."
+                    "OPENAI_API_KEY (or LESSON_PLAN_OPENAI_API_KEY) is not "
+                    "configured. Set it in the backend environment to enable "
+                    "Lesson Plan generation."
                 ),
             )
 
+        resources = metadata_dict.get("resources") or []
+        if not resources:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "No source documents are attached to this chapter. "
+                    "Re-upload the chapter material and try again."
+                ),
+            )
+
+        # Read + extract text from every uploaded resource.
+        texts: List[str] = []
+        for key in resources:
+            try:
+                data = await lesson_plan_s3.read_object(key)
+            except FileNotFoundError:
+                logger.warning("LP source missing in storage key=%s", key)
+                continue
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("LP read source failed key=%s: %s", key, exc)
+                continue
+            try:
+                texts.append(extract_text(key, data))
+            except ValueError as exc:
+                # Unsupported type or empty extraction — skip this file.
+                logger.warning("LP extract_text skipped key=%s: %s", key, exc)
+
+        chapter_text = "\n\n".join(t for t in texts if t and t.strip())
+        if not chapter_text.strip():
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    "Could not extract any readable text from the uploaded "
+                    "files. Upload a text-based PDF, DOCX, or TXT."
+                ),
+            )
+
+        subject = (
+            metadata_dict.get("subject_label")
+            or metadata_dict.get("subject_id")
+            or "General"
+        )
+        academic_year = (
+            metadata_dict.get("grade_label")
+            or metadata_dict.get("section_label")
+            or "General"
+        )
+        num_classes = int(metadata_dict.get("number_of_classes") or 12)
+        additional_info = metadata_dict.get("additional_info") or ""
+
+        try:
+            payload = await asyncio.to_thread(
+                generate_lesson_plan,
+                subject=subject,
+                academic_year=academic_year,
+                num_classes=num_classes,
+                chapter_text=chapter_text,
+                additional_info=additional_info,
+            )
+        except HTTPException:
+            raise
+        except RuntimeError as exc:
+            logger.exception(
+                "In-process LP generation failed scope=%s: %s",
+                scope.base_prefix,
+                exc,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Lesson plan generation failed: {exc}",
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception(
+                "In-process LP generation crashed scope=%s: %s",
+                scope.base_prefix,
+                exc,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Lesson plan generation failed. Please try again.",
+            )
+
+        try:
+            await lesson_plan_s3.write_output(scope=scope, payload=payload)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception(
+                "S3 output write failed after in-process LP generation: %s", exc
+            )
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Could not save the generated lesson plan.",
+            )
+
+        logger.info(
+            "Lesson plan GENERATE in-process user=%s scope=%s classes=%d",
+            user.id,
+            scope.base_prefix,
+            len(payload.get("schedule") or []),
+        )
+        return payload
+
+    async def _generate_via_http(
+        self,
+        *,
+        ai_url: str,
+        scope: ChapterScope,
+        metadata_dict: dict,
+        user: UserContext,
+    ) -> dict:
+        """Offload generation to a remote copy of this package over HTTP.
+
+        Kept as the microservice-ready seam: set
+        ``LESSON_PLAN_AI_SERVICE_URL`` to route generation to a standalone
+        service. The remote service reads the uploaded files from S3, writes
+        ``output/lesson_plan.json`` back, and returns once done.
+        """
+        timeout = ai_settings.lesson_plan_service_timeout
         ai_payload = {
             **metadata_dict,
             "output_key": scope.output_key,
-            "bucket": settings.AWS_S3_BUCKET or "",
+            "bucket": ai_settings.s3_bucket or "",
         }
         logger.info(
             "Lesson plan GENERATE dispatch user=%s scope=%s ai_url=%s",
@@ -228,9 +384,7 @@ class LessonPlanAIService:
             ai_url,
         )
         try:
-            async with httpx.AsyncClient(
-                timeout=settings.LESSON_PLAN_AI_SERVICE_TIMEOUT
-            ) as client:
+            async with httpx.AsyncClient(timeout=timeout) as client:
                 response = await client.post(ai_url, json=ai_payload)
                 response.raise_for_status()
         except httpx.HTTPStatusError as exc:
@@ -251,8 +405,7 @@ class LessonPlanAIService:
             raise HTTPException(
                 status_code=status.HTTP_504_GATEWAY_TIMEOUT,
                 detail=(
-                    f"External AI service did not respond within "
-                    f"{settings.LESSON_PLAN_AI_SERVICE_TIMEOUT:.0f}s."
+                    f"External AI service did not respond within {timeout:.0f}s."
                 ),
             )
         except Exception as exc:  # noqa: BLE001
@@ -262,9 +415,9 @@ class LessonPlanAIService:
                 detail=f"Could not reach external AI service: {exc}",
             )
 
-        # 3. Read output/lesson_plan.json the AI service wrote to S3
+        # Read output/lesson_plan.json the remote service wrote to S3.
         try:
-            payload = await lesson_plan_s3.read_output(scope=scope)
+            return await lesson_plan_s3.read_output(scope=scope)
         except FileNotFoundError:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
@@ -279,9 +432,6 @@ class LessonPlanAIService:
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail="Could not read the generated lesson plan.",
             )
-
-        # 4. Parse and return
-        return self._parse_output_payload(payload, identity, scope)
 
     # ── Generate (read-only from S3) ──────────────────────────────────
     async def get_output(

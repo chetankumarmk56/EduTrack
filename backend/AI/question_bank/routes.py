@@ -10,12 +10,13 @@ Four surfaces live here:
 * ``POST /api/question-bank/export-pdf`` — render a question list to a
   PDF (exam paper or answer key).
 
-S3 + external AI microservice flow (mirrors Lesson Plan):
+S3 + in-process AI generation flow (mirrors Lesson Plan):
 
 * ``POST /api/question-bank/upload``   — save uploaded files + metadata
   JSON to S3 under ``question-bank/{scope}/``.
-* ``POST /api/question-bank/generate-s3`` — load metadata from S3, call
-  the external AI microservice, return ``output/question_bank.json``.
+* ``POST /api/question-bank/generate-s3`` — load metadata from S3, generate
+  the bank in-process (:mod:`AI.question_bank.generator`), and return
+  ``output/question_bank.json``.
 * ``GET  /api/question-bank/output``    — read the generated JSON
   directly from S3 without re-generating.
 * ``GET  /api/question-bank/chapters``  — list every question bank the
@@ -42,7 +43,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.dependencies import require_faculty, UserContext
 from app.core.logger import logger
-from app.schemas.question_bank import (
+from AI.question_bank.schemas import (
     DeleteQuestionBankResponse,
     DiagramUploadResponse,
     ExportPDFRequest,
@@ -55,10 +56,8 @@ from app.schemas.question_bank import (
     QuestionBankUploadResponse,
     SaveQuestionBankRequest,
 )
-from app.services.question_bank import (
-    question_bank_ai_service,
-    question_bank_service,
-)
+from AI.question_bank.legacy_service import question_bank_service
+from AI.question_bank.service import question_bank_ai_service
 
 router = APIRouter(prefix="/api/question-bank", tags=["Question Bank"])
 
@@ -129,10 +128,11 @@ async def export_pdf(
     )
 
 
-# ─── S3 + external AI microservice flow ──────────────────────────────────────
+# ─── S3 + in-process AI generation flow ──────────────────────────────────────
 # These endpoints mirror the Lesson Plan upload/generate/output flow. The
-# backend stores files + metadata in S3 and dispatches to the same external
-# microservice with ``type=question_bank``; no AI generation runs here.
+# backend stores files + metadata in S3 and generates the question bank
+# in-process via AI.question_bank.generator (or offloads to a remote copy of
+# the AI package when QUESTION_BANK_AI_SERVICE_URL is set).
 
 @router.post("/upload", response_model=QuestionBankUploadResponse)
 async def upload_question_bank_resources(
@@ -189,20 +189,22 @@ async def generate_question_bank_s3(
     db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(require_faculty),
 ) -> QuestionBankOutputResponse:
-    """Load ``metadata.json`` from S3, dispatch to the external AI
-    microservice, and return the generated question bank.
+    """Load ``metadata.json`` from S3, generate the question bank, and
+    return it.
 
-    The AI microservice reads the uploaded files from S3, generates the
-    question bank, saves ``output/question_bank.json`` to S3, and
-    returns only when done. This endpoint then reads that file and
-    returns it to the client.
+    Generation runs in-process: the service reads the uploaded PDF from
+    S3, calls OpenAI, and writes ``output/question_bank.json`` back to S3
+    before returning. When ``QUESTION_BANK_AI_SERVICE_URL`` (or
+    ``LESSON_PLAN_AI_SERVICE_URL``) is set, generation is offloaded to a
+    remote copy of the AI package instead.
 
     After a successful generation, a row is added to the teacher's
     My Files library so the output appears alongside their uploads.
 
-    503 if neither ``QUESTION_BANK_AI_SERVICE_URL`` nor ``LESSON_PLAN_AI_SERVICE_URL`` is configured.
+    503 if ``OPENAI_API_KEY`` is not configured.
     404 if metadata has not been uploaded yet.
-    502 if the AI service call fails.
+    409 if no source document is attached.
+    502 if generation fails.
     """
     return await question_bank_ai_service.generate(
         user=user, identity=identity, db=db

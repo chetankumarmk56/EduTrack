@@ -2,7 +2,7 @@
 
 Pipeline:
   1. Deterministic input prep (parse uploaded file → plain text).
-  2. Isolated LLM call via :mod:`app.services.llm.openai_provider`.
+  2. Isolated LLM call via :mod:`AI.question_bank.llm_provider`.
   3. Deterministic validation against :class:`Question` schema.
 
 The route layer stays thin; this service is the only place that knows about
@@ -18,14 +18,14 @@ from fastapi import UploadFile
 from pydantic import ValidationError
 
 from app.core.logger import logger
-from app.schemas.question_bank import (
+from AI.question_bank.schemas import (
     GenerateRequest,
     GenerateResponse,
     Question,
     QuestionSpec,
 )
-from app.services.file_parsing import extract_text
-from app.services.llm.openai_provider import openai_provider
+from app.services.file_parsing import extract_text  # shared text extraction (host app)
+from AI.question_bank.llm_provider import openai_provider
 
 _MAX_FILE_BYTES = 8 * 1024 * 1024  # 8 MB
 _DEFAULT_MARKS = {"mcq": 1, "short": 3, "long": 7}

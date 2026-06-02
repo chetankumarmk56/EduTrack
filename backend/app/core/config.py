@@ -34,24 +34,33 @@ class Settings(BaseSettings):
     JWT_SECRET: Optional[str] = None
     JWT_ALGORITHM: Optional[str] = None
     
-    # AI (Optional) — used by Question Bank only. Lesson plan generation
-    # lives in an external microservice; this codebase never calls it.
+    # AI — Question Bank + Lesson Plan generation. Both now run IN-PROCESS
+    # inside the ``backend/AI`` package; no external microservice is required.
     GOOGLE_API_KEY: Optional[str] = None
     OPENAI_API_KEY: Optional[str] = None
-    OPENAI_MODEL: str = "gpt-4o-mini"
+    OPENAI_MODEL: str = "gpt-4o-mini"  # legacy inline QB generator (topics + specs)
 
-    # External Lesson Plan AI microservice
-    # POST {LESSON_PLAN_AI_SERVICE_URL} receives the metadata JSON and
-    # S3 output key; the service writes output/lesson_plan.json to S3
-    # and returns only after the file is saved.
+    # Models used by the in-process AI generators (backend/AI). Override per
+    # deployment via env. The Question Bank generator sends the PDF to the
+    # OpenAI Responses API; the Lesson Plan generator sends extracted chapter
+    # text to Chat Completions.
+    QUESTION_BANK_OPENAI_MODEL: str = "gpt-4o"
+    LESSON_PLAN_OPENAI_MODEL: str = "gpt-5.5"
+
+    # Per-tool OpenAI key overrides. The two source microservices each ran
+    # with their own key, so the generators read a tool-specific key first
+    # and fall back to the shared OPENAI_API_KEY when it is unset.
+    QUESTION_BANK_OPENAI_API_KEY: Optional[str] = None
+    LESSON_PLAN_OPENAI_API_KEY: Optional[str] = None
+
+    # Optional external AI offload (microservice-ready seam). Leave UNSET to
+    # generate in-process (the default after integration). When set, the AI
+    # package dispatches generation over HTTP to a remote copy of itself
+    # (which reads inputs from S3, writes the output JSON back, and returns
+    # once done) instead of running locally. See backend/AI/README.md.
     LESSON_PLAN_AI_SERVICE_URL: Optional[str] = None
-    # Seconds to wait for the AI service (generation can take minutes).
+    # Seconds to wait for the remote AI service (generation can take minutes).
     LESSON_PLAN_AI_SERVICE_TIMEOUT: float = 300.0
-
-    # External Question Bank AI microservice (same service as Lesson Plan).
-    # The microservice routes by ``type`` in the request body. Leave unset
-    # to reuse LESSON_PLAN_AI_SERVICE_URL; set to a different URL only if
-    # you've split the deployments.
     QUESTION_BANK_AI_SERVICE_URL: Optional[str] = None
     QUESTION_BANK_AI_SERVICE_TIMEOUT: float = 300.0
 

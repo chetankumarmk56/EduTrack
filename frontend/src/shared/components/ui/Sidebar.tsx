@@ -31,8 +31,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
   const portalName =
     user?.role === 'teacher'     ? 'Faculty'   :
     user?.role === 'super_admin' ? 'Platform'  :
-    user?.role === 'admin'       ? 'Admin'     :
-    user?.role === 'finance'     ? 'Finance'   : 'Family';
+    user?.role === 'admin'       ? 'Admin'     : 'Family';
 
   const handleSignOut = async () => {
     await logout();
