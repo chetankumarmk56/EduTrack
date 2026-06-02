@@ -97,3 +97,108 @@ services:
 
 volumes:
   postgres_data:
+
+
+
+
+
+
+
+
+# services:
+#   db:
+#     image: postgres:15-alpine
+#     container_name: edutrack_db
+#     restart: always
+#     environment:
+#       POSTGRES_USER: ${POSTGRES_USER:-luffy}
+#       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+#       POSTGRES_DB: ${POSTGRES_DB:-school}
+#     volumes:
+#       - postgres_data:/var/lib/postgresql/data
+#     ports:
+#       - "5432:5432"
+#     healthcheck:
+#       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-luffy} -d ${POSTGRES_DB:-school}"]
+#       interval: 5s
+#       timeout: 5s
+#       retries: 10
+#       start_period: 10s
+
+#   redis:
+#     # Shared Redis used for rate limiting (slowapi) + websocket pub/sub.
+#     # Single replica is fine; the data is ephemeral by design.
+#     image: redis:7-alpine
+#     container_name: edutrack_redis
+#     restart: always
+#     healthcheck:
+#       test: ["CMD", "redis-cli", "ping"]
+#       interval: 5s
+#       timeout: 3s
+#       retries: 10
+
+#   backend:
+#     build: ./backend
+#     container_name: edutrack_api
+#     restart: always
+#     # Dev: uvicorn with --reload so host-side Python edits hot-reload
+#     # without a rebuild. The Dockerfile's default gunicorn command is for
+#     # prod-like runs; override here for local iteration.
+#     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+#     ports:
+#       - "8000:8000"
+#     # Source mount for hot-reload. Anonymous volumes shield bake-time
+#     # dirs we don't want the host to clobber.
+#     volumes:
+#       - ./backend:/app
+#     # Pull everything from backend/.env (S3 creds, third-party API keys,
+#     # etc.). The explicit `environment:` block below overrides anything
+#     # that needs container-specific values (DB host = `db` service, not
+#     # localhost; same for Redis).
+#     env_file:
+#       - ./backend/.env
+#     environment:
+#       - DATABASE_URL=postgresql://${POSTGRES_USER:-luffy}:${POSTGRES_PASSWORD:-secret}@db:5432/${POSTGRES_DB:-school}
+#       - ENVIRONMENT=${ENVIRONMENT:-dev}
+#       - FRONTEND_URL=${FRONTEND_URL:--https://www.arkenedu.com}
+#       - REDIS_URL=redis://redis:6379/0
+#       # Scheduler runs in the `worker` service; keep it off on the web replicas.
+#       - FEE_REMINDER_SCHEDULER_ENABLED=false
+#       # 2 workers is a sensible default for a 1-vCPU dev container. Bump
+#       # via `WEB_CONCURRENCY=N docker-compose up` to stress-test.
+#       - WEB_CONCURRENCY=${WEB_CONCURRENCY:-2}
+#     depends_on:
+#       db:
+#         condition: service_healthy
+#       redis:
+#         condition: service_healthy
+
+#   # Background worker. Runs the in-process scheduler (Wednesday fee-reminder
+#   # push, future cron-style jobs) outside the web replicas so:
+#   #   * Scaling the web tier doesn't spawn duplicate cron jobs.
+#   #   * A blocked dispatch can't tie up an ASGI worker.
+#   # Keep this at exactly one replica — the cron_locks table is a safety
+#   # net, not a license to run more than one.
+#   worker:
+#     build: ./backend
+#     container_name: edutrack_worker
+#     restart: always
+#     command: ["python", "worker.py"]
+#     volumes:
+#       - ./backend:/app
+#     env_file:
+#       - ./backend/.env
+#     environment:
+#       - DATABASE_URL=postgresql://${POSTGRES_USER:-luffy}:${POSTGRES_PASSWORD:-secret}@db:5432/${POSTGRES_DB:-school}
+#       - ENVIRONMENT=${ENVIRONMENT:-dev}
+#       - FRONTEND_URL=${FRONTEND_URL:--https://www.arkenedu.com}
+#       - REDIS_URL=redis://redis:6379/0
+#       - FEE_REMINDER_SCHEDULER_ENABLED=true
+#     depends_on:
+#       db:
+#         condition: service_healthy
+#       redis:
+#         condition: service_healthy
+
+# volumes:
+#   postgres_data:

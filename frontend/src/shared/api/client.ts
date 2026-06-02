@@ -60,9 +60,18 @@ const processQueue = (error: unknown, token: string | null = null) => {
 client.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const currentRole = getCurrentPortalRole();
-    const institutionId = localStorage.getItem(`edu_institution_id_${currentRole}`) || '1';
 
-    config.headers.set('X-Institution-Id', institutionId);
+    // Honor an X-Institution-Id the caller set explicitly (e.g. the login
+    // dispatcher attaches the value typed into the form). Only fall back to
+    // localStorage — and the legacy '1' default — when no explicit value was
+    // provided. Previously this branch ran unconditionally and clobbered the
+    // form's Institution ID with a stale/default localStorage value, which is
+    // how admin login ended up sending '1' and the backend rejected it with
+    // "Unknown Institution ID."
+    if (!config.headers.has('X-Institution-Id')) {
+      const institutionId = localStorage.getItem(`edu_institution_id_${currentRole}`) || '1';
+      config.headers.set('X-Institution-Id', institutionId);
+    }
     config.headers.set('X-Portal-Role', currentRole);
     return config;
   },
