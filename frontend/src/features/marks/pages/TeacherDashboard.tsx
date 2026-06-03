@@ -39,10 +39,14 @@ export default function TeacherDashboard() {
   } = useApp();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Direct fetch — bypass AppContext cache so newly-enrolled students always show.
+  // Roster freshness (newly-enrolled students) comes from the direct
+  // getMyStudents() call below. The teacher's assignments only need the
+  // cached directory, and dashboard stats are refreshed separately via
+  // fetchTeacherStats() — so we no longer force a full /system/initialize
+  // re-pull on every visit; the cached (≤5 min) directory is enough.
   const [classDirectory, setClassDirectory] = useState<Student[]>([]);
   useEffect(() => {
-    refreshDirectory(true);
+    refreshDirectory();
     directoryApi.getMyStudents()
       .then((data) => setClassDirectory(data || []))
       .catch(err => console.error('[TeacherDashboard] getMyStudents failed', err));

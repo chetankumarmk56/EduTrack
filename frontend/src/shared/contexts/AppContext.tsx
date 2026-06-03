@@ -48,7 +48,6 @@ interface AppContextType {
   studentProfile: Student | null;
   studentMarks: Mark[];
   studentAttendance: Attendance[];
-  studentEvents: Event[];
   events: Event[];
   fetchStudentData: (studentId: number) => Promise<void>;
 
@@ -133,7 +132,6 @@ const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
     const saved = localStorage.getItem('edu_cache_student_attendance');
     return saved ? JSON.parse(saved) : [];
   });
-  const [studentEvents, setStudentEvents] = useState<Event[]>([]);
 
   const [aiAnalysis, setAiAnalysis] = useState<AiAnalysisResult | null>(null);
   const [teacherStats, setTeacherStats] = useState<TeacherStats | null>(null);
@@ -434,14 +432,17 @@ const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
 
   const fetchStudentData = async (sid: number) => {
     try {
-      const [m, a, e] = await Promise.all([
+      // Events are loaded once into the shared `events` slice by
+      // refreshEvents (called from refreshDirectory on auth) and consumed
+      // by both the parent Dashboard and the Events page — so we no longer
+      // re-fetch /events here. Previously this fired a second, identical
+      // getEvents() on every login alongside refreshEvents.
+      const [m, a] = await Promise.all([
         marksApi.getMarks(sid),
         attendanceApi.getAttendance(sid),
-        eventsApi.getEvents()
       ]);
       setStudentMarks(m);
       setStudentAttendance(a);
-      setStudentEvents(e);
       localStorage.setItem('edu_cache_student_marks', JSON.stringify(m));
       localStorage.setItem('edu_cache_student_attendance', JSON.stringify(a));
     } catch (err) {
@@ -468,7 +469,6 @@ const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
       studentProfile,
       studentMarks,
       studentAttendance,
-      studentEvents,
       events,
       fetchStudentData,
       classMarks,

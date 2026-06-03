@@ -5,6 +5,7 @@ import {
   Search, Sparkles, X, ChevronDown, Hash, School, UserRound,
 } from 'lucide-react';
 import { directoryApi, type TeacherWithPassword } from '@/features/directory/api';
+import { useApp } from '@/shared/contexts/AppContext';
 import { cn } from '@/shared/lib/utils';
 import { SkeletonCardGrid } from '@/shared/components/ui/Skeleton';
 
@@ -56,19 +57,35 @@ function uniqueClasses(t: TeacherWithPassword): string[] {
 }
 
 export default function Teachers() {
-  const [teachers, setTeachers] = useState<TeacherWithPassword[]>([]);
-  const [loading, setLoading] = useState(true);
+  // The student's teacher list is fetched once into the shared context on
+  // login (AppContext → getMyTeachers) and cached. Reuse it here instead
+  // of re-firing /my-teachers on every navigation to this page; fall back
+  // to a direct fetch only when the context is still empty (cold deep-link).
+  const { teacherDirectory } = useApp();
+  const [fetched, setFetched] = useState<TeacherWithPassword[] | null>(null);
   const [search, setSearch] = useState('');
   const [subjectFilter, setSubjectFilter] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
   useEffect(() => {
+    if (teacherDirectory.length > 0) return; // already hydrated from context
     directoryApi
       .getMyTeachers()
-      .then((res) => setTeachers(res || []))
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, []);
+      .then((res) => setFetched(res || []))
+      .catch(console.error);
+  }, [teacherDirectory]);
+
+  // Prefer the shared context list; fall back to the cold-start fetch.
+  // Memoized so the downstream useMemo derivations don't recompute on every
+  // render from a fresh array reference.
+  const teachers: TeacherWithPassword[] = useMemo(
+    () =>
+      teacherDirectory.length > 0
+        ? (teacherDirectory as TeacherWithPassword[])
+        : fetched ?? [],
+    [teacherDirectory, fetched],
+  );
+  const loading = teacherDirectory.length === 0 && fetched === null;
 
   const allSubjects = useMemo(() => {
     const set = new Set<string>();

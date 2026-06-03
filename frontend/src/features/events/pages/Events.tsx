@@ -1,28 +1,16 @@
-import { useState, useEffect } from 'react';
 import { MapPin, Clock, Calendar, BookOpen, UserCheck, Trophy, Palmtree, Zap, Sparkles } from 'lucide-react';
-import { eventsApi } from '@/features/events/api';
 import { type Event as SchoolEvent } from '@/shared/types';
+import { useApp } from '@/shared/contexts/AppContext';
 import { cn } from '@/shared/lib/utils';
 import { StaggerContainer, StaggerItem } from '@/shared/components/ui/PageWrapper';
 import { SkeletonCardGrid } from '@/shared/components/ui/Skeleton';
 
 export default function Events() {
-  const [events, setEvents] = useState<SchoolEvent[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchEvents = async () => {
-      try {
-        const data = await eventsApi.getEvents();
-        setEvents(data);
-      } catch (err) {
-        console.error("Failed to fetch events:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchEvents();
-  }, []);
+  // Events are already hydrated into the shared context slice on auth
+  // (refreshDirectory → refreshEvents) and kept in localStorage, so this
+  // page reads from there instead of firing its own /events request on
+  // every visit. Same source the teacher Events page already uses.
+  const { events, isEventsLoading: loading } = useApp();
 
   const getEventStyles = (event: SchoolEvent) => {
     if (event.is_holiday) {

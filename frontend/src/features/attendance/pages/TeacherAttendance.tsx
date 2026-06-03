@@ -20,13 +20,22 @@ export default function TeacherAttendance() {
   const [isFetching, setIsFetching] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
-  // Direct fetch — bypass AppContext cache so newly-enrolled students always show.
+  // Roster freshness (newly-enrolled students) comes from the direct
+  // getMyStudents() call below, so we no longer force a full
+  // /system/initialize re-pull on every visit. The attendance-rate stat is
+  // refreshed via the lightweight fetchTeacherStats() endpoint instead —
+  // which is what the forced refresh was previously providing here.
   const [classDirectory, setClassDirectory] = useState<Student[]>([]);
   useEffect(() => {
-    refreshDirectory(true);
+    refreshDirectory();
+    fetchTeacherStats();
     directoryApi.getMyStudents()
       .then((data) => setClassDirectory(data || []))
       .catch(err => console.error('[TeacherAttendance] getMyStudents failed', err));
+    // fetchTeacherStats is intentionally not in the dep array — it's a fresh
+    // closure each render (not memoized in context). Matching the existing
+    // mount-once pattern used by TeacherDashboard's stats effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshDirectory]);
 
   // Find current teacher's assignments

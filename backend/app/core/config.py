@@ -44,8 +44,13 @@ class Settings(BaseSettings):
     # deployment via env. The Question Bank generator sends the PDF to the
     # OpenAI Responses API; the Lesson Plan generator sends extracted chapter
     # text to Chat Completions.
+    #
+    # NOTE: both default to a REAL, GA OpenAI model. A previous default of
+    # "gpt-5.5" (which does not exist on the API) caused Lesson Plan
+    # generation to 502 on any deployment that did not explicitly set
+    # LESSON_PLAN_OPENAI_MODEL in its environment.
     QUESTION_BANK_OPENAI_MODEL: str = "gpt-4o"
-    LESSON_PLAN_OPENAI_MODEL: str = "gpt-5.5"
+    LESSON_PLAN_OPENAI_MODEL: str = "gpt-4o"
 
     # Per-tool OpenAI key overrides. The two source microservices each ran
     # with their own key, so the generators read a tool-specific key first
@@ -53,11 +58,16 @@ class Settings(BaseSettings):
     QUESTION_BANK_OPENAI_API_KEY: Optional[str] = None
     LESSON_PLAN_OPENAI_API_KEY: Optional[str] = None
 
-    # Optional external AI offload (microservice-ready seam). Leave UNSET to
-    # generate in-process (the default after integration). When set, the AI
-    # package dispatches generation over HTTP to a remote copy of itself
-    # (which reads inputs from S3, writes the output JSON back, and returns
-    # once done) instead of running locally. See backend/AI/README.md.
+    # Optional external AI offload (microservice-ready seam). Generation runs
+    # IN-PROCESS by default. The remote HTTP offload is only used when it is
+    # BOTH explicitly enabled (AI_REMOTE_OFFLOAD_ENABLED=true) AND given a URL.
+    #
+    # This two-key requirement is deliberate: a leftover *_AI_SERVICE_URL in a
+    # host's .env (e.g. an old ngrok/microservice tunnel from before the
+    # in-process migration) must NOT silently re-route generation to a dead
+    # endpoint. A dead/404 endpoint surfaces to the browser as 502 Bad Gateway.
+    # See backend/AI/README.md.
+    AI_REMOTE_OFFLOAD_ENABLED: bool = False
     LESSON_PLAN_AI_SERVICE_URL: Optional[str] = None
     # Seconds to wait for the remote AI service (generation can take minutes).
     LESSON_PLAN_AI_SERVICE_TIMEOUT: float = 300.0

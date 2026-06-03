@@ -46,7 +46,7 @@ export default function Dashboard() {
       studentProfile,
       studentMarks: rawMarks,
       studentAttendance: rawAttendance,
-      studentEvents: rawEvents,
+      events: rawEvents,
       fetchStudentData,
       parentFees,
       institutionName,

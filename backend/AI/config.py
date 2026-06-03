@@ -14,6 +14,32 @@ from __future__ import annotations
 from typing import Optional
 
 from app.core.config import settings as _settings
+from app.core.logger import logger
+
+
+def _resolve_offload_url(*candidates: Optional[str]) -> Optional[str]:
+    """Return the first usable remote-offload URL, or ``None`` for in-process.
+
+    The remote HTTP offload is only honored when it is *explicitly* enabled
+    via ``AI_REMOTE_OFFLOAD_ENABLED``. This guards against the failure mode
+    where a host's ``.env`` still carries an old ``*_AI_SERVICE_URL`` (e.g. an
+    ngrok tunnel from before the in-process migration): such a leftover value
+    would otherwise silently route every Generate call to a dead endpoint and
+    surface as 502 Bad Gateway. URLs are whitespace-stripped so a value like
+    ``" "`` is treated as unset.
+    """
+    url = next((c.strip() for c in candidates if c and c.strip()), None)
+    if not url:
+        return None
+    if not getattr(_settings, "AI_REMOTE_OFFLOAD_ENABLED", False):
+        logger.warning(
+            "Ignoring AI offload URL %r because AI_REMOTE_OFFLOAD_ENABLED is "
+            "not set; generating in-process. Set AI_REMOTE_OFFLOAD_ENABLED=true "
+            "to use a remote AI service.",
+            url,
+        )
+        return None
+    return url
 
 
 class _AISettings:
@@ -53,11 +79,13 @@ class _AISettings:
     # ── Optional external offload (microservice-ready seam) ───────────
     @property
     def question_bank_service_url(self) -> Optional[str]:
-        """When set, Question Bank generation is dispatched over HTTP to a
-        remote copy of this package instead of running in-process."""
-        return (
-            _settings.QUESTION_BANK_AI_SERVICE_URL
-            or _settings.LESSON_PLAN_AI_SERVICE_URL
+        """Remote Question Bank offload URL, or ``None`` to run in-process.
+
+        Only returned when ``AI_REMOTE_OFFLOAD_ENABLED`` is true. Falls back to
+        the Lesson Plan URL when no QB-specific URL is set (shared deployment)."""
+        return _resolve_offload_url(
+            _settings.QUESTION_BANK_AI_SERVICE_URL,
+            _settings.LESSON_PLAN_AI_SERVICE_URL,
         )
 
     @property
@@ -69,7 +97,10 @@ class _AISettings:
 
     @property
     def lesson_plan_service_url(self) -> Optional[str]:
-        return _settings.LESSON_PLAN_AI_SERVICE_URL
+        """Remote Lesson Plan offload URL, or ``None`` to run in-process.
+
+        Only returned when ``AI_REMOTE_OFFLOAD_ENABLED`` is true."""
+        return _resolve_offload_url(_settings.LESSON_PLAN_AI_SERVICE_URL)
 
     @property
     def lesson_plan_service_timeout(self) -> float:
