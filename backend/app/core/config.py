@@ -52,6 +52,16 @@ class Settings(BaseSettings):
     QUESTION_BANK_OPENAI_MODEL: str = "gpt-4o"
     LESSON_PLAN_OPENAI_MODEL: str = "gpt-4o"
 
+    # Per-request timeout (seconds) for the IN-PROCESS OpenAI calls. Lesson
+    # Plan generates a full class-by-class plan (one detailed object per
+    # class), so its single completion is much larger/slower than Question
+    # Bank's — give it generous headroom but still bound it so a stuck call
+    # can't hold a worker for the OpenAI SDK's 600s default. Must stay BELOW
+    # the gateway read timeouts (gunicorn `timeout`, nginx `proxy_read_timeout`)
+    # so the backend fails cleanly instead of the proxy emitting a 504.
+    LESSON_PLAN_OPENAI_TIMEOUT: float = 240.0
+    QUESTION_BANK_OPENAI_TIMEOUT: float = 120.0
+
     # Per-tool OpenAI key overrides. The two source microservices each ran
     # with their own key, so the generators read a tool-specific key first
     # and fall back to the shared OPENAI_API_KEY when it is unset.
@@ -118,6 +128,19 @@ class Settings(BaseSettings):
     COOKIE_DOMAIN: str = Field(
         default="",
         description="Cookie domain for production, e.g. '.yourdomain.com' (leading dot for subdomains)"
+    )
+    # Override the auth-cookie SameSite policy. Empty = auto: 'none' in prod
+    # (for a frontend hosted on a *different site* than the API, e.g.
+    # Vercel + Render) and 'lax' in dev.
+    #
+    # When the SPA and API share one registrable domain — e.g.
+    # www.arkenedu.com (SPA) + api.arkenedu.com (API), which are *same-site* —
+    # set this to 'lax'. Cookies still ride every same-site XHR, and Lax
+    # additionally blocks the cross-site request forgery that 'none' permits.
+    # Allowed values: 'lax' | 'strict' | 'none' (case-insensitive).
+    COOKIE_SAMESITE: str = Field(
+        default="",
+        description="Auth cookie SameSite: 'lax' | 'strict' | 'none'. Empty = auto (none in prod, lax in dev).",
     )
     
     # Infrastructure
@@ -205,6 +228,18 @@ class Settings(BaseSettings):
             self.SECRET_KEY = self.JWT_SECRET
         if self.JWT_ALGORITHM:
             self.ALGORITHM = self.JWT_ALGORITHM
+
+        # Validate the optional SameSite override early so a typo fails at
+        # startup instead of silently emitting a malformed Set-Cookie that
+        # browsers drop (which would manifest as "logged in then 401").
+        if self.COOKIE_SAMESITE:
+            normalized = self.COOKIE_SAMESITE.strip().lower()
+            if normalized not in ("lax", "strict", "none"):
+                raise ValueError(
+                    "COOKIE_SAMESITE must be one of 'lax', 'strict', 'none' "
+                    f"(got {self.COOKIE_SAMESITE!r})."
+                )
+            self.COOKIE_SAMESITE = normalized
 
         # Production hardening
         if self.ENVIRONMENT == "prod":

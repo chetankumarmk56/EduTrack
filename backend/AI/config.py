@@ -71,6 +71,16 @@ class _AISettings:
         """Model used by the Lesson Plan generator (chapter text → plan)."""
         return _settings.LESSON_PLAN_OPENAI_MODEL
 
+    @property
+    def lesson_plan_openai_timeout(self) -> float:
+        """Per-request timeout (s) for the in-process Lesson Plan OpenAI call."""
+        return float(getattr(_settings, "LESSON_PLAN_OPENAI_TIMEOUT", 240.0) or 240.0)
+
+    @property
+    def question_bank_openai_timeout(self) -> float:
+        """Per-request timeout (s) for the in-process Question Bank OpenAI call."""
+        return float(getattr(_settings, "QUESTION_BANK_OPENAI_TIMEOUT", 120.0) or 120.0)
+
     # ── Storage ───────────────────────────────────────────────────────
     @property
     def s3_bucket(self) -> Optional[str]:

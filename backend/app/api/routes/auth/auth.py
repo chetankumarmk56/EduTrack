@@ -210,16 +210,29 @@ async def logout(
 
     Requires auth so an unauthenticated attacker can't trigger
     arbitrary Set-Cookie clears as a DoS vector. The cookies are
-    cleared scoped to the caller's own role+user_id — sister sessions
-    (e.g. an admin still logged in alongside a parent in the same
-    browser) are untouched.
+    cleared scoped to the caller's own role — sister sessions for a
+    *different* role (e.g. an admin still logged in alongside a parent in
+    the same browser) are untouched.
+
+    We clear by role across ALL user_id suffixes present on this browser,
+    not just the caller's own id, so an earlier same-role account on a
+    shared device can't leave a still-valid cookie that the next visit
+    silently re-adopts.
     """
-    from app.services.auth.auth_service import clear_auth_cookies
+    from app.services.auth.auth_service import (
+        clear_auth_cookies,
+        clear_role_cookies_from_request,
+    )
+    # Exact-clear the caller's own suffixed cookies (covers the mobile/bearer
+    # path where no cookie was sent in the request to enumerate).
     clear_auth_cookies(
         response,
         role=current_user.role,
         user_id=current_user.id,
     )
+    # Sweep any other same-role cookies the browser sent (stale account
+    # switches / shared-device sessions).
+    clear_role_cookies_from_request(response, request, role=current_user.role)
     logger.info(f"LOGOUT: user_id={current_user.id} role={current_user.role}")
     return {"status": "ok"}
 

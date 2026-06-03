@@ -61,10 +61,21 @@ workers = _resolve_workers()
 # offloads (bcrypt, S3 multipart upload via boto3).
 threads = 1
 
-# Timeouts. Default 30s gunicorn timeout kills workers mid-upload on
-# slow client connections. Lesson-plan generation is queued/async post
-# fix-#3, so 60s is enough for any other path.
-timeout = 60
+# Timeouts. Default 30s gunicorn timeout kills workers mid-upload on slow
+# client connections. Lesson-plan generation runs SYNCHRONOUSLY in-process
+# (the request blocks while OpenAI produces a full class-by-class plan —
+# one detailed object per class), which for many classes can take a few
+# minutes. 300s gives that path room; the OpenAI call itself is separately
+# bounded by LESSON_PLAN_OPENAI_TIMEOUT (default 240s) so a stuck upstream
+# still releases the worker. The async UvicornWorker keeps its heartbeat
+# alive during the off-loop `asyncio.to_thread` OpenAI call, so this
+# timeout is a safety ceiling, not the normal request budget.
+#
+# NOTE: a reverse proxy in front of gunicorn (nginx `proxy_read_timeout`,
+# default 60s; Cloudflare's ~100s edge limit on non-Enterprise plans) must
+# allow at least as long, or it will 504/524 before generation finishes.
+# See deployment/nginx/*.conf.
+timeout = 300
 graceful_timeout = 30
 
 # Keep-alive helps for parent dashboards that pull 4-5 endpoints right

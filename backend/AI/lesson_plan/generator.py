@@ -433,7 +433,19 @@ def _get_client():
         )
     from openai import OpenAI
 
-    _client = OpenAI(api_key=api_key)
+    # Bound the per-request time explicitly. The SDK default is 600s, which
+    # is far longer than the gateway read timeouts — without this an
+    # OpenAI slow-down would keep a worker busy long after nginx/Cloudflare
+    # already returned a 504 to the user. Kept BELOW the gunicorn/nginx
+    # read timeouts so the backend raises a clean 502 instead of the proxy
+    # emitting an opaque 504. ``max_retries=0`` disables the SDK's own
+    # internal retry/backoff — we run our own validation-aware retry loop
+    # in ``generate_lesson_plan`` and don't want the two to compound.
+    _client = OpenAI(
+        api_key=api_key,
+        timeout=ai_settings.lesson_plan_openai_timeout,
+        max_retries=0,
+    )
     return _client
 
 

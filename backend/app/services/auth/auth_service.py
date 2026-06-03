@@ -38,6 +38,42 @@ ACCESS_COOKIE_PREFIX = "edu_access_"
 REFRESH_COOKIE_PREFIX = "edu_refresh_"
 
 
+def _cookie_samesite() -> str:
+    """
+    Resolve the auth-cookie SameSite policy.
+
+    Honors an explicit ``COOKIE_SAMESITE`` override (validated to one of
+    lax/strict/none in config). With no override it falls back to the
+    historical auto behavior: ``none`` in prod (frontend on a *different
+    site* than the API) and ``lax`` in dev. Set the override to ``lax`` for
+    a same-site subdomain deploy (www + api under one domain) to keep
+    cross-site CSRF off the table.
+    """
+    override = (_settings.COOKIE_SAMESITE or "").strip().lower()
+    if override in ("lax", "strict", "none"):
+        return override
+    return "none" if _settings.ENVIRONMENT == "prod" else "lax"
+
+
+def _cookie_common_attrs() -> dict:
+    """
+    Shared Set-Cookie attributes used for both writing and deleting auth
+    cookies. Deletion only takes effect when these match the original write,
+    so keeping a single source of truth prevents a drift that would silently
+    leave logout cookies un-cleared.
+
+    ``secure`` is forced on whenever SameSite=None because browsers reject a
+    ``SameSite=None`` cookie that isn't also ``Secure``.
+    """
+    samesite = _cookie_samesite()
+    return {
+        "httponly": True,
+        "secure": _settings.COOKIE_SECURE or samesite == "none",
+        "samesite": samesite,
+        "domain": _settings.COOKIE_DOMAIN if _settings.COOKIE_DOMAIN else None,
+    }
+
+
 def set_auth_cookies(
     response,
     *,
@@ -62,18 +98,12 @@ def set_auth_cookies(
     it. The refresh cookie keeps the existing narrow path "/api/auth/refresh"
     so it's never sent on any other endpoint.
     """
-    # SameSite=None is required when the frontend and backend live on
-    # different sites (e.g. Vercel + Render). Lax cookies are dropped on
-    # cross-site XHR, which is why a "successful" login was immediately
-    # followed by 401s and a "session expired" bounce. None mandates
-    # Secure=True, which prod already forces.
-    is_cross_site = _settings.ENVIRONMENT == "prod"
-    common = {
-        "httponly": True,
-        "secure": _settings.COOKIE_SECURE,
-        "samesite": "none" if is_cross_site else "lax",
-        "domain": _settings.COOKIE_DOMAIN if _settings.COOKIE_DOMAIN else None,
-    }
+    # SameSite policy is resolved centrally (see _cookie_samesite): 'none'
+    # for a cross-site frontend (Vercel + Render), 'lax' for a same-site
+    # subdomain deploy (www + api under one domain). Lax cookies are dropped
+    # on cross-site XHR, which is why a cross-site frontend must use None;
+    # None mandates Secure=True, which _cookie_common_attrs enforces.
+    common = _cookie_common_attrs()
     # Access token cookie — JS-inaccessible. Lifetime matches the JWT exp.
     response.set_cookie(
         key=f"{ACCESS_COOKIE_PREFIX}{role}_{user_id}",
@@ -104,21 +134,43 @@ def clear_auth_cookies(response, *, role: str, user_id: Optional[int] = None) ->
     cookies the request never sent stay alive until their TTL.
     """
     # Browsers only honour a Set-Cookie deletion when the SameSite +
-    # Secure attributes match the original. Mirror set_auth_cookies'
-    # cross-site policy or the deletion is silently dropped.
-    is_cross_site = _settings.ENVIRONMENT == "prod"
-    common = {
-        "domain": _settings.COOKIE_DOMAIN if _settings.COOKIE_DOMAIN else None,
-        "secure": _settings.COOKIE_SECURE,
-        "samesite": "none" if is_cross_site else "lax",
-        "httponly": True,
-    }
+    # Secure + Domain attributes match the original. Reuse the exact same
+    # attribute set used to write them or the deletion is silently dropped.
+    common = _cookie_common_attrs()
     suffixes = [str(user_id)] if user_id is not None else [""]
     for suffix in suffixes:
         key_access = f"{ACCESS_COOKIE_PREFIX}{role}_{suffix}".rstrip("_")
         key_refresh = f"{REFRESH_COOKIE_PREFIX}{role}_{suffix}".rstrip("_")
         response.delete_cookie(key=key_access, path="/", **common)
         response.delete_cookie(key=key_refresh, path="/api/auth/refresh", **common)
+
+
+def clear_role_cookies_from_request(response, request, *, role: str) -> None:
+    """
+    Delete EVERY access/refresh cookie for ``role`` that the browser actually
+    sent — regardless of the ``_{user_id}`` suffix.
+
+    Why this exists: ``clear_auth_cookies`` only deletes the *current* user's
+    suffixed cookie. On a shared browser where two same-role accounts were
+    used (e.g. two parents on one device, or an account switch without an
+    explicit logout in between), the earlier account's
+    ``edu_access_{role}_{old_id}`` / ``edu_refresh_{role}_{old_id}`` cookies
+    survive logout. The auth dependency's generic cookie scan could then
+    silently re-adopt that still-valid session on the next visit. Enumerating
+    the inbound cookies and deleting all role matches closes that
+    "logout left a re-loginable session behind" gap.
+
+    starlette's delete_cookie matches on exact name, so we can only delete
+    cookies we can see — hence the dependency on the inbound request.
+    """
+    common = _cookie_common_attrs()
+    access_root = f"{ACCESS_COOKIE_PREFIX}{role}"
+    refresh_root = f"{REFRESH_COOKIE_PREFIX}{role}"
+    for name in request.cookies:
+        if name == access_root or name.startswith(f"{access_root}_"):
+            response.delete_cookie(key=name, path="/", **common)
+        elif name == refresh_root or name.startswith(f"{refresh_root}_"):
+            response.delete_cookie(key=name, path="/api/auth/refresh", **common)
 
 async def resolve_institution_id(db: AsyncSession, raw: Optional[str]) -> Optional[int]:
     """
