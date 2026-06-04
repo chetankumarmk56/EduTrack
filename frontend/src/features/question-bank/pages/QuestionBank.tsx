@@ -13,7 +13,7 @@
  * focus_questions takes priority over focus_percentage. If both empty,
  * the microservice generates a normal chapter-wide bank.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -21,19 +21,26 @@ import {
   AlertCircle,
   ArrowRight,
   BookOpen,
+  Check,
   CheckCircle2,
+  ChevronDown,
+  CircleDot,
   Cloud,
   FileText,
   FolderOpen,
+  GraduationCap,
   Languages,
   Loader2,
   Printer,
+  Rocket,
   RotateCcw,
   Save,
   Share2,
+  SlidersHorizontal,
   Sparkles,
   Target,
   Trash2,
+  UploadCloud,
   Wand2,
   X,
 } from 'lucide-react';
@@ -458,6 +465,15 @@ export default function QuestionBank() {
     }
   };
 
+  // Smoothly bring the result area into view as soon as generation kicks off
+  // (so the teacher sees progress) and again when the bank lands.
+  const resultRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (isGenerating || result) {
+      resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [isGenerating, result]);
+
   // ── Render ──────────────────────────────────────────────────────────
   const validationError = validate();
   const canSave = !validationError && !isSaving && !isGenerating;
@@ -474,93 +490,125 @@ export default function QuestionBank() {
     return 'Choose exactly one: focus questions OR focus percentage.';
   }, [focusQ, focusPct, numQ, focusEffective]);
 
+  // Step completion — drives the stepper rail and the launch checklist.
+  const totalM = parseIntOrNull(form.totalMarks);
+  const focusValid = !hasFocusTopic || (focusQ !== null) !== (focusPct !== null);
+  const step1Done = !!selectedGrade && !!selectedSubject;
+  const step2Done = form.chapter.trim().length > 0 && focusValid;
+  const step3Done =
+    numQ !== null && numQ >= 1 && totalM !== null && totalM >= 1;
+  const step4Done = form.files.length > 0;
+  const steps: StepMeta[] = [
+    { n: 1, label: 'Class', hint: 'Grade & subject', icon: GraduationCap, done: step1Done },
+    { n: 2, label: 'Chapter', hint: 'Chapter name', icon: BookOpen, done: step2Done },
+    { n: 3, label: 'Settings', hint: 'Count & marks', icon: SlidersHorizontal, done: step3Done },
+    { n: 4, label: 'Source', hint: 'Upload document', icon: UploadCloud, done: step4Done },
+  ];
+
   return (
-    <div className="flex flex-col gap-8 sm:gap-10 pb-16">
-      {/* Header */}
-      <header className="flex flex-col md:flex-row md:items-end md:justify-between gap-5 pb-6 border-b border-white/5">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 text-primary text-[10px] font-black uppercase tracking-[0.3em] aurora-glow">
-            <Sparkles className="h-3.5 w-3.5 fill-primary" />
-            AI Question Bank Generator
+    <div className="flex flex-col gap-6 pb-20 sm:gap-8">
+      {/* ── Hero ───────────────────────────────────────────────── */}
+      <header className="premium-card border-glass-border relative overflow-hidden rounded-3xl p-6 sm:p-8">
+        <div className="pointer-events-none absolute -right-16 -top-24 h-72 w-72 rounded-full bg-emerald-500/10 blur-[90px]" />
+        <div className="pointer-events-none absolute -bottom-28 -left-12 h-72 w-72 rounded-full bg-violet-500/10 blur-[90px]" />
+
+        <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex items-start gap-4">
+            <div className="aurora-gradient aurora-glow flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl">
+              <Sparkles className="h-7 w-7 text-white" />
+            </div>
+            <div className="space-y-1.5">
+              <span className="block text-[10px] font-black uppercase tracking-[0.3em] text-emerald-400">
+                AI Question Bank Generator
+              </span>
+              <h1 className="text-3xl font-black tracking-tight text-white sm:text-4xl">
+                Question Bank
+              </h1>
+              <p className="max-w-xl text-sm font-medium text-slate-400">
+                Configure the chapter, pin an optional focus topic, and upload
+                your source — the AI returns a ready-to-print question bank.
+              </p>
+            </div>
           </div>
-          <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tighter text-foreground -mb-1">
-            Question Bank
-          </h1>
-          <p className="text-muted-foreground font-medium text-sm max-w-xl">
-            Configure the chapter, optionally pin a focus topic, upload the
-            source PDF, and the AI service will return a flat question bank.
-          </p>
-        </div>
-        <div className="flex items-center gap-3 self-start md:self-end">
+
           <button
             type="button"
             onClick={handleReset}
             disabled={isBusy}
-            className="h-11 px-4 rounded-2xl bg-black/40 border border-white/10 hover:border-white/20 text-muted-foreground hover:text-foreground text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2 transition-all disabled:opacity-40"
+            className="inline-flex h-11 shrink-0 items-center gap-2 self-start rounded-2xl border border-white/10 bg-black/30 px-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 transition-all hover:border-white/20 hover:text-white disabled:opacity-40"
           >
-            <RotateCcw className="w-4 h-4" />
+            <RotateCcw className="h-4 w-4" />
             Reset
           </button>
         </div>
+
+        <div className="relative z-10 mt-7">
+          <Stepper steps={steps} />
+        </div>
       </header>
 
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
-        {/* ── Configuration column ─────────────────────────────────── */}
-        <section className="xl:col-span-5 space-y-6">
+      {/* ── Working area ───────────────────────────────────────── */}
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
+        {/* Configuration form */}
+        <section className="space-y-5 xl:col-span-7">
           {/* Step 1 — Class & subject */}
-          <Card step="1" title="Class & Subject">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <SectionCard step="1" title="Class & Subject" icon={GraduationCap} done={step1Done}>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Grade">
-                <select
-                  value={form.gradeId}
-                  onChange={(e) =>
-                    setField(
-                      'gradeId',
-                      e.target.value ? Number(e.target.value) : '',
-                    )
-                  }
-                  disabled={isBusy}
-                  className={selectCls}
-                >
-                  <option value="">Select</option>
-                  {teachingGrades.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.name}
-                    </option>
-                  ))}
-                </select>
+                <SelectWrap>
+                  <select
+                    value={form.gradeId}
+                    onChange={(e) =>
+                      setField(
+                        'gradeId',
+                        e.target.value ? Number(e.target.value) : '',
+                      )
+                    }
+                    disabled={isBusy}
+                    className={selectCls}
+                  >
+                    <option value="">Select</option>
+                    {teachingGrades.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name}
+                      </option>
+                    ))}
+                  </select>
+                </SelectWrap>
               </Field>
               <Field label="Subject">
-                <select
-                  value={form.subjectId}
-                  onChange={(e) =>
-                    setField(
-                      'subjectId',
-                      e.target.value ? Number(e.target.value) : '',
-                    )
-                  }
-                  disabled={!form.gradeId || isBusy}
-                  className={selectCls}
-                >
-                  <option value="">Select</option>
-                  {teachingSubjects.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
+                <SelectWrap>
+                  <select
+                    value={form.subjectId}
+                    onChange={(e) =>
+                      setField(
+                        'subjectId',
+                        e.target.value ? Number(e.target.value) : '',
+                      )
+                    }
+                    disabled={!form.gradeId || isBusy}
+                    className={selectCls}
+                  >
+                    <option value="">Select</option>
+                    {teachingSubjects.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </SelectWrap>
               </Field>
             </div>
             {teachingGrades.length === 0 && (
-              <p className="text-[10px] font-bold text-amber-300/80 mt-3">
+              <p className="mt-3 text-[11px] font-bold text-amber-400">
                 No teaching assignments found. Ask your admin to add a class
                 assignment before generating question banks.
               </p>
             )}
-          </Card>
+          </SectionCard>
 
           {/* Step 2 — Chapter & focus topic */}
-          <Card step="2" title="Chapter & Focus">
+          <SectionCard step="2" title="Chapter & Focus" icon={BookOpen} done={step2Done}>
             <div className="space-y-4">
               <Field label="Chapter">
                 <input
@@ -584,80 +632,96 @@ export default function QuestionBank() {
                 />
               </Field>
 
-              {hasFocusTopic && (
-                <>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Field
-                      label={
-                        <span className="inline-flex items-center gap-1.5">
-                          <Target className="w-3 h-3" />
-                          Focus % (of total)
-                        </span>
-                      }
-                    >
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        min={0}
-                        max={100}
-                        placeholder="e.g. 40"
-                        value={form.focusPercentage}
-                        onChange={(e) =>
-                          setField('focusPercentage', e.target.value)
-                        }
-                        disabled={isBusy || !!form.focusQuestions.trim()}
-                        className={inputCls}
-                      />
-                    </Field>
-                    <Field label="Focus questions (exact)">
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        min={0}
-                        placeholder="e.g. 8"
-                        value={form.focusQuestions}
-                        onChange={(e) =>
-                          setField('focusQuestions', e.target.value)
-                        }
-                        disabled={isBusy || !!form.focusPercentage.trim()}
-                        className={inputCls}
-                      />
-                    </Field>
-                  </div>
+              <AnimatePresence initial={false}>
+                {hasFocusTopic && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="space-y-4 pt-1">
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <Field
+                          label={
+                            <span className="inline-flex items-center gap-1.5">
+                              <Target className="h-3 w-3" />
+                              Focus % (of total)
+                            </span>
+                          }
+                        >
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            min={0}
+                            max={100}
+                            placeholder="e.g. 40"
+                            value={form.focusPercentage}
+                            onChange={(e) =>
+                              setField('focusPercentage', e.target.value)
+                            }
+                            disabled={isBusy || !!form.focusQuestions.trim()}
+                            className={inputCls}
+                          />
+                        </Field>
+                        <Field label="Focus questions (exact)">
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            min={0}
+                            placeholder="e.g. 8"
+                            value={form.focusQuestions}
+                            onChange={(e) =>
+                              setField('focusQuestions', e.target.value)
+                            }
+                            disabled={isBusy || !!form.focusPercentage.trim()}
+                            className={inputCls}
+                          />
+                        </Field>
+                      </div>
 
-                  <div className="rounded-2xl bg-primary/5 border border-primary/20 px-4 py-3 flex items-start gap-3">
-                    <Target className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
-                    <p className="text-[11px] sm:text-xs font-medium text-muted-foreground/90">
-                      {focusHelper}
-                    </p>
-                  </div>
-                </>
-              )}
+                      <div className="flex items-start gap-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
+                        <Target className="mt-0.5 h-4 w-4 flex-shrink-0 text-emerald-400" />
+                        <p className="text-[11px] font-medium text-slate-300 sm:text-xs">
+                          {focusHelper}
+                        </p>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
-          </Card>
+          </SectionCard>
 
           {/* Step 3 — Generation settings */}
-          <Card step="3" title="Generation Settings">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <SectionCard
+            step="3"
+            title="Generation Settings"
+            icon={SlidersHorizontal}
+            done={step3Done}
+          >
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field
                 label={
                   <span className="inline-flex items-center gap-1.5">
-                    <Languages className="w-3 h-3" /> Language
+                    <Languages className="h-3 w-3" /> Language
                   </span>
                 }
               >
-                <select
-                  value={form.language}
-                  onChange={(e) => setField('language', e.target.value)}
-                  disabled={isBusy}
-                  className={selectCls}
-                >
-                  {LANGUAGES.map((l) => (
-                    <option key={l} value={l}>
-                      {l}
-                    </option>
-                  ))}
-                </select>
+                <SelectWrap>
+                  <select
+                    value={form.language}
+                    onChange={(e) => setField('language', e.target.value)}
+                    disabled={isBusy}
+                    className={selectCls}
+                  >
+                    {LANGUAGES.map((l) => (
+                      <option key={l} value={l}>
+                        {l}
+                      </option>
+                    ))}
+                  </select>
+                </SelectWrap>
               </Field>
               <div className="hidden sm:block" />
               <Field label="Number of questions">
@@ -700,56 +764,66 @@ export default function QuestionBank() {
                     setField('extraInstructions', e.target.value)
                   }
                   disabled={isBusy}
-                  className={`${inputCls} resize-y h-auto p-4`}
+                  className={`${inputCls} h-auto resize-y p-4`}
                 />
               </Field>
             </div>
-          </Card>
+          </SectionCard>
 
           {/* Step 4 — Upload */}
-          <Card step="4" title="Upload Chapter PDF">
-            <input
-              type="file"
-              multiple
-              accept={ALLOWED_FILE_EXTENSIONS.join(',')}
-              disabled={isBusy}
-              onChange={(e) => {
-                addFiles(e.target.files);
-                e.target.value = '';
-              }}
-              className="block w-full text-sm text-muted-foreground cursor-pointer
-                         file:mr-4 file:px-5 file:py-3 file:rounded-2xl file:border-0
-                         file:font-black file:text-[10px] file:uppercase file:tracking-[0.2em]
-                         file:text-white file:cursor-pointer file:shadow-lg file:shadow-primary/10
-                         file:bg-gradient-to-r file:from-emerald-500 file:to-violet-500
-                         hover:file:opacity-90 disabled:opacity-40"
-            />
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground/50 mt-2">
-              Accepted: {ALLOWED_FILE_EXTENSIONS.join(', ')}
-            </p>
+          <SectionCard step="4" title="Upload Source" icon={UploadCloud} done={step4Done}>
+            <label
+              className={cn(
+                'group flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-white/10 bg-black/20 px-4 py-8 text-center transition-all hover:border-emerald-500/40 hover:bg-emerald-500/5',
+                isBusy && 'pointer-events-none opacity-40',
+              )}
+            >
+              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-400 transition-transform group-hover:scale-105">
+                <UploadCloud className="h-6 w-6" />
+              </span>
+              <span className="text-sm font-bold text-white">
+                Tap to choose files
+              </span>
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                {ALLOWED_FILE_EXTENSIONS.join('  ·  ')}
+              </span>
+              <input
+                type="file"
+                multiple
+                accept={ALLOWED_FILE_EXTENSIONS.join(',')}
+                disabled={isBusy}
+                onChange={(e) => {
+                  addFiles(e.target.files);
+                  e.target.value = '';
+                }}
+                className="hidden"
+              />
+            </label>
 
             {form.files.length > 0 && (
               <ul className="mt-4 space-y-2">
                 {form.files.map((file, i) => (
                   <li
                     key={`${file.name}-${i}`}
-                    className="flex items-center gap-3 px-4 py-3 rounded-xl bg-black/30 border border-white/5"
+                    className="flex items-center gap-3 rounded-xl border border-white/5 bg-black/30 px-4 py-3"
                   >
-                    <FileText className="w-4 h-4 text-primary flex-shrink-0" />
-                    <span className="flex-1 truncate text-sm font-bold text-foreground">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400">
+                      <FileText className="h-4 w-4" />
+                    </span>
+                    <span className="flex-1 truncate text-sm font-bold text-white">
                       {file.name}
                     </span>
-                    <span className="hidden sm:inline text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 tabular-nums">
+                    <span className="hidden text-[10px] font-black uppercase tracking-widest tabular-nums text-slate-500 sm:inline">
                       {(file.size / 1024 / 1024).toFixed(2)} MB
                     </span>
                     <button
                       type="button"
                       onClick={() => removeFile(i)}
                       disabled={isBusy}
-                      className="p-1.5 rounded-lg hover:bg-rose-500/10 text-rose-400 transition-all disabled:opacity-30"
+                      className="rounded-lg p-1.5 text-rose-400 transition-all hover:bg-rose-500/10 disabled:opacity-30"
                       title="Remove file"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="h-4 w-4" />
                     </button>
                   </li>
                 ))}
@@ -758,98 +832,191 @@ export default function QuestionBank() {
 
             {isSaving && uploadProgress > 0 && (
               <div className="mt-4 space-y-1">
-                <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-[0.25em] text-muted-foreground">
+                <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">
                   <span>Uploading</span>
-                  <span className="text-primary">{uploadProgress}%</span>
+                  <span className="text-emerald-400">{uploadProgress}%</span>
                 </div>
-                <div className="h-1.5 rounded-full bg-black/40 overflow-hidden">
+                <div className="h-1.5 overflow-hidden rounded-full bg-black/40">
                   <div
-                    className="h-full aurora-gradient transition-all duration-150"
+                    className="aurora-gradient h-full transition-all duration-150"
                     style={{ width: `${uploadProgress}%` }}
                   />
                 </div>
               </div>
             )}
-          </Card>
-
-          {/* Validation banner */}
-          {validationError && !error && (
-            <div className="flex items-start gap-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 text-sm text-amber-200 font-bold">
-              <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
-              <span>{validationError}</span>
-            </div>
-          )}
-          {error && (
-            <div className="flex items-start gap-3 bg-red-500/10 border border-red-500/30 rounded-2xl p-4 text-sm text-red-300 font-bold">
-              <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
-              <span className="flex-1">{error}</span>
-              <button
-                type="button"
-                onClick={() => setError(null)}
-                className="opacity-60 hover:opacity-100"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          )}
-
-          {savedIdentity && !result && !isGenerating && (
-            <div className="flex items-center gap-3 bg-emerald-500/5 border border-emerald-500/30 rounded-2xl p-4 text-sm font-bold">
-              <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
-              <span className="flex-1 text-emerald-200/90">
-                Saved. Tap Generate to produce the question bank.
-              </span>
-            </div>
-          )}
-
-          {/* Action buttons */}
-          <div className="grid grid-cols-2 gap-3 sticky bottom-4 z-10">
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={!canSave}
-              className="h-14 rounded-2xl bg-primary/10 border border-primary/30 hover:bg-primary/20 text-primary font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-primary/5 backdrop-blur-md"
-            >
-              {isSaving ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Saving…
-                </>
-              ) : savedIdentity ? (
-                <>
-                  <Cloud className="w-4 h-4" />
-                  Saved
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4" />
-                  Save
-                </>
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={handleGenerate}
-              disabled={!canGenerate}
-              className="h-14 rounded-2xl aurora-gradient text-white font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-2 shadow-lg shadow-primary/20 transition-all hover:translate-y-[-1px] aurora-glow disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 backdrop-blur-md"
-            >
-              {isGenerating ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Generating…
-                </>
-              ) : (
-                <>
-                  <Wand2 className="w-4 h-4" />
-                  Generate
-                </>
-              )}
-            </button>
-          </div>
+          </SectionCard>
         </section>
 
-        {/* ── Output column ────────────────────────────────────────── */}
-        <section className="xl:col-span-7 space-y-6">
+        {/* Launch / blueprint aside */}
+        <aside className="xl:col-span-5">
+          <div className="space-y-4 xl:sticky xl:top-6">
+            <div className="premium-card border-glass-border relative overflow-hidden rounded-3xl p-5 sm:p-6">
+              <div className="pointer-events-none absolute -left-16 -top-16 h-56 w-56 rounded-full bg-violet-500/10 blur-[90px]" />
+              <div className="relative z-10">
+                <div className="mb-5 flex items-center gap-3">
+                  <div className="aurora-gradient aurora-glow flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl">
+                    <Rocket className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-[0.3em] text-emerald-400">
+                      Blueprint
+                    </div>
+                    <h3 className="text-base font-black text-white sm:text-lg">
+                      Generation summary
+                    </h3>
+                  </div>
+                </div>
+
+                <dl className="mb-5 space-y-px overflow-hidden rounded-2xl border border-white/5">
+                  <RecapRow
+                    label="Class"
+                    value={
+                      selectedGrade && selectedSubject
+                        ? `${selectedGrade.name} · ${selectedSubject.name}`
+                        : null
+                    }
+                  />
+                  <RecapRow label="Chapter" value={form.chapter.trim() || null} />
+                  <RecapRow
+                    label="Focus"
+                    value={hasFocusTopic ? form.focusTopic.trim() : 'Whole chapter'}
+                    muted={!hasFocusTopic}
+                  />
+                  <RecapRow label="Language" value={form.language} />
+                  <RecapRow
+                    label="Questions"
+                    value={numQ !== null ? String(numQ) : null}
+                  />
+                  <RecapRow
+                    label="Total marks"
+                    value={totalM !== null ? String(totalM) : null}
+                  />
+                  <RecapRow
+                    label="Sources"
+                    value={
+                      form.files.length
+                        ? `${form.files.length} file${form.files.length === 1 ? '' : 's'}`
+                        : null
+                    }
+                  />
+                </dl>
+
+                <div className="mb-5 space-y-2">
+                  {steps.map((s) => (
+                    <div key={s.n} className="flex items-center gap-2.5">
+                      <span
+                        className={cn(
+                          'flex h-5 w-5 shrink-0 items-center justify-center rounded-md transition-colors',
+                          s.done
+                            ? 'bg-emerald-500/15 text-emerald-400'
+                            : 'bg-white/5 text-slate-500',
+                        )}
+                      >
+                        {s.done ? (
+                          <Check className="h-3 w-3" />
+                        ) : (
+                          <CircleDot className="h-3 w-3" />
+                        )}
+                      </span>
+                      <span
+                        className={cn(
+                          'text-xs font-bold',
+                          s.done ? 'text-slate-300' : 'text-slate-500',
+                        )}
+                      >
+                        {s.hint}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Status messaging */}
+                {validationError && !error && (
+                  <div className="mb-4 flex items-start gap-2.5 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs font-bold text-amber-300">
+                    <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                    <span>{validationError}</span>
+                  </div>
+                )}
+                {error && (
+                  <div className="mb-4 flex items-start gap-2.5 rounded-2xl border border-red-500/30 bg-red-500/10 p-3 text-xs font-bold text-red-300">
+                    <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                    <span className="flex-1">{error}</span>
+                    <button
+                      type="button"
+                      onClick={() => setError(null)}
+                      className="opacity-60 hover:opacity-100"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
+                {savedIdentity && !result && !isGenerating && (
+                  <div className="mb-4 flex items-center gap-2.5 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-3 text-xs font-bold text-emerald-300">
+                    <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-emerald-400" />
+                    <span className="flex-1">
+                      Saved. Tap Generate to produce the question bank.
+                    </span>
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={handleSave}
+                    disabled={!canSave}
+                    className="flex h-14 items-center justify-center gap-2 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 text-xs font-black uppercase tracking-[0.18em] text-emerald-400 transition-all hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {isSaving ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Saving…
+                      </>
+                    ) : savedIdentity ? (
+                      <>
+                        <Cloud className="h-4 w-4" />
+                        Saved
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4" />
+                        Save
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleGenerate}
+                    disabled={!canGenerate}
+                    className="aurora-gradient aurora-glow flex h-14 items-center justify-center gap-2 rounded-2xl text-xs font-black uppercase tracking-[0.18em] text-white shadow-lg transition-all hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0"
+                  >
+                    {isGenerating ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Generating…
+                      </>
+                    ) : (
+                      <>
+                        <Wand2 className="h-4 w-4" />
+                        Generate
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                <p className="mt-4 flex items-center justify-center gap-1.5 text-center text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
+                  <Cloud className="h-3 w-3" />
+                  Output appears below once generated
+                </p>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      {/* ── Result (full width) ────────────────────────────────── */}
+      {(isGenerating || result) && (
+        <div ref={resultRef} className="scroll-mt-6">
           <ResultPanel
             isGenerating={isGenerating}
             result={result}
@@ -872,39 +1039,116 @@ export default function QuestionBank() {
             }
             onRegenerate={savedIdentity ? handleGenerate : undefined}
           />
-        </section>
-      </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // ── UI Helpers ────────────────────────────────────────────────────────
-function Card({
+interface StepMeta {
+  n: number;
+  label: string;
+  hint: string;
+  icon: React.ComponentType<{ className?: string }>;
+  done: boolean;
+}
+
+function Stepper({ steps }: { steps: StepMeta[] }) {
+  return (
+    <div className="flex items-center gap-2 sm:gap-3">
+      {steps.map((s, i) => (
+        <Fragment key={s.n}>
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span
+              className={cn(
+                'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[12px] font-black transition-all',
+                s.done
+                  ? 'aurora-gradient aurora-glow text-white'
+                  : 'border border-white/10 bg-white/5 text-slate-400',
+              )}
+            >
+              {s.done ? <Check className="h-4 w-4" /> : s.n}
+            </span>
+            <span
+              className={cn(
+                'hidden truncate text-[10px] font-black uppercase tracking-[0.2em] sm:block',
+                s.done ? 'text-emerald-400' : 'text-slate-400',
+              )}
+            >
+              {s.label}
+            </span>
+          </div>
+          {i < steps.length - 1 && (
+            <div className="h-px min-w-[12px] flex-1 overflow-hidden rounded-full bg-white/10">
+              <div
+                className={cn(
+                  'h-full transition-all duration-500',
+                  s.done ? 'aurora-gradient' : 'w-0',
+                )}
+                style={{ width: s.done ? '100%' : '0%' }}
+              />
+            </div>
+          )}
+        </Fragment>
+      ))}
+    </div>
+  );
+}
+
+function SectionCard({
   step,
   title,
+  icon: Icon,
+  done,
   children,
 }: {
   step: string;
   title: string;
+  icon: React.ComponentType<{ className?: string }>;
+  done: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <div className="premium-card p-5 sm:p-6 bg-card/40 border-glass-border relative overflow-hidden">
-      <div className="absolute -top-16 -right-16 w-60 h-60 bg-primary/5 rounded-full blur-[100px]" />
-      <h3 className="text-base sm:text-lg font-black mb-4 flex items-center gap-3 relative z-10">
-        <span className="text-primary text-[10px] font-black uppercase tracking-[0.3em]">
-          Step {step}
-        </span>
-        <span className="text-foreground">{title}</span>
-      </h3>
+    <div className="premium-card border-glass-border relative overflow-hidden rounded-3xl p-5 sm:p-6">
+      <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-emerald-500/5 blur-[90px]" />
+      <div className="relative z-10 mb-5 flex items-center gap-3">
+        <div
+          className={cn(
+            'flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-colors',
+            done
+              ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-400'
+              : 'border-white/10 bg-white/5 text-slate-300',
+          )}
+        >
+          {done ? <Check className="h-5 w-5" /> : <Icon className="h-5 w-5" />}
+        </div>
+        <div className="min-w-0">
+          <div className="text-[10px] font-black uppercase tracking-[0.3em] text-emerald-400">
+            Step {step}
+          </div>
+          <h3 className="truncate text-base font-black leading-tight text-white sm:text-lg">
+            {title}
+          </h3>
+        </div>
+      </div>
       <div className="relative z-10">{children}</div>
+    </div>
+  );
+}
+
+function SelectWrap({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="relative">
+      {children}
+      <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
     </div>
   );
 }
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
-    <label className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/60 ml-2 block mb-2">
+    <label className="mb-2 ml-1 block text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">
       {children}
     </label>
   );
@@ -921,6 +1165,32 @@ function Field({
     <div className="space-y-2">
       <FieldLabel>{label}</FieldLabel>
       {children}
+    </div>
+  );
+}
+
+function RecapRow({
+  label,
+  value,
+  muted,
+}: {
+  label: string;
+  value: string | null;
+  muted?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 bg-white/[0.02] px-3.5 py-2.5">
+      <dt className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+        {label}
+      </dt>
+      <dd
+        className={cn(
+          'max-w-[58%] truncate text-right text-xs font-bold',
+          value ? (muted ? 'text-slate-400' : 'text-white') : 'text-slate-600',
+        )}
+      >
+        {value || 'Not set'}
+      </dd>
     </div>
   );
 }
@@ -957,121 +1227,120 @@ function ResultPanel({
 
   if (isGenerating) {
     return (
-      <div className="premium-card p-10 bg-gradient-to-br from-primary/10 to-transparent border-primary/20 rounded-3xl text-center flex flex-col items-center gap-5 min-h-[420px] justify-center">
-        <Loader2 className="w-10 h-10 text-primary animate-spin" />
-        <div>
-          <h2 className="text-xl sm:text-2xl font-black uppercase tracking-tight">
-            Generating questions…
+      <div className="premium-card border-glass-border relative flex min-h-[360px] flex-col items-center justify-center gap-5 overflow-hidden rounded-3xl p-10 text-center">
+        <div className="pointer-events-none absolute inset-0 aurora-gradient opacity-[0.06]" />
+        <div className="relative">
+          <div className="absolute inset-0 animate-ping rounded-full bg-emerald-500/20" />
+          <div className="aurora-gradient aurora-glow relative flex h-16 w-16 items-center justify-center rounded-2xl">
+            <Loader2 className="h-8 w-8 animate-spin text-white" />
+          </div>
+        </div>
+        <div className="relative z-10">
+          <h2 className="text-xl font-black tracking-tight text-white sm:text-2xl">
+            Generating your question bank…
           </h2>
-          <p className="text-muted-foreground text-sm mt-2 max-w-sm">
-            Dispatching to the AI service. The microservice reads your PDF
-            from S3 and writes the question bank back. This may take up to a
-            few minutes.
+          <p className="mx-auto mt-2 max-w-sm text-sm text-slate-400">
+            The AI service is reading your source from S3 and writing the bank
+            back. This can take up to a few minutes.
           </p>
         </div>
       </div>
     );
   }
 
-  if (!result) {
-    return (
-      <div className="premium-card p-8 sm:p-12 bg-card/30 border-glass-border rounded-3xl text-center min-h-[420px] flex flex-col items-center justify-center gap-5">
-        <BookOpen className="w-14 h-14 text-muted-foreground/20" />
-        <div className="space-y-2 max-w-sm">
-          <h2 className="text-lg sm:text-xl font-black uppercase tracking-[0.15em] text-muted-foreground/70">
-            Awaiting generation
-          </h2>
-          <p className="text-xs sm:text-sm text-muted-foreground/60">
-            Fill in the form on the left, upload your source documents, and
-            hit Generate. The output will render here.
-          </p>
-        </div>
-      </div>
-    );
-  }
+  if (!result) return null;
 
   return (
     <div className="space-y-5">
       {/* Result header */}
-      <div className="premium-card p-5 sm:p-6 bg-card/40 border-glass-border rounded-3xl flex flex-col md:flex-row md:items-center gap-4">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 text-emerald-400 text-[10px] font-black uppercase tracking-[0.3em] mb-1">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            Generated
+      <div className="premium-card border-glass-border relative overflow-hidden rounded-3xl p-5 sm:p-6">
+        <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-emerald-500/10 blur-[90px]" />
+        <div className="relative z-10 flex flex-col gap-5 md:flex-row md:items-center">
+          <div className="min-w-0 flex-1">
+            <div className="mb-1 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.3em] text-emerald-400">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Generated
+            </div>
+            <h2 className="truncate text-xl font-black tracking-tight text-white sm:text-2xl">
+              {chapterName || result.question_bank.chapter || 'Question Bank'}
+            </h2>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {subjectName && (
+                <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.15em] text-slate-300">
+                  <BookOpen className="h-3 w-3" />
+                  {subjectName}
+                </span>
+              )}
+              <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.15em] text-emerald-400">
+                <span className="tabular-nums">{questions.length}</span> question
+                {questions.length === 1 ? '' : 's'}
+              </span>
+              {totalMarks > 0 && (
+                <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.15em] text-slate-300">
+                  <span className="tabular-nums">{totalMarks}</span> marks
+                </span>
+              )}
+            </div>
           </div>
-          <h2 className="text-xl sm:text-2xl font-black tracking-tight text-foreground truncate">
-            {chapterName || result.question_bank.chapter || 'Question Bank'}
-          </h2>
-          <p className="text-[11px] sm:text-xs text-muted-foreground font-medium mt-1">
-            {subjectName ? `${subjectName} · ` : ''}
-            <span className="tabular-nums">{questions.length}</span> question
-            {questions.length === 1 ? '' : 's'}
-            {totalMarks > 0 && (
-              <>
-                {' · '}
-                <span className="tabular-nums">{totalMarks}</span> marks
-              </>
-            )}
-          </p>
-        </div>
-        <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => onExport(false)}
-            disabled={!!exporting || isSharing}
-            className="h-10 px-4 bg-black/40 border border-white/5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] hover:border-primary/50 hover:bg-primary/5 transition-all flex items-center justify-center gap-2 disabled:opacity-30"
-          >
-            {exporting === 'exam' ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
-            ) : (
-              <Printer className="w-3.5 h-3.5 text-primary" />
-            )}
-            PDF Exam
-          </button>
-          <button
-            type="button"
-            onClick={() => onExport(true)}
-            disabled={!!exporting || isSharing}
-            className="h-10 px-4 bg-black/40 border border-emerald-500/20 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] hover:border-emerald-500/50 hover:bg-emerald-500/5 transition-all flex items-center justify-center gap-2 disabled:opacity-30"
-          >
-            {exporting === 'key' ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
-            ) : (
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-            )}
-            Answer Key
-          </button>
-          <button
-            type="button"
-            onClick={onShare}
-            disabled={!!exporting || isSharing}
-            className="h-10 px-4 bg-emerald-600/10 border border-emerald-500/30 hover:bg-emerald-600 text-emerald-300 hover:text-white rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 disabled:opacity-30"
-          >
-            {isSharing ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Share2 className="w-3.5 h-3.5" />
-            )}
-            WhatsApp
-          </button>
-          {onRegenerate && (
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
             <button
               type="button"
-              onClick={onRegenerate}
+              onClick={() => onExport(false)}
               disabled={!!exporting || isSharing}
-              className="h-10 px-4 bg-primary/10 border border-primary/30 hover:bg-primary/20 text-primary rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 disabled:opacity-30"
+              className="flex h-10 items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/30 px-4 text-[10px] font-black uppercase tracking-[0.18em] text-white transition-all hover:border-emerald-500/40 hover:bg-emerald-500/5 disabled:opacity-30"
             >
-              <RotateCcw className="w-3.5 h-3.5" />
-              Regenerate
+              {exporting === 'exam' ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" />
+              ) : (
+                <Printer className="h-3.5 w-3.5 text-emerald-400" />
+              )}
+              PDF Exam
             </button>
-          )}
+            <button
+              type="button"
+              onClick={() => onExport(true)}
+              disabled={!!exporting || isSharing}
+              className="flex h-10 items-center justify-center gap-2 rounded-xl border border-emerald-500/20 bg-black/30 px-4 text-[10px] font-black uppercase tracking-[0.18em] text-white transition-all hover:border-emerald-500/50 hover:bg-emerald-500/5 disabled:opacity-30"
+            >
+              {exporting === 'key' ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" />
+              ) : (
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+              )}
+              Answer Key
+            </button>
+            <button
+              type="button"
+              onClick={onShare}
+              disabled={!!exporting || isSharing}
+              className="flex h-10 items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-600/10 px-4 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-300 transition-all hover:bg-emerald-600 hover:text-white disabled:opacity-30"
+            >
+              {isSharing ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Share2 className="h-3.5 w-3.5" />
+              )}
+              WhatsApp
+            </button>
+            {onRegenerate && (
+              <button
+                type="button"
+                onClick={onRegenerate}
+                disabled={!!exporting || isSharing}
+                className="flex h-10 items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/30 px-4 text-[10px] font-black uppercase tracking-[0.18em] text-white transition-all hover:border-emerald-500/40 hover:bg-emerald-500/5 disabled:opacity-30"
+              >
+                <RotateCcw className="h-3.5 w-3.5 text-emerald-400" />
+                Regenerate
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Questions */}
       {questions.length === 0 ? (
-        <div className="rounded-3xl bg-card/30 border-2 border-dashed border-white/10 p-12 text-center">
-          <p className="text-sm font-black uppercase tracking-[0.3em] text-muted-foreground/60">
+        <div className="rounded-3xl border-2 border-dashed border-white/10 bg-white/[0.02] p-12 text-center">
+          <p className="text-sm font-black uppercase tracking-[0.3em] text-slate-400">
             The generated bank has no questions.
           </p>
         </div>
@@ -1096,11 +1365,11 @@ function ResultPanel({
         <button
           type="button"
           onClick={onOpenStandalone}
-          className="w-full h-12 rounded-2xl border border-white/10 bg-black/30 hover:border-primary/40 hover:bg-primary/5 text-muted-foreground hover:text-primary text-[10px] font-black uppercase tracking-[0.25em] transition-all flex items-center justify-center gap-2"
+          className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-black/30 text-[10px] font-black uppercase tracking-[0.25em] text-slate-400 transition-all hover:border-emerald-500/40 hover:bg-emerald-500/5 hover:text-emerald-400"
         >
-          <FolderOpen className="w-3.5 h-3.5" />
+          <FolderOpen className="h-3.5 w-3.5" />
           Open in dedicated viewer
-          <ArrowRight className="w-3.5 h-3.5" />
+          <ArrowRight className="h-3.5 w-3.5" />
         </button>
       )}
     </div>
@@ -1127,18 +1396,18 @@ function QuestionRow({
     | null
     | undefined;
   return (
-    <div className="rounded-3xl bg-card/40 border border-white/5 p-5 sm:p-6">
-      <div className="flex flex-wrap items-center gap-2 mb-3">
-        <span className="h-6 px-2.5 rounded-md bg-primary/10 border border-primary/20 text-primary text-[10px] font-black uppercase tracking-[0.2em] flex items-center tabular-nums">
+    <div className="premium-card border-glass-border rounded-3xl p-5 transition-colors hover:border-emerald-500/20 sm:p-6">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <span className="flex h-6 items-center rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2.5 text-[10px] font-black uppercase tracking-[0.2em] tabular-nums text-emerald-400">
           Q{index}
         </span>
-        <span className="h-6 px-2.5 rounded-md bg-white/5 border border-white/10 text-foreground text-[10px] font-black uppercase tracking-[0.2em] flex items-center">
+        <span className="flex h-6 items-center rounded-md border border-white/10 bg-white/5 px-2.5 text-[10px] font-black uppercase tracking-[0.2em] text-white">
           {typeLabel(q.type)}
         </span>
         {q.difficulty && (
           <span
             className={cn(
-              'h-6 px-2.5 rounded-md border text-[10px] font-black uppercase tracking-[0.2em] flex items-center',
+              'flex h-6 items-center rounded-md border px-2.5 text-[10px] font-black uppercase tracking-[0.2em]',
               difficultyTone(q.difficulty),
             )}
           >
@@ -1146,27 +1415,27 @@ function QuestionRow({
           </span>
         )}
         {typeof q.marks === 'number' && q.marks > 0 && (
-          <span className="h-6 px-2.5 rounded-md bg-white/5 border border-white/10 text-muted-foreground text-[10px] font-black uppercase tracking-[0.2em] flex items-center">
+          <span className="flex h-6 items-center rounded-md border border-white/10 bg-white/5 px-2.5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
             {q.marks} mark{q.marks === 1 ? '' : 's'}
           </span>
         )}
       </div>
 
-      <p className="text-sm sm:text-base font-bold text-foreground leading-snug whitespace-pre-wrap mb-3">
+      <p className="mb-3 whitespace-pre-wrap text-sm font-bold leading-snug text-white sm:text-base">
         {q.question}
       </p>
 
       {isMcq && Array.isArray(q.options) && q.options.length > 0 && (
-        <ul className="space-y-1.5 mb-3">
+        <ul className="mb-3 space-y-1.5">
           {q.options.map((opt, i) => (
             <li
               key={i}
-              className="flex items-start gap-3 p-2.5 rounded-lg border border-white/5 bg-black/30"
+              className="flex items-start gap-3 rounded-lg border border-white/5 bg-black/30 p-2.5"
             >
-              <span className="w-5 h-5 shrink-0 rounded bg-primary/10 text-primary text-[9px] font-black flex items-center justify-center">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-emerald-500/10 text-[9px] font-black text-emerald-400">
                 {String.fromCharCode(65 + i)}
               </span>
-              <span className="text-xs sm:text-sm text-foreground/90 whitespace-pre-wrap">
+              <span className="whitespace-pre-wrap text-xs text-slate-200 sm:text-sm">
                 {opt}
               </span>
             </li>
@@ -1175,22 +1444,22 @@ function QuestionRow({
       )}
 
       {q.answer && (
-        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 mb-2">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-400/80 mb-1">
+        <div className="mb-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
+          <p className="mb-1 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-400">
             Answer
           </p>
-          <p className="text-xs sm:text-sm text-emerald-100/90 whitespace-pre-wrap">
+          <p className="whitespace-pre-wrap text-xs text-emerald-200 sm:text-sm">
             {q.answer}
           </p>
         </div>
       )}
 
       {solutionSteps && solutionSteps.length > 0 && (
-        <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 mb-2">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary/80 mb-2">
+        <div className="mb-2 rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3">
+          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-cyan-400">
             Solution steps
           </p>
-          <ol className="list-decimal pl-5 space-y-1 text-xs sm:text-sm text-foreground/80">
+          <ol className="list-decimal space-y-1 pl-5 text-xs text-slate-300 sm:text-sm">
             {solutionSteps.map((step, i) => (
               <li key={i} className="whitespace-pre-wrap">
                 {typeof step === 'string'
@@ -1203,11 +1472,11 @@ function QuestionRow({
       )}
 
       {diagram && (
-        <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3 mb-2">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 mb-1">
+        <div className="mb-2 rounded-xl border border-white/5 bg-white/[0.02] p-3">
+          <p className="mb-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
             Diagram
           </p>
-          <p className="text-xs sm:text-sm text-foreground/70 whitespace-pre-wrap">
+          <p className="whitespace-pre-wrap text-xs text-slate-300 sm:text-sm">
             {typeof diagram === 'string'
               ? diagram
               : diagram.caption || diagram.description || diagram.url || ''}
@@ -1217,10 +1486,10 @@ function QuestionRow({
 
       {q.explanation && (
         <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 mb-1">
+          <p className="mb-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
             Explanation
           </p>
-          <p className="text-xs sm:text-sm text-foreground/70 whitespace-pre-wrap">
+          <p className="whitespace-pre-wrap text-xs text-slate-300 sm:text-sm">
             {q.explanation}
           </p>
         </div>
@@ -1248,7 +1517,7 @@ function difficultyTone(diff: string | null | undefined): string {
     return 'bg-red-500/10 text-red-400 border-red-500/20';
   if (d.startsWith('med') || d.startsWith('mix'))
     return 'bg-amber-500/10 text-amber-400 border-amber-500/20';
-  return 'bg-white/5 text-muted-foreground border-white/10';
+  return 'bg-white/5 text-slate-400 border-white/10';
 }
 
 function typeLabel(type: string | null | undefined): string {
@@ -1328,7 +1597,7 @@ function toQuestionItems(questions: GeneratedQuestion[]): QuestionItem[] {
 
 // ── Atoms ─────────────────────────────────────────────────────────────
 const inputCls =
-  'w-full h-12 px-4 rounded-2xl border border-white/5 bg-black/40 focus:ring-2 focus:ring-primary/50 outline-none font-bold text-sm transition-all hover:border-primary/30 disabled:opacity-40 disabled:cursor-not-allowed';
+  'w-full h-12 px-4 rounded-2xl border border-white/10 bg-black/30 text-white placeholder:text-slate-500 focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/50 outline-none font-semibold text-sm transition-all hover:border-white/20 disabled:opacity-40 disabled:cursor-not-allowed';
 
 const selectCls =
-  'w-full h-12 px-4 rounded-2xl border border-white/5 bg-black/40 focus:ring-2 focus:ring-primary/50 outline-none font-black text-sm transition-all hover:border-primary/30 disabled:opacity-40 disabled:cursor-not-allowed';
+  'w-full h-12 pl-4 pr-10 rounded-2xl border border-white/10 bg-black/30 text-white appearance-none cursor-pointer focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/50 outline-none font-bold text-sm transition-all hover:border-white/20 disabled:opacity-40 disabled:cursor-not-allowed';

@@ -67,7 +67,7 @@ export function useLogin() {
         setApiError('This account type is not supported in the mobile app. Please use the website.');
         return;
       }
-      await login(data.access_token, { ...data.user, role: data.role, institution_id: data.institution_id }, String(data.institution_id));
+      await login(data.access_token, { ...data.user, role: data.role, institution_id: data.institution_id }, String(data.institution_id), data.refresh_token);
       router.replace('/(parent)/dashboard');
     } catch (err: any) {
       setApiError(err?.message || 'Login failed');
@@ -94,7 +94,7 @@ export function useLogin() {
       // institution_id comes back from the server (resolved off the User
       // record) and is what every authenticated request will send as
       // X-Institution-Id thereafter.
-      await login(data.access_token, { ...data.user, role: data.role, institution_id: data.institution_id }, String(data.institution_id));
+      await login(data.access_token, { ...data.user, role: data.role, institution_id: data.institution_id }, String(data.institution_id), data.refresh_token);
       router.replace('/(teacher)/dashboard');
     } catch (err: any) {
       setApiError(err?.message || 'Teacher login failed');

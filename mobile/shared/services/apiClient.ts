@@ -38,6 +38,9 @@ const apiClient = axios.create({
 // no other code has to know about it.
 interface RetryableConfig extends InternalAxiosRequestConfig {
   __retryCount?: number;
+  // Set once we've replayed a request after a silent token refresh, so a
+  // second 401 on the same request can't trigger an infinite refresh loop.
+  __retriedAfterRefresh?: boolean;
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -67,6 +70,55 @@ const getFullURL = (baseURL: string = '', url: string = '') => {
   return `${baseURL}${url}`;
 };
 
+// ─── Silent access-token refresh (mobile) ────────────────────────────────────
+// Native clients have no cookie jar, so the short-lived access token can't be
+// rotated by the browser the way the web SPA does. When a request 401s with a
+// token attached, we exchange the stored refresh token for a fresh access
+// token and replay the request once. Single-flight: if many requests 401 at
+// the same expiry, only ONE /auth/refresh call goes out and the rest reuse it.
+let isRefreshing = false;
+let refreshWaiters: ((token: string | null) => void)[] = [];
+
+async function refreshAccessToken(): Promise<string | null> {
+  if (isRefreshing) {
+    return new Promise<string | null>((resolve) => refreshWaiters.push(resolve));
+  }
+  isRefreshing = true;
+  let newToken: string | null = null;
+  try {
+    const [refreshToken, role] = await Promise.all([
+      Storage.getItem(STORAGE_KEYS.REFRESH_TOKEN),
+      Storage.getItem(STORAGE_KEYS.ROLE),
+    ]);
+    if (refreshToken) {
+      // Bare axios (NOT apiClient) so this never re-enters the response
+      // interceptor / refresh logic.
+      const resp = await axios.post(getFullURL(API_BASE_URL, 'auth/refresh'), null, {
+        timeout: REQUEST_TIMEOUT_MS,
+        headers: {
+          'X-Refresh-Token': refreshToken,
+          'X-Portal-Role': role || 'parent',
+          'X-Client': 'mobile',
+        },
+      });
+      const token: string | undefined = resp?.data?.access_token;
+      if (token) {
+        await Storage.setItem(STORAGE_KEYS.ACCESS_TOKEN, token);
+        newToken = token;
+      }
+    }
+  } catch (e: any) {
+    console.warn('[API] token refresh failed:', e?.message);
+    newToken = null;
+  } finally {
+    isRefreshing = false;
+    const waiters = refreshWaiters;
+    refreshWaiters = [];
+    waiters.forEach((w) => w(newToken));
+  }
+  return newToken;
+}
+
 // ─── Request interceptor ──────────────────────────────────────────────────────
 apiClient.interceptors.request.use(
   async (config) => {
@@ -85,6 +137,12 @@ apiClient.interceptors.request.use(
     }
     if (storedRole && !config.headers['X-Portal-Role']) {
       config.headers['X-Portal-Role'] = storedRole;
+    }
+    // Identify the native client so the backend returns the refresh token in
+    // the login body (no cookie jar here) and accepts X-Refresh-Token on
+    // /auth/refresh. Harmless/ignored by the web-oriented endpoints.
+    if (!config.headers['X-Client']) {
+      config.headers['X-Client'] = 'mobile';
     }
 
     return config;
@@ -154,6 +212,31 @@ apiClient.interceptors.response.use(
         statusText: error?.response?.statusText || 'no response',
         attempts: retryCount + 1,
       });
+    }
+
+    // ── Silent refresh before giving up on a 401 ────────────────────────────
+    // A 401 with a token attached usually just means the access token expired.
+    // Rotate it via the stored refresh token and replay the request ONCE. If
+    // refresh fails (no/expired refresh token), we fall through to the existing
+    // clear-session-and-logout path below — so the worst case is identical to
+    // the previous behavior. Never refresh on the refresh call itself.
+    const isRefreshCall = requestUrl.includes('auth/refresh');
+    if (
+      error?.response?.status === 401 &&
+      hadAuthHeader &&
+      !isLoginRequest &&
+      !isRefreshCall &&
+      !isLogoutRace &&
+      !config.__retriedAfterRefresh
+    ) {
+      const newToken = await refreshAccessToken();
+      if (newToken) {
+        config.__retriedAfterRefresh = true;
+        config.headers = config.headers || ({} as any);
+        (config.headers as any).Authorization = `Bearer ${newToken}`;
+        return apiClient(config as AxiosRequestConfig);
+      }
+      // refresh failed → fall through to logout below.
     }
 
     // ── Auto-logout on 401 ──────────────────────────────────────────────────

@@ -13,6 +13,9 @@ export interface LoginPayload {
 
 export interface AuthResponse {
   access_token: string;
+  // Present for mobile (X-Client: mobile) so the app can rotate the access
+  // token on expiry; null/absent on the web cookie-based flow.
+  refresh_token?: string | null;
   token_type: string;
   role: 'parent' | 'student' | 'teacher' | 'admin' | 'super_admin';
   institution_id: number;

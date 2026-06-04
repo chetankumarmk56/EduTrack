@@ -369,7 +369,7 @@ function LibraryTab({
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by filename, subject, or tag…"
+            placeholder="Search"
             className="w-full h-10 pl-10 pr-4 rounded-xl bg-black/30 border border-white/5 text-sm outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/30 transition-all"
           />
         </div>

@@ -9,6 +9,10 @@ export const API_BASE_URL =
 // Secure storage keys
 export const STORAGE_KEYS = {
   ACCESS_TOKEN: 'edu_access_token',
+  // Long-lived refresh token (mobile only — native has no cookie jar, so the
+  // backend hands it back in the login body for X-Client: mobile). Used to
+  // silently rotate the access token on a 401 instead of forcing re-login.
+  REFRESH_TOKEN: 'edu_refresh_token',
   USER: 'edu_user',
   INSTITUTION_ID: 'edu_institution_id',
   ROLE: 'edu_role',

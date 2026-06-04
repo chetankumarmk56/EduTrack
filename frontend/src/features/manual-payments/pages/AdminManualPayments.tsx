@@ -274,7 +274,7 @@ export default function AdminManualPayments() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by student, parent, UTR or receipt no…"
+              placeholder="Search"
               className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.04] text-sm font-bold focus:outline-none focus:border-primary"
             />
           </div>

@@ -216,7 +216,7 @@ export default function GeneratedLessonPlanView({ plan, sessionDates, onReset }:
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden">
+    <div className="lp-canvas relative min-h-screen overflow-hidden">
       {/* ── Ambient background ─────────────────────────────────────────── */}
       <div className="pointer-events-none fixed inset-0 -z-10">
         <div className="absolute inset-0 bg-gradient-to-br from-slate-50 via-indigo-50/40 to-violet-50/30" />
@@ -230,7 +230,7 @@ export default function GeneratedLessonPlanView({ plan, sessionDates, onReset }:
         <div className="max-w-screen-xl mx-auto px-5 h-16 flex items-center gap-4">
           {/* Logo */}
           <div className="flex items-center gap-2.5 mr-2 shrink-0">
-            <div className="relative w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+            <div className="relative w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-600 to-blue-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
               <Sparkles className="w-4 h-4 text-white" />
               <div className="absolute inset-0 rounded-xl bg-white/20 mix-blend-overlay" />
             </div>
@@ -498,7 +498,7 @@ function FullPlanView({
                           className={`rounded-md px-1.5 py-1 w-full transition-colors ${
                             isSel
                               ? 'bg-white/25 backdrop-blur-sm'
-                              : 'bg-gradient-to-br from-indigo-600 to-violet-600'
+                              : 'bg-gradient-to-br from-indigo-600 to-blue-600'
                           }`}
                         >
                           <div className="text-white text-[9px] font-black uppercase tracking-wider truncate leading-none">
@@ -552,7 +552,7 @@ function FullPlanView({
           transition={SPRING}
           className="rounded-2xl bg-white/85 backdrop-blur-xl border border-white/60 shadow-[0_12px_30px_-15px_rgba(79,70,229,0.18)] px-5 py-4 flex items-center gap-3.5"
         >
-          <div className="relative w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex flex-col items-center justify-center shadow-lg shadow-indigo-500/30 shrink-0">
+          <div className="relative w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-blue-600 flex flex-col items-center justify-center shadow-lg shadow-indigo-500/30 shrink-0">
             <span className="text-[9px] font-black text-white/80 uppercase leading-none">
               {selDate.toLocaleDateString('en-US', { month: 'short' })}
             </span>
@@ -623,7 +623,7 @@ function DayClassPanel({ sc, onOpen }: { sc: ScheduledClass; onOpen: () => void 
       className="text-left relative rounded-2xl overflow-hidden bg-white/90 backdrop-blur-xl border border-white/60 shadow-[0_12px_30px_-15px_rgba(79,70,229,0.18)] hover:shadow-[0_20px_50px_-20px_rgba(79,70,229,0.32)] transition-shadow group"
     >
       {/* Gradient header */}
-      <div className="relative px-5 py-3.5 bg-gradient-to-br from-indigo-600 via-indigo-600 to-violet-600 overflow-hidden">
+      <div className="relative px-5 py-3.5 bg-gradient-to-br from-indigo-600 via-indigo-600 to-blue-600 overflow-hidden">
         <div className="absolute -top-12 -right-12 w-32 h-32 rounded-full bg-white/10 blur-2xl" />
         <div className="absolute -bottom-10 -left-6 w-24 h-24 rounded-full bg-violet-300/20 blur-2xl" />
         <div className="relative flex items-center justify-between">
@@ -752,9 +752,8 @@ function SingleDayView({
       <motion.div
         layout
         transition={SPRING}
-        className="relative rounded-3xl overflow-hidden shadow-2xl shadow-indigo-500/20"
+        className="lp-hero relative rounded-3xl overflow-hidden shadow-2xl shadow-indigo-500/20 bg-gradient-to-br from-indigo-700 via-indigo-600 to-blue-600"
       >
-        <div className="absolute inset-0 bg-gradient-to-br from-indigo-700 via-indigo-600 to-violet-600" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_25%_30%,rgba(255,255,255,0.18),transparent_55%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_85%_85%,rgba(139,92,246,0.45),transparent_55%)]" />
         <motion.div

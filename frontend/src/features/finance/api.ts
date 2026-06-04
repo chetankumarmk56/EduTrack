@@ -364,6 +364,8 @@ export interface FeeReminderDispatchSummary {
   eligible_rows: number;
   unique_students: number;
   skipped_no_target: number;
+  /** Attempted but not reached (no push token + no call). Not cooled down. */
+  delivery_failed: number;
   push: { sent?: number; failed?: number; tokens?: number; invalidated?: number };
   calls: { placed?: number; failed?: number; skipped_no_phone?: number };
   notified_fee_ids: number[];

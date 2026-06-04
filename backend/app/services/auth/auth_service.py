@@ -38,6 +38,21 @@ ACCESS_COOKIE_PREFIX = "edu_access_"
 REFRESH_COOKIE_PREFIX = "edu_refresh_"
 
 
+def is_mobile_client(request) -> bool:
+    """
+    True when the caller is the native mobile app (it sends ``X-Client:
+    mobile``). Native clients have no cookie jar, so the auth cookies the
+    web SPA relies on never round-trip for them. We use this flag to ALSO
+    hand the refresh token back in the login response body (and to accept it
+    via the ``X-Refresh-Token`` header on /auth/refresh) for mobile only —
+    the web flow is untouched and keeps its HttpOnly-cookie-only model.
+    """
+    try:
+        return (request.headers.get("X-Client") or "").strip().lower() == "mobile"
+    except Exception:
+        return False
+
+
 def _cookie_samesite() -> str:
     """
     Resolve the auth-cookie SameSite policy.

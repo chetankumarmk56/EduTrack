@@ -4,15 +4,15 @@ import {
   CheckCircle2, XCircle, AlertCircle, Loader2, Edit3, X,
   ChevronLeft, ChevronRight, Users, UserCheck, UserX, Clock,
   CalendarOff, FileClock, RefreshCw, Download, Search,
-  BarChart3, ClipboardList, Inbox, History, Sparkles,
+  BarChart3, ClipboardList, Inbox, Sparkles,
 } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import { getErrorMessage } from '@/shared/lib/errorHandler';
-import { teacherAttendanceApi, type TeacherAttendanceRecord, type TeacherLeaveRecord, type AuditLogRecord, type AttendanceSummary } from '@/features/teacher-attendance/api';
+import { teacherAttendanceApi, type TeacherAttendanceRecord, type TeacherLeaveRecord, type AttendanceSummary } from '@/features/teacher-attendance/api';
 import { useApp } from '@/shared/contexts/AppContext';
 import DatePicker from '@/shared/components/ui/DatePicker';
 
-type Tab = 'attendance' | 'leave' | 'summary' | 'audit';
+type Tab = 'attendance' | 'leave' | 'summary';
 
 interface StatusMeta {
   label: string;
@@ -79,106 +79,6 @@ function matchPreset(from: string, to: string): string | null {
     if (p.from() === from && p.to() === to) return p.key;
   }
   return null;
-}
-
-// Audit snapshots are stored as JSON strings in old_value / new_value.
-interface AuditSnapshot {
-  date?: string;
-  status?: string;
-  check_in_time?: string | null;
-  check_out_time?: string | null;
-  remarks?: string | null;
-  leave_type?: string;
-  start_date?: string;
-  end_date?: string;
-}
-
-function parseAuditSnapshot(raw: string | null): AuditSnapshot | null {
-  if (!raw) return null;
-  try {
-    const obj = JSON.parse(raw);
-    return obj && typeof obj === 'object' ? obj : null;
-  } catch {
-    return null;
-  }
-}
-
-function deriveAuditStatus(log: AuditLogRecord, snap: AuditSnapshot): string {
-  if (snap.status && ATTENDANCE_STATUSES.includes(snap.status)) return snap.status;
-  if (log.entity_type === 'LEAVE') {
-    if (log.action === 'CREATE_LEAVE') return 'ON_LEAVE';
-    if (log.action === 'APPROVE') return 'ON_LEAVE';
-    return snap.status || '';
-  }
-  if (log.action === 'CHECK_IN') return 'PRESENT';
-  return '';
-}
-
-function formatAuditTime(t: string | null | undefined): string {
-  if (!t) return '—';
-  if (/^\d{2}:\d{2}/.test(t)) return t.slice(0, 5);
-  const d = new Date(t);
-  return Number.isNaN(d.getTime())
-    ? t
-    : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-function formatActionLabel(action: string): string {
-  return action
-    .toLowerCase()
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, c => c.toUpperCase());
-}
-
-// Each check-in/check-out/edit produces its own audit row. For the attendance
-// view we merge by (teacher, date).
-interface GroupedAuditRow {
-  key: string;
-  teacher_id: number;
-  date: string;
-  status: string;
-  check_in_time: string | null;
-  check_out_time: string | null;
-  latestAt: string | null;
-  lastAction: string;
-  lastChangedBy: string;
-}
-
-function groupAuditLogsByDay(logs: AuditLogRecord[]): GroupedAuditRow[] {
-  const map = new Map<string, GroupedAuditRow>();
-  for (const log of logs) {
-    const snap = parseAuditSnapshot(log.new_value) || parseAuditSnapshot(log.old_value) || {};
-    const date =
-      snap.date || snap.start_date || (log.created_at ? log.created_at.slice(0, 10) : '');
-    if (!date) continue;
-    const key = `${log.teacher_id}_${date}`;
-
-    let g = map.get(key);
-    if (!g) {
-      g = {
-        key,
-        teacher_id: log.teacher_id,
-        date,
-        status: '',
-        check_in_time: null,
-        check_out_time: null,
-        latestAt: log.created_at,
-        lastAction: log.action,
-        lastChangedBy: log.changed_by_name,
-      };
-      map.set(key, g);
-    }
-
-    if (!g.status) {
-      const inferred = deriveAuditStatus(log, snap);
-      if (inferred) g.status = inferred;
-    }
-    if (!g.check_in_time && snap.check_in_time) g.check_in_time = snap.check_in_time;
-    if (!g.check_out_time && snap.check_out_time) g.check_out_time = snap.check_out_time;
-  }
-  return Array.from(map.values()).sort((a, b) =>
-    (b.latestAt || '').localeCompare(a.latestAt || ''),
-  );
 }
 
 function downloadCSV(filename: string, headers: string[], rows: (string | number | null | undefined)[][]) {
@@ -259,13 +159,6 @@ export default function TeacherAttendanceAdmin() {
   const [summaryDateTo, setSummaryDateTo] = useState(todayStr());
   const [summary, setSummary] = useState<AttendanceSummary[]>([]);
   const [summaryLoading, setSummaryLoading] = useState(false);
-
-  // Audit
-  const [auditTeacherId, setAuditTeacherId] = useState('');
-  const [auditPage, setAuditPage] = useState(0);
-  const [auditLogs, setAuditLogs] = useState<AuditLogRecord[]>([]);
-  const [auditTotal, setAuditTotal] = useState(0);
-  const [auditLoading, setAuditLoading] = useState(false);
 
   // Today's snapshot (KPI cards)
   const [todayCounts, setTodayCounts] = useState<Record<string, number>>({ PRESENT: 0, ABSENT: 0, HALF_DAY: 0, ON_LEAVE: 0 });
@@ -354,25 +247,9 @@ export default function TeacherAttendanceAdmin() {
     }
   }, [summaryTeacherId, summaryDateFrom, summaryDateTo]);
 
-  const loadAudit = useCallback(async () => {
-    setAuditLoading(true);
-    try {
-      const res = await teacherAttendanceApi.adminGetAuditLogs({
-        teacher_id: auditTeacherId ? Number(auditTeacherId) : undefined,
-        skip: auditPage * PAGE_SIZE,
-        limit: PAGE_SIZE,
-      });
-      setAuditLogs(res.items);
-      setAuditTotal(res.total);
-    } finally {
-      setAuditLoading(false);
-    }
-  }, [auditTeacherId, auditPage]);
-
   useEffect(() => { if (tab === 'attendance') loadAttendance(); }, [tab, loadAttendance]);
   useEffect(() => { if (tab === 'leave') loadLeaves(); }, [tab, loadLeaves]);
   useEffect(() => { if (tab === 'summary') loadSummary(); }, [tab, loadSummary]);
-  useEffect(() => { if (tab === 'audit') loadAudit(); }, [tab, loadAudit]);
 
   const handleEdit = async () => {
     if (!editModal) return;
@@ -439,7 +316,6 @@ export default function TeacherAttendanceAdmin() {
 
   const totalAttPages = Math.ceil(attTotal / PAGE_SIZE);
   const totalLeavePages = Math.ceil(leaveTotal / PAGE_SIZE);
-  const totalAuditPages = Math.ceil(auditTotal / PAGE_SIZE);
 
   const totalStaff = teacherDirectory.length;
   const todayPresent = todayCounts.PRESENT + todayCounts.HALF_DAY;
@@ -487,7 +363,7 @@ export default function TeacherAttendanceAdmin() {
           <p className="text-sm text-slate-400">Track check-ins, manage leave, and audit changes — all updating live.</p>
         </div>
         <button
-          onClick={() => { loadSnapshot(); if (tab === 'attendance') loadAttendance(); if (tab === 'leave') loadLeaves(); if (tab === 'summary') loadSummary(); if (tab === 'audit') loadAudit(); }}
+          onClick={() => { loadSnapshot(); if (tab === 'attendance') loadAttendance(); if (tab === 'leave') loadLeaves(); if (tab === 'summary') loadSummary(); }}
           className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900/60 border border-white/10 text-xs font-black uppercase tracking-widest text-slate-300 hover:text-white hover:border-primary/40 transition-colors"
         >
           <RefreshCw className={cn('w-3.5 h-3.5', snapshotLoading && 'animate-spin')} /> Refresh
@@ -571,7 +447,6 @@ export default function TeacherAttendanceAdmin() {
         <TabButton active={tab === 'attendance'} onClick={() => setTab('attendance')} icon={ClipboardList} label="Attendance" />
         <TabButton active={tab === 'leave'}      onClick={() => setTab('leave')}      icon={CalendarOff}    label="Leave"      badge={pendingLeavesCount} />
         <TabButton active={tab === 'summary'}    onClick={() => setTab('summary')}    icon={BarChart3}      label="Summary" />
-        <TabButton active={tab === 'audit'}      onClick={() => setTab('audit')}      icon={History}        label="Audit Log" />
       </div>
 
       <AnimatePresence mode="wait">
@@ -860,73 +735,6 @@ export default function TeacherAttendanceAdmin() {
           </motion.div>
         )}
 
-        {/* ── Audit Log Tab ───────────────────────────────────────────────── */}
-        {tab === 'audit' && (
-          <motion.div key="audit" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-4">
-            <FilterShell
-              count={auditTotal}
-              onRefresh={loadAudit}
-              loading={auditLoading}
-            >
-              <TeacherFilter
-                value={auditTeacherId}
-                onChange={v => { setAuditTeacherId(v); setAuditPage(0); }}
-                teachers={teacherDirectory}
-              />
-            </FilterShell>
-
-            {auditLoading ? (
-              <LoadingBlock />
-            ) : auditLogs.length === 0 ? (
-              <EmptyBlock icon={History} title="No audit history" message="Edits, check-ins, and leave actions will appear here." />
-            ) : (
-              <>
-                <div className="overflow-x-auto rounded-3xl border border-white/5 bg-slate-900/60 backdrop-blur-md">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="border-b border-white/5 bg-slate-900/40">
-                        {['Date', 'Teacher', 'Action', 'Status', 'Check-In', 'Check-Out', 'Changed By'].map(h => (
-                          <th key={h} className="px-4 py-3.5 text-left font-black uppercase tracking-widest text-slate-500">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {groupAuditLogsByDay(auditLogs).map((row) => {
-                        const teacher = teacherDirectory.find((t) => t.id === row.teacher_id);
-                        const status = row.status || (row.check_in_time ? 'PRESENT' : '');
-                        const meta = STATUS_META[status];
-                        return (
-                          <tr key={row.key} className="border-b border-white/5 hover:bg-white/[0.03] transition-colors">
-                            <td className="px-4 py-3 font-mono text-slate-300 whitespace-nowrap">
-                              {row.date ? new Date(row.date).toLocaleDateString() : '—'}
-                            </td>
-                            <td className="px-4 py-3 font-black text-slate-200">
-                              <TeacherCell name={teacher?.name || `Teacher #${row.teacher_id}`} />
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className="px-2 py-0.5 rounded-full border border-white/10 bg-white/[0.03] text-[10px] font-black uppercase tracking-widest text-slate-300">
-                                {formatActionLabel(row.lastAction)}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3">
-                              {meta
-                                ? <StatusPill status={status} meta={meta} />
-                                : <span className="text-slate-500">—</span>}
-                            </td>
-                            <td className="px-4 py-3 font-mono text-slate-300 whitespace-nowrap">{formatAuditTime(row.check_in_time)}</td>
-                            <td className="px-4 py-3 font-mono text-slate-300 whitespace-nowrap">{formatAuditTime(row.check_out_time)}</td>
-                            <td className="px-4 py-3 text-slate-400">{row.lastChangedBy || '—'}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                <Pagination page={auditPage} totalPages={totalAuditPages} total={auditTotal} pageSize={PAGE_SIZE} onPage={setAuditPage} />
-              </>
-            )}
-          </motion.div>
-        )}
       </AnimatePresence>
 
       {/* ── Edit Attendance Modal ────────────────────────────────────────── */}
@@ -1287,7 +1095,7 @@ function TeacherFilter({
           >
             <input
               autoFocus
-              placeholder="Search teacher…"
+              placeholder="Search"
               value={query}
               onChange={e => setQuery(e.target.value)}
               className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-xs text-white focus:outline-none focus:border-primary/50 mb-2"

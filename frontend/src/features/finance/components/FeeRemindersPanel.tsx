@@ -43,7 +43,8 @@ export default function FeeRemindersPanel() {
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   const [isDispatching, setIsDispatching] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
+  // null = closed; 'preview' = read-only eligible list; 'confirm' = send flow.
+  const [modal, setModal] = useState<null | 'preview' | 'confirm'>(null);
   const [error, setError] = useState<string | null>(null);
 
   const loadSettings = useCallback(async () => {
@@ -103,9 +104,14 @@ export default function FeeRemindersPanel() {
     }
   };
 
+  const openPreview = async () => {
+    await loadPreview();
+    setModal('preview');
+  };
+
   const openConfirm = async () => {
     await loadPreview();
-    setConfirmOpen(true);
+    setModal('confirm');
   };
 
   const onDispatch = async () => {
@@ -114,13 +120,18 @@ export default function FeeRemindersPanel() {
     try {
       const summary = await financeApi.dispatchFeeReminders();
       setLastDispatch(summary);
-      setConfirmOpen(false);
+      setModal(null);
       if (summary.triggered) {
-        toast.success(
-          summary.eligible_rows
-            ? `Sent reminders for ${summary.unique_students} student${summary.unique_students === 1 ? '' : 's'}.`
-            : 'No eligible students right now — nothing to send.',
-        );
+        const reached = summary.notified_fee_ids.length;
+        if (!summary.eligible_rows) {
+          toast.success('No eligible students right now — nothing to send.');
+        } else if (reached === 0) {
+          toast.error(
+            'Could not reach anyone — no push tokens or calls landed. No one was put under cooldown.',
+          );
+        } else {
+          toast.success(`Reminders delivered for ${reached} fee${reached === 1 ? '' : 's'}.`);
+        }
       } else {
         toast.error(summary.skipped_reason || 'Dispatch did not run.');
       }
@@ -193,7 +204,7 @@ export default function FeeRemindersPanel() {
           <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
             <button
               type="button"
-              onClick={loadPreview}
+              onClick={openPreview}
               disabled={isLoadingPreview}
               className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl border border-white/10 bg-white/5 text-xs font-black uppercase tracking-widest text-foreground hover:bg-white/10 transition-all disabled:opacity-50"
             >
@@ -425,14 +436,16 @@ export default function FeeRemindersPanel() {
         </div>
       </div>
 
-      {/* Confirmation modal */}
+      {/* Preview / confirmation modal */}
       <ConfirmDispatchModal
-        open={confirmOpen}
+        open={modal !== null}
+        mode={modal ?? 'confirm'}
         preview={preview}
+        isLoadingPreview={isLoadingPreview}
         isDispatching={isDispatching}
         cooldownDays={merged.effective_cooldown_days}
         voiceEnabled={merged.voice_calls_enabled}
-        onCancel={() => setConfirmOpen(false)}
+        onCancel={() => setModal(null)}
         onConfirm={onDispatch}
       />
     </div>
@@ -497,7 +510,9 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 interface ConfirmDispatchModalProps {
   open: boolean;
+  mode: 'preview' | 'confirm';
   preview: FeeReminderPreview | null;
+  isLoadingPreview: boolean;
   isDispatching: boolean;
   cooldownDays: number;
   voiceEnabled: boolean;
@@ -506,8 +521,9 @@ interface ConfirmDispatchModalProps {
 }
 
 function ConfirmDispatchModal({
-  open, preview, isDispatching, cooldownDays, voiceEnabled, onCancel, onConfirm,
+  open, mode, preview, isLoadingPreview, isDispatching, cooldownDays, voiceEnabled, onCancel, onConfirm,
 }: ConfirmDispatchModalProps) {
+  const isPreview = mode === 'preview';
   const rows = preview?.rows ?? [];
   const eligibleRows = rows.filter((r) => r.eligible_now);
   const totalDue = preview?.total_due_amount ?? 0;
@@ -535,13 +551,20 @@ function ConfirmDispatchModal({
           >
             <div className="flex items-start justify-between p-6 border-b border-slate-200 dark:border-white/10">
               <div className="flex items-center gap-3">
-                <div className="h-11 w-11 rounded-2xl bg-amber-500/10 text-amber-600 flex items-center justify-center">
-                  <MailWarning className="w-5 h-5" />
+                <div className={cn(
+                  'h-11 w-11 rounded-2xl flex items-center justify-center',
+                  isPreview ? 'bg-indigo-500/10 text-indigo-600' : 'bg-amber-500/10 text-amber-600',
+                )}>
+                  {isPreview ? <Eye className="w-5 h-5" /> : <MailWarning className="w-5 h-5" />}
                 </div>
                 <div>
-                  <h2 className="text-lg font-black text-foreground">Send fee reminders?</h2>
+                  <h2 className="text-lg font-black text-foreground">
+                    {isPreview ? 'Eligible students preview' : 'Send fee reminders?'}
+                  </h2>
                   <p className="text-xs text-muted-foreground">
-                    Pushes notifications now. Cooldown blocks re-sends for the next {cooldownDays} days.
+                    {isPreview
+                      ? `Who would be notified if you send now. Rows in cooldown or without a login are shown but skipped.`
+                      : `Pushes notifications now. Cooldown blocks re-sends for the next ${cooldownDays} days.`}
                   </p>
                 </div>
               </div>
@@ -590,7 +613,11 @@ function ConfirmDispatchModal({
                 </div>
               )}
 
-              {rows.length === 0 ? (
+              {isLoadingPreview && rows.length === 0 ? (
+                <div className="p-6 rounded-xl bg-slate-100 dark:bg-white/5 flex items-center justify-center gap-2 text-sm text-muted-foreground font-bold">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Loading eligible students…
+                </div>
+              ) : rows.length === 0 ? (
                 <div className="p-6 rounded-xl bg-slate-100 dark:bg-white/5 text-center text-sm text-muted-foreground font-bold">
                   No overdue, unpaid fees right now. Nothing to send.
                 </div>
@@ -657,19 +684,21 @@ function ConfirmDispatchModal({
                 disabled={isDispatching}
                 className="px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-white/5 text-foreground text-xs font-black uppercase tracking-widest hover:bg-slate-200 dark:hover:bg-white/10 transition-colors disabled:opacity-50"
               >
-                Cancel
+                {isPreview ? 'Close' : 'Cancel'}
               </button>
-              <button
-                type="button"
-                onClick={onConfirm}
-                disabled={isDispatching || eligibleCount === 0}
-                className="inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-black uppercase tracking-widest shadow-md hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50"
-              >
-                {isDispatching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                {eligibleCount === 0
-                  ? 'Nothing to send'
-                  : `Confirm — notify ${uniqueStudents} student${uniqueStudents === 1 ? '' : 's'}`}
-              </button>
+              {!isPreview && (
+                <button
+                  type="button"
+                  onClick={onConfirm}
+                  disabled={isDispatching || eligibleCount === 0}
+                  className="inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-black uppercase tracking-widest shadow-md hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50"
+                >
+                  {isDispatching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                  {eligibleCount === 0
+                    ? 'Nothing to send'
+                    : `Confirm — notify ${uniqueStudents} student${uniqueStudents === 1 ? '' : 's'}`}
+                </button>
+              )}
             </div>
           </motion.div>
         </div>
@@ -698,10 +727,11 @@ function DispatchResultBanner({ summary }: { summary: FeeReminderDispatchSummary
   const callsFailed = summary.calls?.failed ?? 0;
   const callsSkipped = summary.calls?.skipped_no_phone ?? 0;
   const noTarget = summary.skipped_no_target ?? 0;
+  const deliveryFailed = summary.delivery_failed ?? 0;
   const rowsNotified = summary.notified_fee_ids.length;
 
   const totalCallAttempts = callsPlaced + callsFailed + callsSkipped;
-  const anyFailure = pushFailed > 0 || callsFailed > 0 || noTarget > 0;
+  const anyFailure = pushFailed > 0 || callsFailed > 0 || noTarget > 0 || deliveryFailed > 0;
   const nothingDelivered = pushSent === 0 && callsPlaced === 0;
 
   // Pick the headline tone: red if nothing landed, amber if partial, green if all good.
@@ -739,6 +769,12 @@ function DispatchResultBanner({ summary }: { summary: FeeReminderDispatchSummary
             <p className="font-normal">
               <span className="font-black">{noTarget} student{noTarget === 1 ? '' : 's'} skipped:</span>{' '}
               no parent / student login linked — no push or call possible until you link a user.
+            </p>
+          )}
+          {deliveryFailed > 0 && (
+            <p className="font-normal">
+              <span className="font-black">{deliveryFailed} student{deliveryFailed === 1 ? '' : 's'} not reached:</span>{' '}
+              no push token landed and no call placed — left out of cooldown and will be retried on the next run.
             </p>
           )}
           {summary.first_call_error && (

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Phone, MessageCircle, X } from 'lucide-react';
+import { Phone, MessageCircle, X, Search } from 'lucide-react';
 import type { DefaulterResponse } from '@/features/finance/api';
 import type { Grade, SchoolClass } from '@/shared/types';
 
@@ -19,11 +19,17 @@ function toWhatsAppNumber(phone: string): string | null {
 export default function DefaultersTable({ defaulters, onClearDues, grades, schoolClasses }: DefaultersTableProps) {
   const [filterGradeId, setFilterGradeId] = useState<number | null>(null);
   const [filterClassId, setFilterClassId] = useState<number | null>(null);
+  const [search, setSearch] = useState('');
 
+  const query = search.trim().toLowerCase();
   const filtered = defaulters.filter(d => {
     const matchesGrade = !filterGradeId || d.grade_id === filterGradeId;
     const matchesClass = !filterClassId || d.class_id === filterClassId;
-    return matchesGrade && matchesClass;
+    const matchesSearch = !query ||
+      d.student_name.toLowerCase().includes(query) ||
+      (d.class_name?.toLowerCase().includes(query) ?? false) ||
+      (d.phone?.replace(/\s/g, '').includes(query.replace(/\s/g, '')) ?? false);
+    return matchesGrade && matchesClass && matchesSearch;
   });
 
   return (
@@ -35,6 +41,29 @@ export default function DefaultersTable({ defaulters, onClearDues, grades, schoo
         </div>
 
         <div className="flex flex-wrap items-center gap-4">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-2">Search</label>
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search"
+                className="w-full sm:w-64 pl-10 pr-9 py-2 bg-slate-900/50 border border-white/10 rounded-xl text-xs font-bold text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary/20"
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-rose-500 transition-colors"
+                  title="Clear search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
           <div className="flex flex-col gap-1.5">
             <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-2">Class Level</label>
             <select
@@ -70,9 +99,9 @@ export default function DefaultersTable({ defaulters, onClearDues, grades, schoo
             </select>
           </div>
 
-          {(filterGradeId || filterClassId) && (
+          {(filterGradeId || filterClassId || search) && (
             <button
-              onClick={() => { setFilterGradeId(null); setFilterClassId(null); }}
+              onClick={() => { setFilterGradeId(null); setFilterClassId(null); setSearch(''); }}
               className="mt-5 p-2 text-rose-500 hover:bg-rose-500/10 rounded-xl transition-all"
               title="Clear Filters"
             >

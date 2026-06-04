@@ -61,12 +61,20 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
 
-      - name: Run pytest
+      - name: Run pytest (with coverage gate)
         env:
           DATABASE_URL: sqlite+aiosqlite:///./test.db
           SECRET_KEY: ${{ secrets.CI_SECRET_KEY || 'ci_test_secret_key_must_be_at_least_32_chars_long' }}
           ENVIRONMENT: test
-        run: python -m pytest tests/ -v --tb=short
+        # --cov-fail-under is a RATCHET: current coverage is ~45% (measured on
+        # app + AI), so 40 is a floor that passes today with headroom. Raise it
+        # as coverage grows — never above the real number, so CI can't break on
+        # an unrelated PR.
+        run: >-
+          python -m pytest tests/ -v --tb=short
+          --cov=app --cov=AI
+          --cov-report=term-missing:skip-covered
+          --cov-fail-under=40
 
   build:
     name: Build (Docker image)

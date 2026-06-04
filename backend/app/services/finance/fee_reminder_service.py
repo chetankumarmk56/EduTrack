@@ -62,6 +62,10 @@ class FeeReminderRunSummary:
     eligible_rows: int
     unique_students: int
     skipped_no_target: int
+    # Rows we tried to notify but couldn't reach (no push token landed AND no
+    # voice call placed). These are intentionally NOT put under cooldown so
+    # the next dispatch retries them.
+    delivery_failed: int
     push_summary: dict
     call_summary: dict
     notified_fee_ids: List[int]
@@ -77,6 +81,7 @@ class FeeReminderRunSummary:
             "eligible_rows": self.eligible_rows,
             "unique_students": self.unique_students,
             "skipped_no_target": self.skipped_no_target,
+            "delivery_failed": self.delivery_failed,
             "push": self.push_summary,
             "calls": self.call_summary,
             "notified_fee_ids": self.notified_fee_ids,
@@ -307,6 +312,7 @@ class FeeReminderService:
                 eligible_rows=0,
                 unique_students=0,
                 skipped_no_target=0,
+                delivery_failed=0,
                 push_summary={},
                 call_summary={},
                 notified_fee_ids=[],
@@ -405,6 +411,7 @@ class FeeReminderService:
                 eligible_rows=0,
                 unique_students=0,
                 skipped_no_target=0,
+                delivery_failed=0,
                 push_summary={"sent": 0, "failed": 0, "tokens": 0},
                 call_summary={"placed": 0, "failed": 0, "skipped_no_phone": 0},
                 notified_fee_ids=[],
@@ -436,6 +443,7 @@ class FeeReminderService:
 
         notified_ids: List[int] = []
         skipped_no_target = 0
+        delivery_failed = 0
         combined_push = {"sent": 0, "failed": 0, "tokens": 0, "invalidated": 0}
         combined_calls = {"placed": 0, "failed": 0, "skipped_no_phone": 0}
         first_call_error: Optional[str] = None
@@ -487,7 +495,9 @@ class FeeReminderService:
                 reference_id=str(fee.id),
                 priority="high",
             )
+            push_sent = int(summary.get("sent", 0) or 0)
 
+            call_placed = False
             if voice_calls_enabled:
                 call_outcome, call_error = await self._place_overdue_call(
                     fee=fee,
@@ -497,13 +507,27 @@ class FeeReminderService:
                 combined_calls[call_outcome] = combined_calls.get(call_outcome, 0) + 1
                 if call_outcome == "failed" and first_call_error is None:
                     first_call_error = call_error
-
-            fee.last_notified_at = datetime.now(timezone.utc)
-            await db.flush()
-            notified_ids.append(fee.id)
+                call_placed = call_outcome == "placed"
 
             for k in ("sent", "failed", "tokens", "invalidated"):
                 combined_push[k] = combined_push.get(k, 0) + int(summary.get(k, 0) or 0)
+
+            # Only consume cooldown for students we ACTUALLY reached. A push
+            # that landed on zero devices (parent has no registered token) or
+            # a failed / skipped voice call is not a delivery — leave
+            # last_notified_at untouched so the next run retries instead of
+            # silencing them for the whole cooldown window.
+            if push_sent > 0 or call_placed:
+                fee.last_notified_at = datetime.now(timezone.utc)
+                await db.flush()
+                notified_ids.append(fee.id)
+            else:
+                delivery_failed += 1
+                logger.info(
+                    "[fee-reminder] nothing delivered for student %s "
+                    "(push_sent=0, call_placed=False) — not bumping cooldown",
+                    fee.student_id,
+                )
 
         if not dry_run:
             await db.commit()
@@ -514,6 +538,7 @@ class FeeReminderService:
             eligible_rows=len(fees),
             unique_students=unique_students,
             skipped_no_target=skipped_no_target,
+            delivery_failed=delivery_failed,
             push_summary=combined_push,
             call_summary=combined_calls,
             notified_fee_ids=notified_ids,

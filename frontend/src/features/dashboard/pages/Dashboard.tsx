@@ -71,6 +71,11 @@ export default function Dashboard() {
    const activeStudent = studentProfile || classDirectory.find((s) => s.user_id === user?.id || s.id === user?.id);
    const studentClass = activeStudent?.school_class || activeStudent?.classroom;
 
+   // Greeting name: parents see their own name, students see their own.
+   const welcomeName = user?.role === 'student'
+      ? (activeStudent?.name || user?.name || 'Scholar')
+      : (activeStudent?.parent?.name || user?.name || 'Guardian');
+
    const marks = useMemo(() => (rawMarks || []).filter((m) =>
       teacherDirectory.some((t) =>
          t.assignments?.some((a) => {
@@ -132,8 +137,11 @@ export default function Dashboard() {
                   <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 md:gap-10 relative z-10">
                      <div className="space-y-4 sm:space-y-6 flex-1 min-w-0 w-full lg:max-w-[55%]">
                         <div className="flex items-center gap-2 sm:gap-3 text-primary text-[10px] font-black uppercase tracking-[0.3em] sm:tracking-[0.5em] bg-white/40 px-4 sm:px-6 py-2 sm:py-3 rounded-full border border-white/60 w-fit crystal-glow">
-                           <ShieldCheck className="w-4 h-4" /> Parent Dashboard
+                           <ShieldCheck className="w-4 h-4" /> {user?.role === 'student' ? 'Student Dashboard' : 'Parent Dashboard'}
                         </div>
+                        <p className="text-2xl sm:text-3xl md:text-4xl font-black tracking-tight text-foreground [text-wrap:balance]">
+                           Welcome, <span className="text-gradient-crystal">{welcomeName}</span>
+                        </p>
                         <div>
                            {institutionLogoUrl && (
                               <SchoolLogo

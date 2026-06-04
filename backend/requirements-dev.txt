@@ -4,6 +4,7 @@
 -r requirements.txt
 pytest>=7.0
 pytest-asyncio>=0.21
+pytest-cov>=4.1     # coverage measurement + CI fail-under gate
 aiosqlite>=0.19
 fakeredis>=2.20
 httpx<0.28          # starlette 0.36 TestClient compat

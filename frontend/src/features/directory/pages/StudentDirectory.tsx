@@ -140,7 +140,7 @@ export default function StudentDirectory() {
       await directoryApi.deleteStudent(target.id);
       toast.success('Student removed', `${target.name} was removed from the roster.`);
       setPendingDeleteStudent(null);
-      refreshStudents();
+      refreshStudents({ schoolClassId: selectedSchoolClassId });
     } catch (err) {
       const error = getErrorMessage(err);
       toast.error('Could not remove student', error.message || 'Please try again.');
@@ -370,13 +370,13 @@ export default function StudentDirectory() {
         isOpen={isAdding}
         onClose={() => setIsAdding(false)}
         selectedSchoolClassId={selectedSchoolClassId}
-        onEnrolled={refreshStudents}
+        onEnrolled={() => refreshStudents({ schoolClassId: selectedSchoolClassId })}
       />
 
       <EditStudentModal
         student={editingStudent}
         onClose={() => setEditingStudent(null)}
-        onUpdated={refreshStudents}
+        onUpdated={() => refreshStudents({ schoolClassId: selectedSchoolClassId })}
       />
 
       <ConfirmModal

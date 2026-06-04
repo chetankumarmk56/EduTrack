@@ -4,16 +4,20 @@ import { useNavigate } from 'react-router-dom';
 import {
   AlertCircle,
   ArrowLeft,
+  CalendarRange,
+  Check,
   CheckCircle2,
   Cloud,
   FileText,
+  GraduationCap,
+  Layers,
   ListChecks,
   Loader2,
   Palmtree,
   Plus,
-  Save,
   Sparkles,
   Trash2,
+  UploadCloud,
   Wand2,
   X,
 } from 'lucide-react';
@@ -31,6 +35,7 @@ import { cn } from '@/shared/lib/utils';
 import DatePicker from '@/shared/components/ui/DatePicker';
 
 import { lessonPlanAIApi } from '@/features/lesson-plan/ai/api';
+import { addPending, removePending } from '@/features/lesson-plan/ai/pendingGenerations';
 import type {
   ChapterIdentity,
   UploadResponse,
@@ -44,10 +49,13 @@ import type {
  *   Step 1: pick Grade / Section / Subject from the teacher's assignments.
  *   Step 2: per chapter — name + date range (drives class count from the
  *           timetable) + files.
- *   Save  ─▶ uploads every chapter's files + writes metadata.json under
- *            lesson-plan/<schoolId>/<teacherId>/<gradeId>/<subjectId>/<chapterId>/
- *   Generate ─▶ reads the matching output/lesson_plan.json that the
- *               external microservice has produced.
+ *   Generate ─▶ a single action that (a) uploads the chapter's files +
+ *               writes metadata.json under
+ *               lesson-plan/<schoolId>/<teacherId>/<gradeId>/<subjectId>/<chapterId>/,
+ *               then (b) kicks off generation in the background and returns
+ *               to the calendar. The teacher waits only on the quick S3
+ *               save; the plan appears on the calendar when generation
+ *               finishes (the dashboard polls output/lesson_plan.json).
  *
  * School and Teacher IDs are derived silently from the logged-in user and
  * never displayed.
@@ -353,7 +361,12 @@ export default function AILessonPlan() {
     return null;
   };
 
-  const handleSaveChapter = async (id: string) => {
+  // ── Generate (one action: save → kick off generation → calendar) ──
+  // A single button does both: it persists the chapter to S3, then fires
+  // generation WITHOUT blocking the UI. The teacher only waits on the quick
+  // S3 save; the AI runs in the background and the plan lands on the
+  // calendar when ready (the calendar polls S3 for the output).
+  const handleGenerateChapter = async (id: string) => {
     const ch = chapters.find((c) => c.id === id);
     if (!ch) return;
 
@@ -374,7 +387,11 @@ export default function AILessonPlan() {
       .length;
     const colorHue = (existingHues * 45) % 360;
 
-    updateChapter(id, { isSaving: true, error: undefined });
+    updateChapter(id, { isGenerating: true, error: undefined });
+
+    // Step 1 — Save: upload files + metadata to S3. Generation reads this
+    // metadata back, so it must complete first. This is a fast S3 write —
+    // the only thing the teacher actually waits on.
     try {
       const res = await lessonPlanAIApi.upload({
         ...ident,
@@ -390,499 +407,587 @@ export default function AILessonPlan() {
         session_dates: sessionDates,
         color_hue: colorHue,
       });
-      updateChapter(id, { saved: res, isSaving: false });
-      toast.success(`Saved "${ch.name}"`);
-    } catch (e) {
-      updateChapter(id, {
-        isSaving: false,
-        error: extractErr(e, 'Could not save the chapter.'),
-      });
-    }
-  };
-
-  // ── Generate (per chapter — read from S3, then return to dashboard) ──
-  const handleGenerateChapter = async (id: string) => {
-    const ch = chapters.find((c) => c.id === id);
-    if (!ch) return;
-    const ident = chapterIdentity(ch);
-    if (!ident) {
-      updateChapter(id, {
-        error:
-          'Pick Grade / Section / Subject and give the chapter a name first.',
-      });
-      return;
-    }
-    if (!ch.saved) {
-      updateChapter(id, {
-        error: 'Save the chapter first before generating.',
-      });
-      return;
-    }
-    updateChapter(id, { isGenerating: true, error: undefined });
-    try {
-      await lessonPlanAIApi.generate(ident);
-      updateChapter(id, { isGenerating: false });
-      toast.success(`Generated "${ch.name}" — opening the calendar.`);
-      navigate('/teacher/lesson-plan');
+      updateChapter(id, { saved: res });
     } catch (e) {
       updateChapter(id, {
         isGenerating: false,
-        error: extractErr(e, 'Generation failed — check the AI service logs.'),
+        error: extractErr(e, 'Could not save the chapter.'),
       });
+      return;
     }
+
+    // Step 2 — Generate (non-blocking). Mark the chapter pending, fire
+    // generation in the background, and go straight to the calendar — it
+    // polls for the output and maps the plan the moment S3 has it. The
+    // backend writes the finished plan to S3 regardless of whether this
+    // request's response makes it back, so we don't await it here.
+    addPending(ident, ch.name.trim());
+    lessonPlanAIApi
+      .generate(ident, { silent: true })
+      .then(() => removePending(ident)) // output is in S3 now → stop polling for it
+      .catch(() => {
+        /* Leave the marker: the response may have been cut while generation
+           kept running server-side. The calendar reconciles against S3 and
+           expires the marker if no output ever appears. */
+      });
+    toast.success(`Generating "${ch.name}" — it'll appear on the calendar when ready.`);
+    navigate('/teacher/lesson-plan');
   };
+
+  // ── Render-time derivations ───────────────────────────────────────
+  const classReady = !!selectedGrade && !!selectedSection && !!selectedSubject;
+  const totalScheduledClasses = chapters.reduce(
+    (sum, c) => sum + (chapterSchedules[c.id]?.totalSessions ?? 0),
+    0,
+  );
 
   // ── Form view ────────────────────────────────────────────────────
   return (
-    <div className="space-y-10">
+    <div className="flex flex-col gap-6 pb-20 sm:gap-8">
       <button
         type="button"
         onClick={() => navigate('/teacher/lesson-plan')}
-        className="group inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.25em] text-muted-foreground hover:text-primary transition-colors"
+        className="group inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.25em] text-slate-400 transition-colors hover:text-emerald-400"
       >
-        <ArrowLeft className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-1" />
+        <ArrowLeft className="h-3.5 w-3.5 transition-transform group-hover:-translate-x-1" />
         Back to Lesson Plans
       </button>
-      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6 pb-2 border-b border-white/5">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 text-primary text-[10px] font-black uppercase tracking-[0.3em] aurora-glow">
-            <Sparkles className="h-3.5 w-3.5 fill-primary" />
-            AI Intelligence Suite
+
+      {/* ── Hero ───────────────────────────────────────────────── */}
+      <header className="premium-card border-glass-border relative overflow-hidden rounded-3xl p-6 sm:p-8">
+        <div className="pointer-events-none absolute -right-16 -top-24 h-72 w-72 rounded-full bg-emerald-500/10 blur-[90px]" />
+        <div className="pointer-events-none absolute -bottom-28 -left-12 h-72 w-72 rounded-full bg-violet-500/10 blur-[90px]" />
+        <div className="relative z-10 flex items-start gap-4">
+          <div className="aurora-gradient aurora-glow flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl">
+            <Sparkles className="h-7 w-7 text-white" />
           </div>
-          <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tighter text-foreground -mb-1">
-            Add Lesson
-          </h1>
-          <p className="text-muted-foreground font-medium text-sm">
-            Upload chapter resources and we'll count classes from your timetable. Previously added chapters stay loaded; use <span className="text-primary font-black">Add Another Chapter</span> below for the next one.
-          </p>
-        </div>
-      </div>
-
-      {/* Step 1 — Choose Class */}
-      <div className="premium-card p-8 bg-card/40 border-glass-border relative overflow-hidden">
-        <div className="absolute -top-20 -right-20 w-80 h-80 bg-primary/5 rounded-full blur-[100px]" />
-        <h3 className="text-xl font-black mb-6 flex items-center gap-3 relative z-10">
-          <span className="text-primary text-[10px] font-black uppercase tracking-[0.3em]">Step 1</span>
-          <span className="text-foreground">Choose Your Class</span>
-        </h3>
-        <div className="grid sm:grid-cols-3 gap-5 relative z-10">
-          <Field label="Grade">
-            <select
-              value={gradeId}
-              onChange={(e) => setGradeId(e.target.value ? Number(e.target.value) : '')}
-              className={selectCls}
-            >
-              <option value="">Select grade</option>
-              {teachingGrades.map((g) => (
-                <option key={g.id} value={g.id}>{g.name}</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Section">
-            <select
-              value={sectionId}
-              onChange={(e) => setSectionId(e.target.value ? Number(e.target.value) : '')}
-              disabled={!gradeId}
-              className={selectCls}
-            >
-              <option value="">Select section</option>
-              {teachingSections.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Subject">
-            <select
-              value={subjectId}
-              onChange={(e) => setSubjectId(e.target.value ? Number(e.target.value) : '')}
-              disabled={!sectionId}
-              className={selectCls}
-            >
-              <option value="">Select subject</option>
-              {teachingSubjects.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
-          </Field>
-        </div>
-
-        {isTimetableLoading && (
-          <div className="mt-5 flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground/70 relative z-10">
-            <Loader2 className="w-4 h-4 animate-spin" /> Syncing timetable…
+          <div className="space-y-1.5">
+            <span className="block text-[10px] font-black uppercase tracking-[0.3em] text-emerald-400">
+              AI Intelligence Suite
+            </span>
+            <h1 className="text-3xl font-black tracking-tight text-white sm:text-4xl">
+              Add Lesson
+            </h1>
+            <p className="max-w-xl text-sm font-medium text-slate-400">
+              Upload chapter resources and we'll count classes from your
+              timetable. Saved chapters stay loaded — use{' '}
+              <span className="font-black text-emerald-400">
+                Add Another Chapter
+              </span>{' '}
+              for the next one.
+            </p>
           </div>
-        )}
-        {timetableError && (
-          <div className="mt-5 bg-red-500/10 border border-red-500/30 rounded-2xl p-4 text-sm text-red-300 font-bold relative z-10">
-            {timetableError}
-          </div>
-        )}
-      </div>
-
-      {/* Step 2 — Chapters */}
-      <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <span className="text-primary text-[10px] font-black uppercase tracking-[0.3em]">Step 2</span>
-          <span className="text-xl font-black text-foreground">Add Chapters</span>
         </div>
+      </header>
 
-        <AnimatePresence initial={false}>
-          {chapters.map((chapter, idx) => {
-            const schedule = chapterSchedules[chapter.id];
-            return (
-              <motion.div
-                key={chapter.id}
-                layout
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="premium-card p-8 bg-card/40 border-glass-border relative overflow-hidden"
-              >
-                <div className="absolute -bottom-24 -left-24 w-72 h-72 bg-primary/5 rounded-full blur-[80px]" />
-
-                <div className="flex items-center justify-between gap-4 mb-6 relative z-10">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-2xl bg-primary/10 border border-primary/30 flex items-center justify-center text-primary font-black text-sm aurora-glow">
-                      {idx + 1}
-                    </div>
-                    <div>
-                      <div className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/60">
-                        Chapter {idx + 1}
-                      </div>
-                      <div className="text-base font-black text-foreground">
-                        {chapter.name || 'Untitled chapter'}
-                      </div>
-                    </div>
+      {/* ── Working area ───────────────────────────────────────── */}
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
+        {/* Class + summary rail */}
+        <aside className="xl:col-span-4">
+          <div className="space-y-4 xl:sticky xl:top-6">
+            {/* Step 1 — Class */}
+            <div className="premium-card border-glass-border relative overflow-hidden rounded-3xl p-5 sm:p-6">
+              <div className="pointer-events-none absolute -left-16 -top-16 h-56 w-56 rounded-full bg-emerald-500/5 blur-[90px]" />
+              <div className="relative z-10">
+                <div className="mb-5 flex items-center gap-3">
+                  <div
+                    className={cn(
+                      'flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-colors',
+                      classReady
+                        ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-400'
+                        : 'border-white/10 bg-white/5 text-slate-300',
+                    )}
+                  >
+                    {classReady ? (
+                      <Check className="h-5 w-5" />
+                    ) : (
+                      <GraduationCap className="h-5 w-5" />
+                    )}
                   </div>
-                  {chapters.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeChapter(chapter.id)}
-                      className="p-2.5 rounded-xl bg-rose-500/5 border border-rose-500/20 hover:bg-rose-500/15 text-rose-400 transition-all"
-                      title="Remove this chapter"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-[0.3em] text-emerald-400">
+                      Step 1
+                    </div>
+                    <h3 className="text-base font-black text-white sm:text-lg">
+                      Choose Your Class
+                    </h3>
+                  </div>
                 </div>
 
-                <div className="grid md:grid-cols-2 gap-5 relative z-10">
-                  <div className="md:col-span-2">
-                    <Field label="Chapter Name">
-                      <input
-                        type="text"
-                        placeholder="e.g. Matrix"
-                        value={chapter.name}
-                        onChange={(e) => {
-                          updateChapter(chapter.id, { name: e.target.value });
+                <div className="space-y-4">
+                  <Field label="Grade">
+                    <SelectWrap>
+                      <select
+                        value={gradeId}
+                        onChange={(e) =>
+                          setGradeId(e.target.value ? Number(e.target.value) : '')
+                        }
+                        className={selectCls}
+                      >
+                        <option value="">Select grade</option>
+                        {teachingGrades.map((g) => (
+                          <option key={g.id} value={g.id}>
+                            {g.name}
+                          </option>
+                        ))}
+                      </select>
+                    </SelectWrap>
+                  </Field>
+                  <Field label="Section">
+                    <SelectWrap>
+                      <select
+                        value={sectionId}
+                        onChange={(e) =>
+                          setSectionId(e.target.value ? Number(e.target.value) : '')
+                        }
+                        disabled={!gradeId}
+                        className={selectCls}
+                      >
+                        <option value="">Select section</option>
+                        {teachingSections.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name}
+                          </option>
+                        ))}
+                      </select>
+                    </SelectWrap>
+                  </Field>
+                  <Field label="Subject">
+                    <SelectWrap>
+                      <select
+                        value={subjectId}
+                        onChange={(e) =>
+                          setSubjectId(e.target.value ? Number(e.target.value) : '')
+                        }
+                        disabled={!sectionId}
+                        className={selectCls}
+                      >
+                        <option value="">Select subject</option>
+                        {teachingSubjects.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name}
+                          </option>
+                        ))}
+                      </select>
+                    </SelectWrap>
+                  </Field>
+                </div>
+
+                {isTimetableLoading && (
+                  <div className="mt-4 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Syncing timetable…
+                  </div>
+                )}
+                {timetableError && (
+                  <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-3 text-xs font-bold text-red-300">
+                    {timetableError}
+                  </div>
+                )}
+                {!isTimetableLoading && !timetableError && timetable && (
+                  <div className="mt-4 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-emerald-400">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Timetable synced
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Plan summary */}
+            <div className="premium-card border-glass-border rounded-3xl p-5 sm:p-6">
+              <div className="mb-4 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.3em] text-emerald-400">
+                <Layers className="h-3.5 w-3.5" />
+                Plan summary
+              </div>
+              <dl className="space-y-px overflow-hidden rounded-2xl border border-white/5">
+                <SummaryRow
+                  label="Class"
+                  value={
+                    classReady
+                      ? `${selectedGrade!.name} · ${selectedSection!.name} · ${selectedSubject!.name}`
+                      : null
+                  }
+                />
+                <SummaryRow label="Chapters" value={String(chapters.length)} />
+                <SummaryRow
+                  label="Classes scheduled"
+                  value={
+                    classReady && totalScheduledClasses > 0
+                      ? String(totalScheduledClasses)
+                      : classReady
+                        ? '0'
+                        : null
+                  }
+                />
+              </dl>
+              <p className="mt-4 flex items-start gap-2 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500">
+                <Cloud className="mt-px h-3.5 w-3.5 shrink-0" />
+                Generate saves your chapter & builds the plan — it appears on the
+                calendar when ready.
+              </p>
+            </div>
+          </div>
+        </aside>
+
+        {/* Step 2 — Chapters */}
+        <section className="space-y-5 xl:col-span-8">
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-emerald-400">
+              Step 2
+            </span>
+            <span className="text-xl font-black text-white">Add Chapters</span>
+            <span className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.15em] tabular-nums text-slate-300">
+              {chapters.length} chapter{chapters.length === 1 ? '' : 's'}
+            </span>
+          </div>
+
+          <AnimatePresence initial={false}>
+            {chapters.map((chapter, idx) => {
+              const schedule = chapterSchedules[chapter.id];
+              return (
+                <motion.div
+                  key={chapter.id}
+                  layout
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="premium-card border-glass-border relative overflow-hidden rounded-3xl p-5 sm:p-7"
+                >
+                  <div className="pointer-events-none absolute -bottom-24 -left-24 h-72 w-72 rounded-full bg-emerald-500/5 blur-[80px]" />
+
+                  <div className="relative z-10 mb-6 flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="aurora-gradient aurora-glow flex h-11 w-11 items-center justify-center rounded-2xl text-sm font-black text-white">
+                        {idx + 1}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">
+                          Chapter {idx + 1}
+                        </div>
+                        <div className="truncate text-base font-black text-white">
+                          {chapter.name || 'Untitled chapter'}
+                        </div>
+                      </div>
+                    </div>
+                    {chapters.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeChapter(chapter.id)}
+                        className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-2.5 text-rose-400 transition-all hover:bg-rose-500/15"
+                        title="Remove this chapter"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="relative z-10 grid gap-5 md:grid-cols-2">
+                    <div className="md:col-span-2">
+                      <Field label="Chapter Name">
+                        <input
+                          type="text"
+                          placeholder="e.g. Matrix"
+                          value={chapter.name}
+                          onChange={(e) => {
+                            updateChapter(chapter.id, { name: e.target.value });
+                            invalidateChapter(chapter.id);
+                          }}
+                          className={inputCls}
+                        />
+                      </Field>
+                    </div>
+
+                    <Field label="Start Date">
+                      <DatePicker
+                        value={chapter.startDate}
+                        placeholder="Start date"
+                        max={chapter.endDate || undefined}
+                        onChange={(v) => {
+                          updateChapter(chapter.id, { startDate: v });
                           invalidateChapter(chapter.id);
                         }}
                         className={inputCls}
                       />
                     </Field>
-                  </div>
-
-                  <Field label="Start Date">
-                    <DatePicker
-                      value={chapter.startDate}
-                      placeholder="Start date"
-                      max={chapter.endDate || undefined}
-                      onChange={(v) => {
-                        updateChapter(chapter.id, { startDate: v });
-                        invalidateChapter(chapter.id);
-                      }}
-                      className={inputCls}
-                    />
-                  </Field>
-                  <Field label="End Date">
-                    <DatePicker
-                      value={chapter.endDate}
-                      placeholder="End date"
-                      min={chapter.startDate || undefined}
-                      onChange={(v) => {
-                        updateChapter(chapter.id, { endDate: v });
-                        invalidateChapter(chapter.id);
-                      }}
-                      className={inputCls}
-                    />
-                  </Field>
-
-                  {/* Live class count from timetable */}
-                  <div className="md:col-span-2">
-                    {!timetable || !subjectId ? (
-                      <div className="rounded-2xl border border-dashed border-white/10 bg-black/20 p-4 text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/50">
-                        Pick grade, section, and subject above to count classes.
-                      </div>
-                    ) : !schedule ? (
-                      <div className="rounded-2xl border border-dashed border-white/10 bg-black/20 p-4 text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/50">
-                        Pick start and end dates to see the class count.
-                      </div>
-                    ) : (
-                      <div
-                        className={cn(
-                          'rounded-2xl border p-5 flex flex-wrap items-center gap-5',
-                          schedule.totalSessions > 0
-                            ? 'bg-primary/5 border-primary/30'
-                            : 'bg-amber-500/5 border-amber-500/30',
-                        )}
-                      >
-                        <div className="flex-1 min-w-[140px]">
-                          <div className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/60 mb-1">
-                            Classes in range
-                          </div>
-                          <div className="text-3xl font-black tabular-nums text-foreground">
-                            {schedule.totalSessions}
-                          </div>
-                          <div className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/50 mt-1">
-                            {Math.round(schedule.totalHours * 10) / 10}h total
-                          </div>
-                        </div>
-                        {schedule.excludedDays.length > 0 && (
-                          <div className="flex-1 min-w-[140px]">
-                            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.3em] text-emerald-400 mb-1">
-                              <Palmtree className="w-3 h-3" /> Excluded
-                            </div>
-                            <div className="text-2xl font-black tabular-nums text-emerald-400">
-                              {schedule.excludedDays.length}
-                            </div>
-                            <div className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/50 mt-1">
-                              Non-teaching day
-                              {schedule.excludedDays.length === 1 ? '' : 's'} skipped
-                            </div>
-                          </div>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() =>
-                            updateChapter(chapter.id, {
-                              showBreakdown: !chapter.showBreakdown,
-                            })
-                          }
-                          disabled={
-                            schedule.totalSessions === 0 &&
-                            schedule.excludedDays.length === 0
-                          }
-                          className="px-3 py-2 rounded-xl border border-white/10 bg-black/30 hover:border-primary/40 hover:bg-primary/5 text-muted-foreground hover:text-primary text-[10px] font-black uppercase tracking-[0.2em] transition-all flex items-center gap-2 disabled:opacity-30"
-                        >
-                          <ListChecks className="w-3.5 h-3.5" />
-                          {chapter.showBreakdown ? 'Hide' : 'Show'} dates
-                        </button>
-                      </div>
-                    )}
-                    {schedule && schedule.totalSessions === 0 && (
-                      <p className="mt-2 ml-2 text-xs font-bold text-amber-300/80">
-                        No timetabled classes for this subject in that range.
-                      </p>
-                    )}
-                    <AnimatePresence>
-                      {schedule &&
-                        chapter.showBreakdown &&
-                        (schedule.sessions.length > 0 ||
-                          schedule.excludedDays.length > 0) && (
-                          <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: 'auto', opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            className="overflow-hidden"
-                          >
-                            <div className="mt-4 max-h-56 overflow-y-auto pr-2 space-y-1.5">
-                              {schedule.sessions.map((s, i) => (
-                                <div
-                                  key={`${s.date}-${s.period_id}-${i}`}
-                                  className="flex items-center justify-between gap-3 text-xs font-bold px-3 py-2 rounded-lg bg-black/30 border border-white/5"
-                                >
-                                  <span className="tabular-nums text-muted-foreground/80 min-w-[6.5rem]">
-                                    {s.date}
-                                  </span>
-                                  <span className="flex-1 truncate text-foreground">
-                                    {s.period_name}
-                                  </span>
-                                  <span className="text-muted-foreground/60 tabular-nums">
-                                    {s.start_time.slice(0, 5)}–{s.end_time.slice(0, 5)}
-                                  </span>
-                                  <span className="text-primary tabular-nums">
-                                    {Math.round(s.duration_hours * 10) / 10}h
-                                  </span>
-                                </div>
-                              ))}
-                              {schedule.excludedDays.map((d) => (
-                                <div
-                                  key={`excl-${d.date}`}
-                                  className="flex items-center justify-between gap-3 text-xs font-bold px-3 py-2 rounded-lg bg-emerald-500/5 border border-emerald-500/10"
-                                >
-                                  <span className="tabular-nums text-muted-foreground/80 min-w-[6.5rem]">
-                                    {d.date}
-                                  </span>
-                                  <span className="flex-1 truncate text-emerald-300">
-                                    {d.reason}
-                                  </span>
-                                  <span className="text-emerald-400/60 text-[10px] font-black uppercase tracking-widest">
-                                    Skipped
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          </motion.div>
-                        )}
-                    </AnimatePresence>
-                  </div>
-
-                  <div className="md:col-span-2">
-                    <Field label="Additional Instructions (optional)">
-                      <textarea
-                        rows={3}
-                        placeholder="Anything specific to highlight or skip — focus areas, lab notes, revision approach…"
-                        value={chapter.instructions}
-                        onChange={(e) => {
-                          updateChapter(chapter.id, { instructions: e.target.value });
+                    <Field label="End Date">
+                      <DatePicker
+                        value={chapter.endDate}
+                        placeholder="End date"
+                        min={chapter.startDate || undefined}
+                        onChange={(v) => {
+                          updateChapter(chapter.id, { endDate: v });
                           invalidateChapter(chapter.id);
                         }}
-                        className={`${inputCls} resize-y h-auto p-4`}
+                        className={inputCls}
                       />
                     </Field>
-                  </div>
 
-                  <div className="md:col-span-2 space-y-3">
-                    <div className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/60 ml-2">
-                      Syllabus File (any file type)
-                    </div>
-                    {/* Direct, visible native file input — styled via Tailwind's
-                        `file:` variant on the built-in ::file-selector-button.
-                        No overlays, no programmatic .click(), no `htmlFor`. This
-                        is the picker the browser already handles natively,
-                        so it works on every browser without exception. */}
-                    <input
-                      type="file"
-                      multiple
-                      onChange={(e) => {
-                        addFilesToChapter(chapter.id, e.target.files);
-                        e.target.value = '';
-                      }}
-                      className="block w-full text-sm text-muted-foreground cursor-pointer
-                                 file:mr-4 file:px-5 file:py-3 file:rounded-2xl file:border-0
-                                 file:font-black file:text-[10px] file:uppercase file:tracking-[0.2em]
-                                 file:text-white file:cursor-pointer file:shadow-lg file:shadow-primary/10
-                                 file:bg-gradient-to-r file:from-emerald-500 file:to-violet-500
-                                 hover:file:opacity-90"
-                    />
-
-                    {chapter.files.length > 0 && (
-                      <ul className="space-y-2 pt-1">
-                        {chapter.files.map((file, i) => (
-                          <li
-                            key={`${file.name}-${i}`}
-                            className="flex items-center gap-3 px-4 py-3 rounded-xl bg-black/30 border border-white/5"
+                    {/* Live class count from timetable */}
+                    <div className="md:col-span-2">
+                      {!timetable || !subjectId ? (
+                        <div className="rounded-2xl border border-dashed border-white/10 bg-black/20 p-4 text-[10px] font-black uppercase tracking-[0.3em] text-slate-500">
+                          Pick grade, section, and subject to count classes.
+                        </div>
+                      ) : !schedule ? (
+                        <div className="rounded-2xl border border-dashed border-white/10 bg-black/20 p-4 text-[10px] font-black uppercase tracking-[0.3em] text-slate-500">
+                          Pick start and end dates to see the class count.
+                        </div>
+                      ) : (
+                        <div
+                          className={cn(
+                            'flex flex-wrap items-center gap-4 rounded-2xl border p-4',
+                            schedule.totalSessions > 0
+                              ? 'border-emerald-500/30 bg-emerald-500/5'
+                              : 'border-amber-500/30 bg-amber-500/5',
+                          )}
+                        >
+                          <div className="flex items-center gap-3 pr-4">
+                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-400">
+                              <CalendarRange className="h-6 w-6" />
+                            </div>
+                            <div>
+                              <div className="text-3xl font-black tabular-nums leading-none text-white">
+                                {schedule.totalSessions}
+                              </div>
+                              <div className="mt-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                                Classes · {Math.round(schedule.totalHours * 10) / 10}h
+                              </div>
+                            </div>
+                          </div>
+                          {schedule.excludedDays.length > 0 && (
+                            <div className="flex items-center gap-3 border-l border-white/10 pl-4">
+                              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5 text-emerald-400">
+                                <Palmtree className="h-6 w-6" />
+                              </div>
+                              <div>
+                                <div className="text-3xl font-black tabular-nums leading-none text-white">
+                                  {schedule.excludedDays.length}
+                                </div>
+                                <div className="mt-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                                  Days skipped
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateChapter(chapter.id, {
+                                showBreakdown: !chapter.showBreakdown,
+                              })
+                            }
+                            disabled={
+                              schedule.totalSessions === 0 &&
+                              schedule.excludedDays.length === 0
+                            }
+                            className="ml-auto flex items-center gap-2 rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 transition-all hover:border-emerald-500/40 hover:bg-emerald-500/5 hover:text-emerald-400 disabled:opacity-30"
                           >
-                            <FileText className="w-4 h-4 text-primary flex-shrink-0" />
-                            <span className="flex-1 truncate text-sm font-bold text-foreground">
-                              {file.name}
-                            </span>
-                            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 tabular-nums">
-                              {(file.size / 1024 / 1024).toFixed(2)} MB
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => removeFileFromChapter(chapter.id, i)}
-                              className="p-1.5 rounded-lg hover:bg-rose-500/10 text-rose-400 transition-all"
-                              title="Remove file"
+                            <ListChecks className="h-3.5 w-3.5" />
+                            {chapter.showBreakdown ? 'Hide' : 'Show'} dates
+                          </button>
+                        </div>
+                      )}
+                      {schedule && schedule.totalSessions === 0 && (
+                        <p className="ml-2 mt-2 text-xs font-bold text-amber-400">
+                          No timetabled classes for this subject in that range.
+                        </p>
+                      )}
+                      <AnimatePresence>
+                        {schedule &&
+                          chapter.showBreakdown &&
+                          (schedule.sessions.length > 0 ||
+                            schedule.excludedDays.length > 0) && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: 'auto', opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              className="overflow-hidden"
                             >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                </div>
+                              <div className="mt-4 max-h-56 space-y-1.5 overflow-y-auto pr-2">
+                                {schedule.sessions.map((s, i) => (
+                                  <div
+                                    key={`${s.date}-${s.period_id}-${i}`}
+                                    className="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-black/30 px-3 py-2 text-xs font-bold"
+                                  >
+                                    <span className="min-w-[6.5rem] tabular-nums text-slate-400">
+                                      {s.date}
+                                    </span>
+                                    <span className="flex-1 truncate text-white">
+                                      {s.period_name}
+                                    </span>
+                                    <span className="tabular-nums text-slate-500">
+                                      {s.start_time.slice(0, 5)}–{s.end_time.slice(0, 5)}
+                                    </span>
+                                    <span className="tabular-nums text-emerald-400">
+                                      {Math.round(s.duration_hours * 10) / 10}h
+                                    </span>
+                                  </div>
+                                ))}
+                                {schedule.excludedDays.map((d) => (
+                                  <div
+                                    key={`excl-${d.date}`}
+                                    className="flex items-center justify-between gap-3 rounded-lg border border-emerald-500/10 bg-emerald-500/5 px-3 py-2 text-xs font-bold"
+                                  >
+                                    <span className="min-w-[6.5rem] tabular-nums text-slate-400">
+                                      {d.date}
+                                    </span>
+                                    <span className="flex-1 truncate text-emerald-300">
+                                      {d.reason}
+                                    </span>
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400/70">
+                                      Skipped
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </motion.div>
+                          )}
+                      </AnimatePresence>
+                    </div>
 
-                {/* Per-chapter status + actions */}
-                {chapter.error && (
-                  <div className="mt-5 flex items-start gap-3 bg-red-500/10 border border-red-500/30 rounded-2xl p-4 text-sm text-red-300 font-bold relative z-10">
-                    <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
-                    <span className="flex-1">{chapter.error}</span>
+                    <div className="md:col-span-2">
+                      <Field label="Additional Instructions (optional)">
+                        <textarea
+                          rows={3}
+                          placeholder="Anything specific to highlight or skip — focus areas, lab notes, revision approach…"
+                          value={chapter.instructions}
+                          onChange={(e) => {
+                            updateChapter(chapter.id, { instructions: e.target.value });
+                            invalidateChapter(chapter.id);
+                          }}
+                          className={`${inputCls} h-auto resize-y p-4`}
+                        />
+                      </Field>
+                    </div>
+
+                    <div className="space-y-3 md:col-span-2">
+                      <div className="ml-1 text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">
+                        Syllabus File (any file type)
+                      </div>
+                      {/* Native file input wrapped in a <label>: clicking the
+                          label activates the contained input via the HTML spec
+                          (no programmatic .click(), no `htmlFor`), so it stays
+                          reliable on every browser. */}
+                      <label
+                        className="group flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-white/10 bg-black/20 px-4 py-7 text-center transition-all hover:border-emerald-500/40 hover:bg-emerald-500/5"
+                      >
+                        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-400 transition-transform group-hover:scale-105">
+                          <UploadCloud className="h-6 w-6" />
+                        </span>
+                        <span className="text-sm font-bold text-white">
+                          Tap to choose files
+                        </span>
+                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                          Any file type · multiple allowed
+                        </span>
+                        <input
+                          type="file"
+                          multiple
+                          onChange={(e) => {
+                            addFilesToChapter(chapter.id, e.target.files);
+                            e.target.value = '';
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+
+                      {chapter.files.length > 0 && (
+                        <ul className="space-y-2 pt-1">
+                          {chapter.files.map((file, i) => (
+                            <li
+                              key={`${file.name}-${i}`}
+                              className="flex items-center gap-3 rounded-xl border border-white/5 bg-black/30 px-4 py-3"
+                            >
+                              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400">
+                                <FileText className="h-4 w-4" />
+                              </span>
+                              <span className="flex-1 truncate text-sm font-bold text-white">
+                                {file.name}
+                              </span>
+                              <span className="text-[10px] font-black uppercase tracking-widest tabular-nums text-slate-500">
+                                {(file.size / 1024 / 1024).toFixed(2)} MB
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => removeFileFromChapter(chapter.id, i)}
+                                className="rounded-lg p-1.5 text-rose-400 transition-all hover:bg-rose-500/10"
+                                title="Remove file"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Per-chapter status + actions */}
+                  {chapter.error && (
+                    <div className="relative z-10 mt-5 flex items-start gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm font-bold text-red-300">
+                      <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0" />
+                      <span className="flex-1">{chapter.error}</span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateChapter(chapter.id, { error: undefined })
+                        }
+                        className="opacity-60 hover:opacity-100"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
+
+                  {chapter.saved && (
+                    <div className="relative z-10 mt-5 flex items-center gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15">
+                        <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-[10px] font-black uppercase tracking-[0.3em] text-emerald-400">
+                          Saved
+                        </div>
+                        <div className="mt-0.5 text-xs font-bold text-emerald-300">
+                          {chapter.saved.resources.length} file
+                          {chapter.saved.resources.length === 1 ? '' : 's'} ready.
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="relative z-10 mt-6">
                     <button
                       type="button"
-                      onClick={() =>
-                        updateChapter(chapter.id, { error: undefined })
-                      }
-                      className="opacity-60 hover:opacity-100"
+                      onClick={() => handleGenerateChapter(chapter.id)}
+                      disabled={chapter.isGenerating}
+                      className="aurora-gradient aurora-glow flex h-12 w-full items-center justify-center gap-2 rounded-2xl px-5 text-xs font-black uppercase tracking-[0.2em] text-white shadow-lg transition-all hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0"
                     >
-                      <X className="w-4 h-4" />
+                      {chapter.isGenerating ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Saving & generating…
+                        </>
+                      ) : (
+                        <>
+                          <Wand2 className="h-4 w-4" />
+                          Generate
+                        </>
+                      )}
                     </button>
                   </div>
-                )}
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
 
-                {chapter.saved && (
-                  <div className="mt-5 p-5 rounded-2xl bg-emerald-500/5 border border-emerald-500/30 flex items-center gap-3 relative z-10">
-                    <div className="w-9 h-9 rounded-xl bg-emerald-500/15 flex items-center justify-center shrink-0">
-                      <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-emerald-300 text-[10px] font-black uppercase tracking-[0.3em]">
-                        Saved
-                      </div>
-                      <div className="text-emerald-200/80 text-xs font-bold mt-0.5">
-                        {chapter.saved.resources.length} file{chapter.saved.resources.length === 1 ? '' : 's'} ready · click Generate when you're ready.
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div className="mt-6 grid sm:grid-cols-2 gap-3 relative z-10">
-                  <button
-                    type="button"
-                    onClick={() => handleSaveChapter(chapter.id)}
-                    disabled={chapter.isSaving || chapter.isGenerating}
-                    className="h-12 px-5 rounded-2xl bg-primary/10 border border-primary/30 hover:bg-primary/20 text-primary font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {chapter.isSaving ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Saving…
-                      </>
-                    ) : (
-                      <>
-                        <Save className="w-4 h-4" />
-                        Save
-                      </>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleGenerateChapter(chapter.id)}
-                    disabled={chapter.isSaving || chapter.isGenerating}
-                    className="h-12 px-5 rounded-2xl aurora-gradient text-white font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-2 shadow-lg shadow-primary/20 transition-all hover:translate-y-[-1px] aurora-glow disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0"
-                  >
-                    {chapter.isGenerating ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Generating…
-                      </>
-                    ) : (
-                      <>
-                        <Wand2 className="w-4 h-4" />
-                        Generate
-                      </>
-                    )}
-                  </button>
-                </div>
-              </motion.div>
-            );
-          })}
-        </AnimatePresence>
-
-        <button
-          type="button"
-          onClick={addChapter}
-          className="w-full py-5 rounded-2xl border-2 border-dashed border-white/10 hover:border-primary/40 hover:bg-primary/5 text-muted-foreground hover:text-primary text-[10px] font-black uppercase tracking-[0.3em] transition-all flex items-center justify-center gap-3"
-        >
-          <Plus className="w-4 h-4" /> Add Another Chapter
-        </button>
+          <button
+            type="button"
+            onClick={addChapter}
+            className="flex w-full items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-white/10 py-5 text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 transition-all hover:border-emerald-500/40 hover:bg-emerald-500/5 hover:text-emerald-400"
+          >
+            <Plus className="h-4 w-4" /> Add Another Chapter
+          </button>
+        </section>
       </div>
-
-      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/40 flex items-center gap-2">
-        <Cloud className="w-3.5 h-3.5" />
-        Save keeps your chapter's files and details · Generate builds the lesson plan from them.
-      </p>
     </div>
   );
 }
@@ -943,10 +1048,54 @@ function hydratePersistedChapter(p: PersistedChapter): ChapterDraft {
 
 // ── UI atoms ────────────────────────────────────────────────────────
 const inputCls =
-  'w-full h-12 px-4 rounded-2xl border border-white/5 bg-black/40 focus:ring-2 focus:ring-primary/50 outline-none font-bold text-sm transition-all hover:border-primary/30 disabled:opacity-40';
+  'w-full h-12 px-4 rounded-2xl border border-white/10 bg-black/30 text-white placeholder:text-slate-500 focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/50 outline-none font-semibold text-sm transition-all hover:border-white/20 disabled:opacity-40';
 
 const selectCls =
-  'w-full h-12 px-4 rounded-2xl border border-white/5 bg-black/40 focus:ring-2 focus:ring-primary/50 outline-none font-black text-sm transition-all hover:border-primary/30 disabled:opacity-40';
+  'w-full h-12 pl-4 pr-10 rounded-2xl border border-white/10 bg-black/30 text-white appearance-none cursor-pointer focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/50 outline-none font-bold text-sm transition-all hover:border-white/20 disabled:opacity-40';
+
+function SelectWrap({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="relative">
+      {children}
+      <svg
+        className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="m6 9 6 6 6-6" />
+      </svg>
+    </div>
+  );
+}
+
+function SummaryRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | null;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 bg-white/[0.02] px-3.5 py-2.5">
+      <dt className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+        {label}
+      </dt>
+      <dd
+        className={cn(
+          'max-w-[60%] truncate text-right text-xs font-bold tabular-nums',
+          value ? 'text-white' : 'text-slate-600',
+        )}
+      >
+        {value || 'Not set'}
+      </dd>
+    </div>
+  );
+}
 
 function Field({
   label,
@@ -957,7 +1106,7 @@ function Field({
 }) {
   return (
     <div className="space-y-2">
-      <label className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/60 ml-2 block">
+      <label className="ml-1 block text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">
         {label}
       </label>
       {children}

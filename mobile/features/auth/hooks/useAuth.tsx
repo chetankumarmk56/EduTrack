@@ -23,7 +23,12 @@ interface AuthContextType {
   institutionId: string;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (token: string, user: AuthUser, institutionId: string) => Promise<void>;
+  login: (
+    token: string,
+    user: AuthUser,
+    institutionId: string,
+    refreshToken?: string | null,
+  ) => Promise<void>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -52,18 +57,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const login = useCallback(async (newToken: string, newUser: AuthUser, newInstitutionId: string) => {
+  const login = useCallback(async (
+    newToken: string,
+    newUser: AuthUser,
+    newInstitutionId: string,
+    newRefreshToken?: string | null,
+  ) => {
     setToken(newToken);
     setInstitutionId(newInstitutionId);
 
     // Fetch the correct student/teacher profile ID
     const profile = await fetchProfile(newToken);
-    
+
     const enrichedUser: AuthUser = {
       ...newUser,
       student_id: profile?.id || newUser.student_id || newUser.id,
       // If we got a profile, ensure the role-specific ID is correct
-      id: profile?.user_id || newUser.id, 
+      id: profile?.user_id || newUser.id,
     };
 
     await Promise.all([
@@ -71,6 +81,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       Storage.setItem(STORAGE_KEYS.USER, JSON.stringify(enrichedUser)),
       Storage.setItem(STORAGE_KEYS.INSTITUTION_ID, newInstitutionId),
       Storage.setItem(STORAGE_KEYS.ROLE, newUser.role),
+      // Persist the refresh token when the backend supplied one (mobile flow)
+      // so the API client can silently rotate the access token on a 401.
+      newRefreshToken
+        ? Storage.setItem(STORAGE_KEYS.REFRESH_TOKEN, newRefreshToken)
+        : Storage.deleteItem(STORAGE_KEYS.REFRESH_TOKEN),
     ]);
 
     setUser(enrichedUser);
@@ -91,6 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     await Promise.all([
       Storage.deleteItem(STORAGE_KEYS.ACCESS_TOKEN),
+      Storage.deleteItem(STORAGE_KEYS.REFRESH_TOKEN),
       Storage.deleteItem(STORAGE_KEYS.USER),
       Storage.deleteItem(STORAGE_KEYS.INSTITUTION_ID),
       Storage.deleteItem(STORAGE_KEYS.ROLE),

@@ -296,7 +296,7 @@ export default function TeacherAnnouncements() {
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary opacity-50 pointer-events-none" />
               <input
                 type="text"
-                placeholder="Search by title or message..."
+                placeholder="Search"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 className="input-obsidian h-12 pl-11 w-full"

@@ -5,7 +5,7 @@ import { AppProvider } from '@/shared/contexts/AppContext';
 import { ThemeProvider } from '@/shared/contexts/ThemeContext';
 import ProtectedRoute from '@/shared/components/auth/ProtectedRoute';
 import GuestRoute from '@/shared/components/auth/GuestRoute';
-import { Toaster } from 'react-hot-toast';
+import ToastHub from '@/shared/components/ui/ToastHub';
 
 // Eagerly load only the public entry (Landing) and the shell pieces.
 // Every other page is code-split so visiting one portal doesn't drag in the
@@ -109,7 +109,7 @@ function App() {
       <AuthProvider>
         <ThemeProvider>
         <AppProvider>
-          <Toaster position="top-right" />
+          <ToastHub />
           <Suspense fallback={<RouteFallback />}>
           <Routes>
             <Route path="/" element={<Landing />} />

@@ -59,7 +59,7 @@ async def login_for_access_token(
     # cookies via `withCredentials: true`. Mobile clients ignore the
     # cookies and use the `access_token` field in the response body via
     # SecureStore + Authorization header instead.
-    from app.services.auth.auth_service import set_auth_cookies
+    from app.services.auth.auth_service import set_auth_cookies, is_mobile_client
     set_auth_cookies(
         response,
         role=user.role,
@@ -67,6 +67,11 @@ async def login_for_access_token(
         access_token=token_data["access_token"],
         refresh_token=refresh_token,
     )
+    # Native mobile has no cookie jar — return the refresh token in the body
+    # so it can rotate the access token itself. Web clients (no X-Client
+    # header) keep getting refresh_token=null and rely on the HttpOnly cookie.
+    if is_mobile_client(request):
+        token_data["refresh_token"] = refresh_token
 
     logger.info(f"AUTH_SUCCESS: user_id={user.id}, role={user.role}, institution_id={user.institution_id}")
     return token_data
@@ -112,7 +117,20 @@ async def refresh_access_token(
     except Exception as e:
         logger.error(f"REFRESH_COOKIE_SEARCH_ERROR: {str(e)}")
         pass
-    
+
+    # Mobile fallback: native clients have no cookie jar, so they send the
+    # refresh token in the X-Refresh-Token header instead. It's validated
+    # identically (signature + type + role) by the block below.
+    if not refresh_token:
+        header_token = request.headers.get("X-Refresh-Token")
+        if header_token:
+            try:
+                header_payload = decode_access_token(header_token)
+                if header_payload.get("type") == "refresh":
+                    refresh_token = header_token
+            except (JWTError, Exception) as e:
+                logger.debug(f"REFRESH_HEADER_INVALID: error={str(e)}")
+
     if not refresh_token:
         logger.warning(f"REFRESH_FAILURE: No valid refresh token found for role={role}, available_cookies={list(request.cookies.keys())}")
         raise HTTPException(

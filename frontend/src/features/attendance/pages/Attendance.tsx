@@ -109,7 +109,7 @@ export default function Attendance() {
                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                        <input 
                         type="text" 
-                        placeholder="Search subject..."
+                        placeholder="Search"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="w-full pl-10 pr-4 py-3 rounded-2xl bg-muted/20 border border-glass-border text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all"

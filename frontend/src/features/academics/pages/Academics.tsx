@@ -2,9 +2,10 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useApp } from '@/shared/contexts/AppContext';
 import { useAuth } from '@/shared/contexts/AuthContext';
 import { motion, useInView, AnimatePresence } from 'framer-motion';
-import { BookOpen, Target, Award, BrainCircuit, X, Calendar, ChevronRight } from 'lucide-react';
+import { BookOpen, Target, Award, BrainCircuit, X, Calendar } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { getPerformanceStyles } from '@/shared/lib/styleUtils';
+import SchoolLogo from '@/shared/components/ui/SchoolLogo';
 import { StaggerContainer, StaggerItem } from '@/shared/components/ui/PageWrapper';
 import { cn } from '@/shared/lib/utils';
 import type { RankingsResponse, LeaderboardEntry } from '@/features/marks/api';
@@ -44,7 +45,9 @@ export default function Academics() {
       studentProfile,
       studentMarks: marks,
       subjectSummaries,
-      fetchSubjectSummary
+      fetchSubjectSummary,
+      institutionName,
+      institutionLogoUrl,
    } = useApp();
 
    const [selectedSubjectName, setSelectedSubjectName] = useState<string | null>(null);
@@ -352,9 +355,13 @@ export default function Academics() {
                      {/* Modal Header */}
                      <div className="px-5 sm:px-10 md:px-12 py-5 sm:py-8 md:py-10 flex items-center justify-between border-b border-slate-100 bg-slate-50/50">
                         <div className="flex items-center gap-4 sm:gap-6 min-w-0">
-                           <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-2xl sm:rounded-[2rem] bg-primary flex items-center justify-center text-white shadow-xl shadow-primary/20 shrink-0">
-                              <BookOpen className="w-6 h-6 sm:w-8 sm:h-8" />
-                           </div>
+                           <SchoolLogo
+                              src={institutionLogoUrl}
+                              name={institutionName}
+                              size={64}
+                              rounded="rounded-2xl sm:rounded-[2rem]"
+                              className="border border-black/5 shadow-xl shadow-primary/10"
+                           />
                            <div className="min-w-0">
                               <h2 className="text-xl sm:text-2xl md:text-4xl font-black text-foreground tracking-tighter truncate">Subject: {selectedSubjectName}</h2>
                               <p className="text-xs font-black uppercase text-muted-foreground tracking-[0.2em] mt-1">Detailed Assessment Matrix</p>
@@ -411,9 +418,6 @@ export default function Academics() {
                                        <div className="text-right">
                                           <p className="text-2xl font-black text-foreground leading-none">{m.score}<span className="text-xs text-muted-foreground ml-1">/{m.max_score}</span></p>
                                           <p className="text-[9px] font-black text-primary uppercase tracking-widest mt-1">Raw Score</p>
-                                       </div>
-                                       <div className="h-10 w-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-300">
-                                          <ChevronRight className="w-5 h-5" />
                                        </div>
                                     </div>
                                  </motion.div>

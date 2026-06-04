@@ -238,7 +238,7 @@ export default function SchoolsOverview() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by school name…"
+            placeholder="Search"
             className={cn(input, 'pl-10')}
             aria-label="Search schools by name"
           />

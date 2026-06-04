@@ -176,7 +176,7 @@ export default function Teachers() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by teacher, subject or class…"
+              placeholder="Search"
               className="input-obsidian pl-11 pr-11 py-3 text-sm"
             />
             {search && (

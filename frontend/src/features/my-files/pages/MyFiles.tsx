@@ -228,7 +228,7 @@ export default function MyFiles() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name, subject, or tag…"
+            placeholder="Search"
             className="w-full h-12 pl-11 pr-4 rounded-2xl border border-white/5 bg-black/40 outline-none font-medium text-sm focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition-all"
           />
         </div>

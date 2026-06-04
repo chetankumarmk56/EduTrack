@@ -267,7 +267,7 @@ export default function SuperAdminCredentials() {
               <input
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Search admins by name, email, or school…"
+                placeholder="Search"
                 className={cn(input, 'pl-9')}
               />
             </div>

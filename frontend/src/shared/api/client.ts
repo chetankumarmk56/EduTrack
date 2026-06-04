@@ -4,6 +4,17 @@ import toast from 'react-hot-toast';
 import { getErrorMessage } from '@/shared/lib/errorHandler';
 import { getCurrentPortalRole } from '@/shared/lib/portalRole';
 
+// Opt-in per-request flag: skip the global error toast on failure. Used by
+// fire-and-forget calls (e.g. the async Lesson Plan generate) where the
+// caller handles outcomes itself and a generic "Network Error" toast would
+// be misleading — the work continues server-side even if the response is
+// cut by a proxy/edge timeout.
+declare module 'axios' {
+  export interface AxiosRequestConfig {
+    suppressErrorToast?: boolean;
+  }
+}
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/';
 
 const client: AxiosInstance = axios.create({
@@ -225,9 +236,13 @@ client.interceptors.response.use(
     }
 
     const { message } = getErrorMessage(error);
-    
+
+    // Callers can opt out of the global toast (fire-and-forget requests that
+    // report their own outcome). originalRequest === error.config.
+    const suppressToast = Boolean(originalRequest?.suppressErrorToast);
+
     // Show error toast globally, except for 401s that are actively redirecting to login
-    if (error.response?.status !== 401 || window.location.pathname.includes('-login')) {
+    if (!suppressToast && (error.response?.status !== 401 || window.location.pathname.includes('-login'))) {
       toast.error(message);
     }
 

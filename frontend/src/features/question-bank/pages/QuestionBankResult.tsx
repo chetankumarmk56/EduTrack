@@ -1144,7 +1144,7 @@ function QuestionEditor({
       {diagramRequired && (
         <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-4">
           <div className="flex items-center justify-between gap-3 mb-2">
-            <label className="text-[10px] font-black uppercase tracking-[0.25em] text-violet-300/80">
+            <label className="text-[10px] font-black uppercase tracking-[0.25em] text-violet-700 dark:text-violet-300">
               Diagram image
             </label>
             <div className="flex items-center gap-2">
@@ -1161,7 +1161,7 @@ function QuestionEditor({
                 type="button"
                 disabled={uploading}
                 onClick={handlePickDiagram}
-                className="h-7 px-3 rounded-md bg-violet-600/20 border border-violet-500/30 hover:bg-violet-600/30 text-[10px] font-black uppercase tracking-[0.2em] text-violet-200 transition-colors flex items-center gap-1.5 disabled:opacity-40"
+                className="h-7 px-3 rounded-md bg-violet-600/20 border border-violet-500/30 hover:bg-violet-600/30 text-[10px] font-black uppercase tracking-[0.2em] text-violet-700 dark:text-violet-200 transition-colors flex items-center gap-1.5 disabled:opacity-40"
               >
                 {uploading ? (
                   <Loader2 className="w-3 h-3 animate-spin" />
@@ -1186,7 +1186,7 @@ function QuestionEditor({
               className="max-h-72 rounded-lg border border-white/5 bg-black/30 object-contain w-full sm:w-auto"
             />
           ) : (
-            <p className="text-[11px] sm:text-xs text-violet-200/70">
+            <p className="text-[11px] sm:text-xs text-violet-700/80 dark:text-violet-200/80">
               No image attached. Upload one to illustrate this question — the
               microservice flagged it as needing a diagram.
             </p>

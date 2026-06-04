@@ -4,7 +4,7 @@ import { useApp } from '@/shared/contexts/AppContext';
 import { useAuth } from '@/shared/contexts/AuthContext';
 import { SkeletonHeader, SkeletonStatGrid, SkeletonCardGrid } from '@/shared/components/ui/Skeleton';
 import {
-  User, Mail, Phone, Heart,
+  Mail, Phone, Heart,
   TrendingUp, TrendingDown,
   MapPin, CalendarDays
 } from 'lucide-react';
@@ -171,8 +171,8 @@ export default function Profile() {
               <div className="premium-glass p-5 sm:p-8 rounded-2xl sm:rounded-[3rem] shadow-2xl relative overflow-hidden">
                 <div className="relative z-10 space-y-8">
                   <div className="flex items-center gap-4">
-                    <div className="h-14 w-14 rounded-2xl bg-primary flex items-center justify-center text-white shadow-lg shadow-primary/20">
-                      <User className="w-7 h-7" />
+                    <div className="h-14 w-14 rounded-2xl bg-gradient-to-tr from-violet-500 to-indigo-500 flex items-center justify-center text-white font-black text-2xl shadow-lg shadow-indigo-500/20">
+                      {parentName.charAt(0).toUpperCase()}
                     </div>
                     <div>
                       <h3 className="text-xl font-black text-foreground tracking-tight">Parent Profile</h3>

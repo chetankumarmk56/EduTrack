@@ -234,7 +234,7 @@ export default function TeacherDirectory() {
         <div className="relative group w-full sm:w-72">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary group-focus-within:text-brand-indigo transition-colors" />
           <input
-            placeholder="Search by name or email..."
+            placeholder="Search"
             className="input-obsidian pl-10 text-sm w-full"
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
@@ -323,11 +323,21 @@ export default function TeacherDirectory() {
                         <Phone className="w-3.5 h-3.5 text-brand-indigo/60 shrink-0" />
                         <span className="text-xs text-text-secondary">{t.phone || 'No phone'}</span>
                       </div>
-                      {t.plain_password && (
+                      {t.plain_password ? (
                         <div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/10 border border-amber-500/20 rounded-lg">
                           <Key className="w-3 h-3 text-amber-500" />
                           <span className="text-[10px] font-black text-amber-500 tabular-nums">{t.plain_password}</span>
                         </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => { setEditingTeacher(t); setEditError(null); }}
+                          title="No stored password for this teacher — reset it to set a visible one"
+                          className="flex items-center gap-1.5 px-2.5 py-1 bg-white/5 border border-glass-border rounded-lg text-text-secondary hover:text-amber-500 hover:border-amber-500/30 transition-colors"
+                        >
+                          <Key className="w-3 h-3" />
+                          <span className="text-[10px] font-black uppercase tracking-wider">Reset to reveal</span>
+                        </button>
                       )}
                     </div>
                   </div>

@@ -66,16 +66,24 @@ export const lessonPlanAIApi = {
   },
 
   /**
-   * GENERATE — call the external AI microservice via the backend.
+   * GENERATE — run lesson-plan generation on the backend.
    *
-   * The backend loads metadata.json from S3, sends it to the AI service,
-   * waits for the service to write output/lesson_plan.json to S3, then
-   * reads and returns the result. May take up to several minutes.
+   * The backend loads metadata.json from S3, generates the plan, writes
+   * output/lesson_plan.json to S3, then returns the result. This can take a
+   * couple of minutes, so the UI fires it without blocking and lets the
+   * calendar poll for the output (see pendingGenerations). The finished plan
+   * lands in S3 even if this request's response is cut by a proxy timeout.
+   *
+   * `silent` suppresses the global error toast — used by the fire-and-forget
+   * path, which surfaces progress/outcome through the calendar instead.
    */
   generate: async (
     identity: ChapterIdentity,
+    opts?: { silent?: boolean },
   ): Promise<LessonPlanOutputResponse> => {
-    const res = await client.post('lesson-plan/generate', identity);
+    const res = await client.post('lesson-plan/generate', identity, {
+      suppressErrorToast: opts?.silent,
+    });
     return res.data as LessonPlanOutputResponse;
   },
 

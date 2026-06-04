@@ -1,13 +1,40 @@
+import { useMemo } from 'react';
 import { TrendingUp } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
-import type { FinanceSummaryResponse, ClassFinanceBreakdownResponse } from '@/features/finance/api';
+import type { FinanceSummaryResponse, ClassFinanceBreakdownResponse, ClassFinanceRow } from '@/features/finance/api';
 
 interface ClassesOverviewProps {
   summary: FinanceSummaryResponse | null;
   classBreakdown: ClassFinanceBreakdownResponse | null;
 }
 
+/**
+ * The breakdown rows only carry a `class_name` string (e.g. "Grade 10 - A"),
+ * so we derive a sort key from it: the leading number is the class level and
+ * the trailing token is the section. Rows are ordered by class DESC, then
+ * section DESC, so the highest classes/sections surface first.
+ */
+function classSortKey(name: string): { grade: number; section: string } {
+  const gradeMatch = name.match(/\d+/);
+  const grade = gradeMatch ? parseInt(gradeMatch[0], 10) : -1;
+  const section = (name.split('-').pop() || '').trim().toUpperCase();
+  return { grade, section };
+}
+
+function sortRowsDesc(rows: ClassFinanceRow[]): ClassFinanceRow[] {
+  return [...rows].sort((a, b) => {
+    const ka = classSortKey(a.class_name);
+    const kb = classSortKey(b.class_name);
+    return kb.grade - ka.grade || kb.section.localeCompare(ka.section);
+  });
+}
+
 export default function ClassesOverview({ summary, classBreakdown }: ClassesOverviewProps) {
+  const sortedRows = useMemo(
+    () => (classBreakdown ? sortRowsDesc(classBreakdown.rows) : []),
+    [classBreakdown],
+  );
+
   return (
     <div className="space-y-8">
       {/* Grand Totals */}
@@ -47,7 +74,7 @@ export default function ClassesOverview({ summary, classBreakdown }: ClassesOver
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {classBreakdown.rows.map((row) => {
+                {sortedRows.map((row) => {
                   const pct = row.total_expected > 0 ? Math.round((row.total_collected / row.total_expected) * 100) : 0;
                   return (
                     <tr key={row.class_id} className="hover:bg-slate-50/20 transition-colors">

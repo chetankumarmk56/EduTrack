@@ -49,6 +49,12 @@ import {
 import { useApp } from '@/shared/contexts/AppContext';
 import { useAuth } from '@/shared/contexts/AuthContext';
 import { lessonPlanAIApi } from '@/features/lesson-plan/ai/api';
+import {
+  listPending,
+  removePending,
+  sameScope,
+  type PendingGeneration,
+} from '@/features/lesson-plan/ai/pendingGenerations';
 import type {
   ChapterIdentity,
   ChapterListItem,
@@ -68,7 +74,7 @@ const SPRING = { type: 'spring', stiffness: 380, damping: 32 } as const;
 const SOFT_SPRING = { type: 'spring', stiffness: 220, damping: 28 } as const;
 
 interface ChapterColor {
-  /** Tailwind gradient for chips and headers (eg "from-indigo-600 to-violet-600"). */
+  /** Tailwind gradient for chips and headers (eg "from-indigo-600 to-blue-600"). */
   gradient: string;
   /** Solid bg for compact chips (eg "bg-indigo-600"). */
   solid: string;
@@ -86,7 +92,7 @@ interface ChapterColor {
 }
 
 const CHAPTER_PALETTE: ChapterColor[] = [
-  { gradient: 'from-indigo-600 to-violet-600', solid: 'bg-indigo-600', text: 'text-indigo-600', tint: 'bg-indigo-50', border: 'border-indigo-200', dot: 'bg-indigo-500', hex: '#4f46e5', label: 'Indigo' },
+  { gradient: 'from-indigo-600 to-blue-600', solid: 'bg-indigo-600', text: 'text-indigo-600', tint: 'bg-indigo-50', border: 'border-indigo-200', dot: 'bg-indigo-500', hex: '#4f46e5', label: 'Indigo' },
   { gradient: 'from-emerald-600 to-teal-600', solid: 'bg-emerald-600', text: 'text-emerald-700', tint: 'bg-emerald-50', border: 'border-emerald-200', dot: 'bg-emerald-500', hex: '#059669', label: 'Emerald' },
   { gradient: 'from-rose-600 to-pink-600', solid: 'bg-rose-600', text: 'text-rose-600', tint: 'bg-rose-50', border: 'border-rose-200', dot: 'bg-rose-500', hex: '#e11d48', label: 'Rose' },
   { gradient: 'from-amber-600 to-orange-600', solid: 'bg-amber-600', text: 'text-amber-700', tint: 'bg-amber-50', border: 'border-amber-200', dot: 'bg-amber-500', hex: '#d97706', label: 'Amber' },
@@ -335,6 +341,46 @@ export default function LessonPlanDashboard() {
     fetchChapters();
   }, [fetchChapters]);
 
+  // ── Pending generations (async, non-blocking) ──
+  // The form fires generation and navigates here without waiting. Each
+  // in-flight chapter is recorded in localStorage; we poll the chapter
+  // listing until its output lands in S3, then drop the marker and let the
+  // plan render on the calendar. A localStorage ceiling expires markers for
+  // generations that never produced output (see pendingGenerations).
+  const [pending, setPending] = useState<PendingGeneration[]>(() => listPending());
+
+  // Reconcile: once a pending chapter shows up in the listing WITH output,
+  // its plan is ready — clear the marker so polling can wind down.
+  useEffect(() => {
+    const current = listPending();
+    let changed = false;
+    for (const p of current) {
+      const done = chapters.some((c) => sameScope(c.metadata, p) && c.has_output);
+      if (done) {
+        removePending(p);
+        changed = true;
+      }
+    }
+    const next = changed ? listPending() : current;
+    // Only update state when the set actually changed, to avoid re-render loops.
+    setPending((prev) =>
+      prev.length === next.length && prev.every((p, i) => p === next[i] || sameScope(p, next[i]))
+        ? prev
+        : next,
+    );
+  }, [chapters]);
+
+  // Poll the listing while any generation is in flight. Stops automatically
+  // once `pending` empties (output landed or markers expired).
+  useEffect(() => {
+    if (pending.length === 0) return;
+    const interval = setInterval(() => {
+      fetchChapters();
+      setPending(listPending()); // prune expired markers each tick
+    }, 8000);
+    return () => clearInterval(interval);
+  }, [pending.length, fetchChapters]);
+
   const sessions = useMemo(() => flattenSessions(chapters), [chapters]);
 
   const dateMap = useMemo(() => {
@@ -483,7 +529,7 @@ export default function LessonPlanDashboard() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden">
+    <div className="lp-canvas relative min-h-screen overflow-hidden">
       {/* Ambient background */}
       <div className="pointer-events-none fixed inset-0 -z-10">
         <div className="absolute inset-0 bg-gradient-to-br from-slate-50 via-indigo-50/40 to-violet-50/30" />
@@ -496,7 +542,7 @@ export default function LessonPlanDashboard() {
       <header className="sticky top-0 z-50 backdrop-blur-xl bg-white/70 border-b border-slate-200/60 shadow-[0_1px_0_0_rgba(15,23,42,0.04)]">
         <div className="max-w-screen-xl mx-auto px-5 h-16 flex items-center gap-4">
           <div className="flex items-center gap-2.5 mr-2 shrink-0">
-            <div className="relative w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+            <div className="relative w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-600 to-blue-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
               <Sparkles className="w-4 h-4 text-white" />
               <div className="absolute inset-0 rounded-xl bg-white/20 mix-blend-overlay" />
             </div>
@@ -540,7 +586,7 @@ export default function LessonPlanDashboard() {
 
           <button
             onClick={() => navigate('/teacher/lesson-plan/new')}
-            className="ml-2 h-10 px-4 sm:px-5 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 text-white font-bold text-sm shadow-lg shadow-indigo-500/30 hover:shadow-xl hover:shadow-indigo-500/40 active:scale-95 transition-all flex items-center gap-2"
+            className="ml-2 h-10 px-4 sm:px-5 rounded-xl bg-gradient-to-br from-indigo-600 to-blue-600 text-white font-bold text-sm shadow-lg shadow-indigo-500/30 hover:shadow-xl hover:shadow-indigo-500/40 active:scale-95 transition-all flex items-center gap-2"
           >
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">Add Lesson</span>
@@ -549,6 +595,33 @@ export default function LessonPlanDashboard() {
       </header>
 
       <main className="max-w-screen-xl mx-auto px-4 sm:px-6 py-6 space-y-5">
+        {/* In-flight generations — these fire from the form and complete in
+            the background; the plan drops onto the calendar automatically
+            once it's ready. */}
+        <AnimatePresence>
+          {pending.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              className="flex items-start gap-3 rounded-2xl border border-indigo-200 bg-indigo-50/80 px-4 py-3 text-indigo-700"
+            >
+              <Loader2 className="w-5 h-5 mt-0.5 shrink-0 animate-spin" />
+              <div className="min-w-0 text-sm font-bold">
+                Generating{' '}
+                {pending
+                  .map((p) => p.chapter_name?.trim())
+                  .filter(Boolean)
+                  .join(', ') || `${pending.length} lesson plan${pending.length === 1 ? '' : 's'}`}
+                …
+                <span className="block text-xs font-semibold text-indigo-500/80">
+                  This runs in the background — the plan appears on the calendar automatically when it's ready.
+                </span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Chapter legend */}
         <ChapterLegend chapters={chapters} />
 
@@ -607,7 +680,7 @@ export default function LessonPlanDashboard() {
 
 function DashboardShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="relative min-h-screen overflow-hidden">
+    <div className="lp-canvas relative min-h-screen overflow-hidden">
       <div className="pointer-events-none fixed inset-0 -z-10">
         <div className="absolute inset-0 bg-gradient-to-br from-slate-50 via-indigo-50/40 to-violet-50/30" />
         <div className="absolute -top-40 -left-40 h-[36rem] w-[36rem] rounded-full bg-violet-300/30 blur-[120px]" />
@@ -622,7 +695,7 @@ function LoadingState() {
   return (
     <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4 text-slate-500">
       <div className="relative">
-        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center shadow-xl shadow-indigo-500/30">
+        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-600 to-blue-600 flex items-center justify-center shadow-xl shadow-indigo-500/30">
           <Loader2 className="w-6 h-6 text-white animate-spin" />
         </div>
       </div>
@@ -641,7 +714,7 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
       <p className="text-sm text-slate-500 font-medium">{message}</p>
       <button
         onClick={onRetry}
-        className="inline-flex items-center gap-2 h-10 px-5 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 text-white font-bold text-sm shadow-lg shadow-indigo-500/30 hover:shadow-xl active:scale-95 transition-all"
+        className="inline-flex items-center gap-2 h-10 px-5 rounded-xl bg-gradient-to-br from-indigo-600 to-blue-600 text-white font-bold text-sm shadow-lg shadow-indigo-500/30 hover:shadow-xl active:scale-95 transition-all"
       >
         <RefreshCw className="w-4 h-4" /> Try again
       </button>
@@ -656,7 +729,7 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
       animate={{ opacity: 1, y: 0 }}
       className="max-w-2xl mx-auto bg-white/80 backdrop-blur-xl border border-white/60 rounded-3xl p-12 text-center space-y-6 shadow-[0_24px_60px_-24px_rgba(79,70,229,0.22)]"
     >
-      <div className="mx-auto w-20 h-20 rounded-3xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-xl shadow-indigo-500/30">
+      <div className="mx-auto w-20 h-20 rounded-3xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center shadow-xl shadow-indigo-500/30">
         <CalendarDays className="w-10 h-10 text-white" />
       </div>
       <div className="space-y-2">
@@ -669,7 +742,7 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
       </div>
       <button
         onClick={onAdd}
-        className="inline-flex items-center gap-2 h-12 px-6 rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 text-white font-black text-sm uppercase tracking-widest shadow-xl shadow-indigo-500/30 hover:shadow-2xl hover:shadow-indigo-500/40 active:scale-95 transition-all"
+        className="inline-flex items-center gap-2 h-12 px-6 rounded-2xl bg-gradient-to-br from-indigo-600 to-blue-600 text-white font-black text-sm uppercase tracking-widest shadow-xl shadow-indigo-500/30 hover:shadow-2xl hover:shadow-indigo-500/40 active:scale-95 transition-all"
       >
         <Wand2 className="w-4 h-4" />
         Generate your first lesson plan
@@ -849,7 +922,7 @@ function FullPlanView({
                     {isSel ? (
                       <motion.div
                         layoutId="dash-selected-day-bg"
-                        className="absolute inset-0 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/30"
+                        className="absolute inset-0 rounded-2xl bg-gradient-to-br from-indigo-500 to-blue-600 shadow-lg shadow-indigo-500/30"
                         transition={SPRING}
                       />
                     ) : hasHoliday ? (
@@ -1020,7 +1093,7 @@ function DayHeader({
 
   const tile = isHoliday
     ? 'from-emerald-500 to-teal-600 shadow-emerald-500/30'
-    : 'from-indigo-500 to-violet-600 shadow-indigo-500/30';
+    : 'from-indigo-500 to-blue-600 shadow-indigo-500/30';
 
   return (
     <motion.div
@@ -1377,10 +1450,9 @@ function SingleClassView({
       <motion.div
         layout
         transition={SPRING}
-        className="relative rounded-3xl overflow-hidden shadow-2xl"
+        className={`lp-hero relative rounded-3xl overflow-hidden shadow-2xl bg-gradient-to-br ${color.gradient}`}
         style={{ boxShadow: `0 24px 60px -24px ${color.hex}66` }}
       >
-        <div className={`absolute inset-0 bg-gradient-to-br ${color.gradient}`} />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_25%_30%,rgba(255,255,255,0.18),transparent_55%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_85%_85%,rgba(255,255,255,0.08),transparent_55%)]" />
         <motion.div

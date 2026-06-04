@@ -482,7 +482,7 @@ export default function SuperAdminDashboard() {
               <input
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder={view === 'active' ? 'Search active schools by name or ID…' : 'Search trash…'}
+                placeholder="Search"
                 className={cn(input, 'pl-9 py-2.5')}
               />
             </div>

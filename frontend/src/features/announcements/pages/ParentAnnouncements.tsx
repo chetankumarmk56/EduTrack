@@ -417,7 +417,7 @@ export default function ParentAnnouncements() {
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search title, message, or teacher…"
+              placeholder="Search"
               className="w-full pl-14 pr-4 py-4 rounded-2xl premium-glass border-white shadow-sm text-base text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15 transition-all"
             />
           </div>

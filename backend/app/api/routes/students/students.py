@@ -68,7 +68,7 @@ async def parent_login(
     # Stamp BOTH the access and refresh cookies as HttpOnly. The web SPA
     # reads neither directly. Mobile keeps using the `access_token` in
     # the response body via SecureStore + Authorization header.
-    from app.services.auth.auth_service import set_auth_cookies
+    from app.services.auth.auth_service import set_auth_cookies, is_mobile_client
     _user_id = auth_data["user"]["id"]
     refresh_token = auth_data.pop("refresh_token")
     set_auth_cookies(
@@ -78,6 +78,10 @@ async def parent_login(
         access_token=auth_data["access_token"],
         refresh_token=refresh_token,
     )
+    # Native mobile has no cookie jar — hand it the refresh token in the body
+    # (web keeps refresh_token=null and uses the HttpOnly cookie).
+    if is_mobile_client(request):
+        auth_data["refresh_token"] = refresh_token
 
     return auth_data
 
@@ -147,7 +151,7 @@ async def student_login(
     # Stamp BOTH the access and refresh cookies as HttpOnly. The web SPA
     # reads neither directly. Mobile keeps using the `access_token` in
     # the response body via SecureStore + Authorization header.
-    from app.services.auth.auth_service import set_auth_cookies
+    from app.services.auth.auth_service import set_auth_cookies, is_mobile_client
     _user_id = auth_data["user"]["id"]
     # Use the actual logged-in role (student vs parent) so the cookie
     # name matches what the SPA sends in X-Portal-Role.
@@ -160,7 +164,11 @@ async def student_login(
         access_token=auth_data["access_token"],
         refresh_token=refresh_token,
     )
-    
+    # Native mobile has no cookie jar — hand it the refresh token in the body
+    # (web keeps refresh_token=null and uses the HttpOnly cookie).
+    if is_mobile_client(request):
+        auth_data["refresh_token"] = refresh_token
+
     return auth_data
 
 # Default kept deliberately conservative — a school with 5K students would

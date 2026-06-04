@@ -235,6 +235,9 @@ class FeeReminderDispatchSummary(BaseModel):
     eligible_rows: int = 0
     unique_students: int = 0
     skipped_no_target: int = 0
+    # Rows attempted but not reached (no push token + no call placed). Not put
+    # under cooldown — the next dispatch retries them.
+    delivery_failed: int = 0
     push: dict = {}
     calls: dict = {}
     notified_fee_ids: List[int] = []
