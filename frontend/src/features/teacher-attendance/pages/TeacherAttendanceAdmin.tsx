@@ -507,7 +507,7 @@ export default function TeacherAttendanceAdmin() {
             ) : (
               <>
                 <div className="overflow-x-auto rounded-3xl border border-white/5 bg-slate-900/60 backdrop-blur-md">
-                  <table className="w-full text-xs">
+                  <table className="w-full min-w-[800px] text-xs">
                     <thead>
                       <tr className="border-b border-white/5 bg-slate-900/40">
                         {['Teacher', 'Date', 'Status', 'Check-in', 'Check-out', 'Remarks', 'Edited', ''].map(h => (
@@ -696,7 +696,7 @@ export default function TeacherAttendanceAdmin() {
               <EmptyBlock icon={BarChart3} title="No data in this range" message="Pick a different range or check that staff have logged attendance." />
             ) : (
               <div className="overflow-x-auto rounded-3xl border border-white/5 bg-slate-900/60 backdrop-blur-md">
-                <table className="w-full text-xs">
+                <table className="w-full min-w-[680px] text-xs">
                   <thead>
                     <tr className="border-b border-white/5 bg-slate-900/40">
                       {['Teacher', 'Present', 'Absent', 'Half Day', 'On Leave', 'Total', 'Attendance %'].map(h => (
@@ -750,7 +750,7 @@ export default function TeacherAttendanceAdmin() {
               initial={{ scale: 0.92, opacity: 0, y: 16 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.92, opacity: 0 }}
-              className="w-full max-w-lg p-8 rounded-3xl bg-slate-900 border border-white/10 shadow-2xl space-y-6"
+              className="w-full max-w-lg p-5 sm:p-8 rounded-3xl bg-slate-900 border border-white/10 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto"
             >
               <div className="flex items-center justify-between">
                 <div>
@@ -855,7 +855,7 @@ export default function TeacherAttendanceAdmin() {
               initial={{ scale: 0.92, opacity: 0, y: 16 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.92, opacity: 0 }}
-              className="w-full max-w-md p-8 rounded-3xl bg-slate-900 border border-white/10 shadow-2xl space-y-6"
+              className="w-full max-w-md p-5 sm:p-8 rounded-3xl bg-slate-900 border border-white/10 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto"
             >
               <div className="flex items-center justify-between">
                 <div>

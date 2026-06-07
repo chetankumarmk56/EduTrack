@@ -230,7 +230,7 @@ export default function StudentDirectory() {
             <div className="relative group">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary group-focus-within:text-brand-indigo transition-colors" />
               <input
-                placeholder="Name, parent name or email..."
+                placeholder="Search"
                 className="input-obsidian pl-10 text-sm"
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}

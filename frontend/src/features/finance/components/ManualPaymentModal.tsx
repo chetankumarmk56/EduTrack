@@ -85,7 +85,7 @@ export default function ManualPaymentModal({ isOpen, onClose, initialStudentId, 
                     required
                     value={form.student_id}
                     onChange={(e) => setForm(f => ({ ...f, student_id: e.target.value }))}
-                    className="w-full px-8 py-5 rounded-3xl bg-slate-900/50 border border-white/10 font-black text-white focus:ring-4 focus:ring-primary/20 transition-all outline-none"
+                    className="w-full px-5 sm:px-8 py-4 sm:py-5 rounded-3xl bg-slate-900/50 border border-white/10 font-black text-white focus:ring-4 focus:ring-primary/20 transition-all outline-none"
                   />
                 </div>
                 <div className="space-y-2">
@@ -95,7 +95,7 @@ export default function ManualPaymentModal({ isOpen, onClose, initialStudentId, 
                     required
                     value={form.amount}
                     onChange={(e) => setForm(f => ({ ...f, amount: e.target.value }))}
-                    className="w-full px-8 py-5 rounded-3xl bg-slate-900/50 border border-white/10 font-black text-white focus:ring-4 focus:ring-primary/20 transition-all outline-none"
+                    className="w-full px-5 sm:px-8 py-4 sm:py-5 rounded-3xl bg-slate-900/50 border border-white/10 font-black text-white focus:ring-4 focus:ring-primary/20 transition-all outline-none"
                     placeholder="5000"
                   />
                 </div>
@@ -104,7 +104,7 @@ export default function ManualPaymentModal({ isOpen, onClose, initialStudentId, 
                   <select
                     value={form.mode}
                     onChange={(e) => setForm(f => ({ ...f, mode: e.target.value }))}
-                    className="w-full px-8 py-5 rounded-3xl bg-slate-900/50 border border-white/10 font-black text-white focus:ring-4 focus:ring-primary/20 transition-all outline-none appearance-none"
+                    className="w-full px-5 sm:px-8 py-4 sm:py-5 rounded-3xl bg-slate-900/50 border border-white/10 font-black text-white focus:ring-4 focus:ring-primary/20 transition-all outline-none appearance-none"
                   >
                     <option value="CASH" className="bg-slate-900">CASH</option>
                     <option value="MANUAL_UPI" className="bg-slate-900">MANUAL UPI</option>
@@ -117,7 +117,7 @@ export default function ManualPaymentModal({ isOpen, onClose, initialStudentId, 
                 <textarea
                   value={form.note}
                   onChange={(e) => setForm(f => ({ ...f, note: e.target.value }))}
-                  className="w-full px-8 py-5 rounded-3xl bg-slate-900/50 border border-white/10 font-bold text-white focus:ring-4 focus:ring-primary/20 transition-all outline-none min-h-[100px]"
+                  className="w-full px-5 sm:px-8 py-4 sm:py-5 rounded-3xl bg-slate-900/50 border border-white/10 font-bold text-white focus:ring-4 focus:ring-primary/20 transition-all outline-none min-h-[100px]"
                   placeholder="Reference from physical check or UPI screenshot ID..."
                 />
               </div>

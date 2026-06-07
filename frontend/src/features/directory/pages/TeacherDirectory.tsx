@@ -226,7 +226,7 @@ export default function TeacherDirectory() {
             </div>
             <div>
               <p className="text-lg font-black text-white leading-none">{totalAssignments}</p>
-              <p className="text-[10px] text-text-secondary font-medium">Assignments</p>
+              <p className="text-[10px] text-text-secondary font-medium">Assigned</p>
             </div>
           </div>
         </div>

@@ -227,7 +227,7 @@ export default function GeneratedLessonPlanView({ plan, sessionDates, onReset }:
 
       {/* ── Top Nav ────────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-50 backdrop-blur-xl bg-white/70 border-b border-slate-200/60 shadow-[0_1px_0_0_rgba(15,23,42,0.04)]">
-        <div className="max-w-screen-xl mx-auto px-5 h-16 flex items-center gap-4">
+        <div className="max-w-screen-xl mx-auto px-4 sm:px-5 h-16 flex items-center gap-2 sm:gap-4">
           {/* Logo */}
           <div className="flex items-center gap-2.5 mr-2 shrink-0">
             <div className="relative w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-600 to-blue-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
@@ -263,7 +263,7 @@ export default function GeneratedLessonPlanView({ plan, sessionDates, onReset }:
                   <button
                     key={m}
                     onClick={() => setMode(m)}
-                    className="relative z-10 px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors"
+                    className="relative z-10 px-3 sm:px-4 py-1.5 rounded-lg text-[13px] sm:text-sm font-semibold transition-colors"
                   >
                     {active && (
                       <motion.div
@@ -360,7 +360,7 @@ function FullPlanView({
       {/* ── Calendar panel ─────────────────────────────────────────────── */}
       <div className="relative rounded-3xl overflow-hidden bg-white/85 backdrop-blur-xl border border-white/60 shadow-[0_24px_60px_-24px_rgba(79,70,229,0.22),0_2px_6px_-2px_rgba(15,23,42,0.06)]">
         {/* Header */}
-        <div className="relative px-7 pt-6 pb-4 border-b border-slate-100/80">
+        <div className="relative px-4 sm:px-7 pt-5 sm:pt-6 pb-4 border-b border-slate-100/80">
           <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-indigo-200/60 to-transparent" />
 
           <div className="flex items-end justify-between gap-4">
@@ -380,7 +380,7 @@ function FullPlanView({
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -12 }}
                     transition={{ duration: 0.22, ease: [0.2, 0.65, 0.3, 0.95] }}
-                    className="absolute inset-0 text-3xl font-black text-slate-900 tracking-tight bg-gradient-to-br from-slate-900 to-indigo-700 bg-clip-text text-transparent"
+                    className="absolute inset-0 text-2xl sm:text-3xl font-black text-slate-900 tracking-tight bg-gradient-to-br from-slate-900 to-indigo-700 bg-clip-text text-transparent"
                   >
                     {MONTH_NAMES[calPos.month]} {calPos.year}
                   </motion.h2>
@@ -411,7 +411,7 @@ function FullPlanView({
         </div>
 
         {/* Calendar grid */}
-        <div className="p-4">
+        <div className="p-2 sm:p-4">
           <div className="grid grid-cols-7 mb-1.5">
             {DAY_NAMES.map((d) => (
               <div key={d} className="text-center text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 py-2">
@@ -426,7 +426,7 @@ function FullPlanView({
               variants={cellContainer}
               initial="hidden"
               animate="show"
-              className="grid grid-cols-7 gap-1.5"
+              className="grid grid-cols-7 gap-1 sm:gap-1.5"
             >
               {cells.map((date, i) => {
                 if (!date) {
@@ -434,7 +434,7 @@ function FullPlanView({
                     <motion.div
                       key={`blank-${i}`}
                       variants={cellItem}
-                      className="h-[92px] rounded-2xl"
+                      className="h-[78px] sm:h-[92px] rounded-2xl"
                     />
                   );
                 }
@@ -452,7 +452,7 @@ function FullPlanView({
                     whileTap={{ scale: 0.97 }}
                     transition={SOFT_SPRING}
                     onClick={() => onSelectDate(date)}
-                    className="relative h-[92px] rounded-2xl p-2 text-left flex flex-col group focus:outline-none"
+                    className="relative h-[78px] sm:h-[92px] rounded-2xl p-1.5 sm:p-2 text-left flex flex-col group focus:outline-none"
                   >
                     {/* Selection / hover background */}
                     {isSel ? (
@@ -523,7 +523,7 @@ function FullPlanView({
         </div>
 
         {/* Stats footer */}
-        <div className="px-7 py-4 border-t border-slate-100/80 bg-gradient-to-br from-slate-50/80 to-indigo-50/40 flex items-center gap-6 flex-wrap">
+        <div className="px-4 sm:px-7 py-4 border-t border-slate-100/80 bg-gradient-to-br from-slate-50/80 to-indigo-50/40 flex items-center gap-4 sm:gap-6 flex-wrap">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-indigo-100 flex items-center justify-center">
               <BookOpen className="w-3.5 h-3.5 text-indigo-600" />
@@ -716,7 +716,7 @@ function SingleDayView({
       className="space-y-6"
     >
       {/* Nav row */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <button
           onClick={onBack}
           className="group flex items-center gap-2 px-4 py-2 rounded-xl bg-white/70 backdrop-blur-sm border border-slate-200 hover:border-indigo-300 text-sm font-bold text-slate-600 hover:text-indigo-600 transition-all active:scale-95 shadow-sm"
@@ -779,7 +779,7 @@ function SingleDayView({
           <rect width="100%" height="100%" fill="url(#hero-grid)" />
         </svg>
 
-        <div className="relative z-10 px-8 sm:px-10 py-9 sm:py-11">
+        <div className="relative z-10 px-5 sm:px-10 py-7 sm:py-11">
           <div className="flex items-center gap-1.5 text-white/60 text-xs font-semibold mb-4">
             <span>{plan.subject}</span>
             <ChevronRight className="w-3 h-3" />

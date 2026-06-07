@@ -316,7 +316,7 @@ export default function TeacherAttendanceLeave() {
         {tab === 'today' && (
           <motion.div key="today" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-6">
             {/* Status card */}
-            <div className="p-8 rounded-3xl bg-slate-900/60 border border-white/5 backdrop-blur-md">
+            <div className="p-5 sm:p-8 rounded-3xl bg-slate-900/60 border border-white/5 backdrop-blur-md">
               <h2 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-6">Today's Status</h2>
 
               {todayRecord === undefined ? (
@@ -432,7 +432,7 @@ export default function TeacherAttendanceLeave() {
               </div>
             ) : (
               <div className="overflow-x-auto rounded-3xl border border-white/5 bg-slate-900/60 backdrop-blur-md">
-                <table className="w-full text-xs">
+                <table className="w-full min-w-[680px] text-xs">
                   <thead>
                     <tr className="border-b border-white/5">
                       {['Date', 'Status', 'Check-in', 'Check-out', 'Remarks', 'Source'].map(h => (
@@ -498,7 +498,7 @@ export default function TeacherAttendanceLeave() {
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
-                  className="p-6 rounded-3xl bg-slate-900/80 border border-white/10 backdrop-blur-md space-y-4"
+                  className="p-5 sm:p-6 rounded-3xl bg-slate-900/80 border border-white/10 backdrop-blur-md space-y-4"
                 >
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-black uppercase tracking-widest">Apply for Leave</h3>
@@ -518,7 +518,7 @@ export default function TeacherAttendanceLeave() {
                         {LEAVE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                       </select>
                     </div>
-                    <div />
+                    <div className="hidden md:block" />
                     <div>
                       <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Start Date</label>
                       <DatePicker

@@ -540,8 +540,8 @@ export default function LessonPlanDashboard() {
 
       {/* Header */}
       <header className="sticky top-0 z-50 backdrop-blur-xl bg-white/70 border-b border-slate-200/60 shadow-[0_1px_0_0_rgba(15,23,42,0.04)]">
-        <div className="max-w-screen-xl mx-auto px-5 h-16 flex items-center gap-4">
-          <div className="flex items-center gap-2.5 mr-2 shrink-0">
+        <div className="max-w-screen-xl mx-auto px-4 sm:px-5 h-16 flex items-center gap-2 sm:gap-4">
+          <div className="flex items-center gap-2.5 mr-1 sm:mr-2 shrink-0">
             <div className="relative w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-600 to-blue-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
               <Sparkles className="w-4 h-4 text-white" />
               <div className="absolute inset-0 rounded-xl bg-white/20 mix-blend-overlay" />
@@ -566,7 +566,7 @@ export default function LessonPlanDashboard() {
                   <button
                     key={m}
                     onClick={() => setMode(m)}
-                    className="relative z-10 px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors"
+                    className="relative z-10 px-3 sm:px-4 py-1.5 rounded-lg text-[13px] sm:text-sm font-semibold transition-colors"
                   >
                     {active && (
                       <motion.div
@@ -576,7 +576,9 @@ export default function LessonPlanDashboard() {
                       />
                     )}
                     <span className={`relative ${active ? 'text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}>
-                      {m === 'single' ? 'Single Class' : 'Full Plan'}
+                      {m === 'single'
+                        ? (<><span className="sm:hidden">Single</span><span className="hidden sm:inline">Single Class</span></>)
+                        : (<><span className="sm:hidden">Full</span><span className="hidden sm:inline">Full Plan</span></>)}
                     </span>
                   </button>
                 );
@@ -727,7 +729,7 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      className="max-w-2xl mx-auto bg-white/80 backdrop-blur-xl border border-white/60 rounded-3xl p-12 text-center space-y-6 shadow-[0_24px_60px_-24px_rgba(79,70,229,0.22)]"
+      className="max-w-2xl mx-auto bg-white/80 backdrop-blur-xl border border-white/60 rounded-3xl p-6 sm:p-12 text-center space-y-6 shadow-[0_24px_60px_-24px_rgba(79,70,229,0.22)]"
     >
       <div className="mx-auto w-20 h-20 rounded-3xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center shadow-xl shadow-indigo-500/30">
         <CalendarDays className="w-10 h-10 text-white" />
@@ -742,10 +744,11 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
       </div>
       <button
         onClick={onAdd}
-        className="inline-flex items-center gap-2 h-12 px-6 rounded-2xl bg-gradient-to-br from-indigo-600 to-blue-600 text-white font-black text-sm uppercase tracking-widest shadow-xl shadow-indigo-500/30 hover:shadow-2xl hover:shadow-indigo-500/40 active:scale-95 transition-all"
+        className="inline-flex items-center justify-center gap-2 h-12 px-5 sm:px-6 max-w-full rounded-2xl bg-gradient-to-br from-indigo-600 to-blue-600 text-white font-black text-xs sm:text-sm uppercase tracking-widest shadow-xl shadow-indigo-500/30 hover:shadow-2xl hover:shadow-indigo-500/40 active:scale-95 transition-all"
       >
-        <Wand2 className="w-4 h-4" />
-        Generate your first lesson plan
+        <Wand2 className="w-4 h-4 shrink-0" />
+        <span className="sm:hidden">Generate first plan</span>
+        <span className="hidden sm:inline">Generate your first lesson plan</span>
       </button>
     </motion.div>
   );
@@ -833,7 +836,7 @@ function FullPlanView({
       className="grid grid-cols-1 lg:grid-cols-[1fr_380px] xl:grid-cols-[1fr_440px] gap-6"
     >
       <div className="relative rounded-3xl overflow-hidden bg-white/85 backdrop-blur-xl border border-white/60 shadow-[0_24px_60px_-24px_rgba(79,70,229,0.22)]">
-        <div className="relative px-7 pt-6 pb-4 border-b border-slate-100/80">
+        <div className="relative px-4 sm:px-7 pt-5 sm:pt-6 pb-4 border-b border-slate-100/80">
           <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-indigo-200/60 to-transparent" />
           <div className="flex items-end justify-between gap-4">
             <div>
@@ -848,7 +851,7 @@ function FullPlanView({
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -12 }}
                     transition={{ duration: 0.22, ease: [0.2, 0.65, 0.3, 0.95] }}
-                    className="absolute inset-0 text-3xl font-black tracking-tight bg-gradient-to-br from-slate-900 to-indigo-700 bg-clip-text text-transparent"
+                    className="absolute inset-0 text-2xl sm:text-3xl font-black tracking-tight bg-gradient-to-br from-slate-900 to-indigo-700 bg-clip-text text-transparent"
                   >
                     {MONTH_NAMES[calPos.month]} {calPos.year}
                   </motion.h2>
@@ -872,7 +875,7 @@ function FullPlanView({
           </div>
         </div>
 
-        <div className="p-4">
+        <div className="p-2 sm:p-4">
           <div className="grid grid-cols-7 mb-1.5">
             {DAY_NAMES.map((d) => (
               <div key={d} className="text-center text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 py-2">
@@ -886,10 +889,10 @@ function FullPlanView({
               key={`${calPos.year}-${calPos.month}`}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1, transition: { staggerChildren: 0.012, delayChildren: 0.04 } }}
-              className="grid grid-cols-7 gap-1.5"
+              className="grid grid-cols-7 gap-1 sm:gap-1.5"
             >
               {cells.map((date, i) => {
-                if (!date) return <div key={`blank-${i}`} className="h-[96px] rounded-2xl" />;
+                if (!date) return <div key={`blank-${i}`} className="h-[78px] sm:h-[96px] rounded-2xl" />;
                 const key = toKey(date);
                 const classes = dateMap.get(key) ?? [];
                 const dayEventList = eventDateMap.get(key) ?? [];
@@ -917,7 +920,7 @@ function FullPlanView({
                     whileTap={{ scale: 0.97 }}
                     transition={SOFT_SPRING}
                     onClick={() => onSelectDate(date)}
-                    className="relative h-[96px] rounded-2xl p-2 text-left flex flex-col group focus:outline-none"
+                    className="relative h-[78px] sm:h-[96px] rounded-2xl p-1.5 sm:p-2 text-left flex flex-col group focus:outline-none"
                   >
                     {isSel ? (
                       <motion.div

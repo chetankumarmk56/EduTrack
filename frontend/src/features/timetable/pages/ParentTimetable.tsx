@@ -25,7 +25,6 @@ import {
 } from '@/features/timetable/lib';
 
 function PeriodIcon({ type }: { type: SchedulePeriodType }) {
-  // eslint-disable-next-line react-hooks/static-components -- periodIconFor
   // returns one of 4 stable lucide icon refs by type; aliasing isn't a
   // dynamic component creation.
   const Icon = periodIconFor(type);
@@ -155,11 +154,11 @@ export default function ParentTimetable() {
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-indigo/10 border border-brand-indigo/20 text-brand-indigo text-[10px] font-black uppercase tracking-widest">
             <CalendarRange className="w-3.5 h-3.5" /> Class Timetable
           </div>
-          <h1 className="text-5xl md:text-6xl font-black tracking-tight text-gradient-indigo leading-[1.05]">
+          <h1 className="text-3xl sm:text-5xl md:text-6xl font-black tracking-tight text-gradient-indigo leading-[1.05]">
             Weekly Schedule
           </h1>
           {studentProfile && (
-            <p className="text-text-secondary text-lg font-medium max-w-2xl">
+            <p className="text-text-secondary text-base sm:text-lg font-medium max-w-2xl">
               Schedule for{' '}
               <span className="text-foreground font-bold">{studentProfile.name}</span>
               {className && (
@@ -531,7 +530,7 @@ function StatTile({
       onClick={onClick}
       type={interactive ? 'button' : undefined}
       className={cn(
-        'obsidian-card px-4 py-4 md:px-5 md:py-5 flex items-center gap-3 text-left transition-all duration-300',
+        'obsidian-card px-3 py-3 sm:px-4 sm:py-4 md:px-5 md:py-5 flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 text-left transition-all duration-300',
         interactive && 'cursor-pointer hover:border-brand-indigo/40 hover:-translate-y-0.5',
         active &&
           'border-brand-indigo/60 ring-2 ring-brand-indigo/30 shadow-[0_15px_30px_-15px_rgba(99,102,241,0.5)]',

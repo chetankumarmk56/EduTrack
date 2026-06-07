@@ -37,10 +37,10 @@ export default function Events() {
             <Sparkles className="w-5 h-5 crystal-glow" />
             Institutional Timeline Active
          </div>
-         <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black tracking-tighter text-gradient-crystal leading-tight">
+         <h1 className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-black tracking-tighter text-gradient-crystal leading-tight">
             Upcoming <span className="italic opacity-80">Milestones</span>
          </h1>
-         <p className="text-lg font-bold text-muted-foreground/60 max-w-3xl">
+         <p className="text-base sm:text-lg font-bold text-muted-foreground/60 max-w-3xl">
             Live synchronization of academic events, campus gatherings, and milestone markers across the institutional network.
          </p>
          {!loading && events.length > 0 && (
@@ -69,7 +69,7 @@ export default function Events() {
 
             return (
               <StaggerItem key={event.id}>
-                <div className="crystal-glass p-7 xl:p-8 rounded-[2.5rem] relative overflow-hidden h-full flex flex-col gap-6 transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_30px_60px_-20px_rgba(99,102,241,0.25)] group">
+                <div className="crystal-glass p-5 sm:p-7 xl:p-8 rounded-3xl sm:rounded-[2.5rem] relative overflow-hidden h-full flex flex-col gap-6 transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_30px_60px_-20px_rgba(99,102,241,0.25)] group">
                   {/* Background accent — fades in on hover */}
                   <div className={cn("absolute -top-12 -right-12 w-48 h-48 opacity-30 group-hover:opacity-60 transition-opacity rounded-full blur-3xl", styles.bg)} />
 

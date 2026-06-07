@@ -641,7 +641,7 @@ export default function AdminClasses() {
             </AnimatePresence>
 
             {isAddingSubject && (
-              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="obsidian-card p-8 border-brand-indigo/30 bg-brand-indigo/[0.02] shadow-2xl relative overflow-hidden">
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="obsidian-card p-5 sm:p-8 border-brand-indigo/30 bg-brand-indigo/[0.02] shadow-2xl relative overflow-hidden">
                 <div className="absolute -top-10 -right-10 w-24 h-24 bg-brand-indigo/10 blur-[50px] rounded-full" />
                 <form onSubmit={handleCreateSubject} className="space-y-6 relative z-10">
                   <div className="flex items-center justify-between">

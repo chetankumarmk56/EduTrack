@@ -21,7 +21,7 @@ export default function TeacherEvents() {
   return (
     <div className="space-y-8">
       <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">Teacher Event Calendar</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">Teacher Event Calendar</h1>
         <p className="text-muted-foreground italic">Stay synchronized with the school's academic and extracurricular master schedule.</p>
       </div>
 

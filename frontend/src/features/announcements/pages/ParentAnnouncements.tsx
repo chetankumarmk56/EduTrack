@@ -331,7 +331,7 @@ export default function ParentAnnouncements() {
       <div className="w-full space-y-8 py-10 px-4 sm:px-6">
 
         {/* Hero */}
-        <div className="relative overflow-hidden p-8 sm:p-10 rounded-[3rem] premium-glass border-white shadow-xl">
+        <div className="relative overflow-hidden p-5 sm:p-8 md:p-10 rounded-3xl sm:rounded-[3rem] premium-glass border-white shadow-xl">
           <div aria-hidden className="absolute -inset-24 bg-gradient-to-r from-primary/10 via-indigo-500/5 to-violet-500/10 blur-[100px] pointer-events-none" />
           <div className="relative z-10 flex flex-col gap-8">
             <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
@@ -373,7 +373,7 @@ export default function ParentAnnouncements() {
             </div>
 
             {/* Stat tiles */}
-            <div className="grid grid-cols-3 gap-3 sm:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
               <StatTile
                 label="Total"
                 value={counts.total}
@@ -524,7 +524,7 @@ export default function ParentAnnouncements() {
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto px-8 py-7 space-y-6">
+              <div className="flex-1 overflow-y-auto px-5 sm:px-8 py-6 sm:py-7 space-y-6">
                 <p className="text-base sm:text-lg text-slate-700 leading-relaxed whitespace-pre-wrap">{selected.message}</p>
                 {selected.attachment_url && (
                   <AttachmentPreview url={selected.attachment_url} onPreview={(url, type) => setPreviewFile({ url, type })} />
@@ -537,7 +537,7 @@ export default function ParentAnnouncements() {
                 )}
               </div>
 
-              <div className="px-8 py-5 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-3">
+              <div className="px-5 sm:px-8 py-5 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-3">
                 <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em]">
                   Press <kbd className="px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-600">Esc</kbd> to close
                 </p>

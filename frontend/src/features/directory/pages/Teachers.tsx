@@ -143,7 +143,7 @@ export default function Teachers() {
           <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black tracking-tight text-gradient-indigo leading-[1.05]">
             Meet Your Teachers
           </h1>
-          <p className="text-text-secondary text-lg font-medium max-w-2xl">
+          <p className="text-text-secondary text-base sm:text-lg font-medium max-w-2xl">
             Reach out to your child&apos;s subject teachers anytime — by call, WhatsApp or email.
           </p>
         </div>
@@ -475,7 +475,7 @@ function StatTile({
   value: number;
 }) {
   return (
-    <div className="obsidian-card px-4 py-4 md:px-5 md:py-5 flex items-center gap-3">
+    <div className="obsidian-card px-3 py-3 sm:px-4 sm:py-4 md:px-5 md:py-5 flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3">
       <div className="w-10 h-10 rounded-xl bg-brand-indigo/10 border border-brand-indigo/20 flex items-center justify-center text-brand-indigo shrink-0">
         {icon}
       </div>

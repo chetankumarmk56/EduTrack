@@ -200,34 +200,34 @@ export default function TeacherAttendance() {
   return (
     <div className="space-y-10 pb-20">
       {/* Attendance Stats Bar */}
-      <div className="flex flex-wrap gap-4">
-        <div className="flex-1 min-w-[200px] premium-card p-4 bg-emerald-500/5 border-emerald-500/20 flex items-center gap-4 group">
-          <div className="p-3 rounded-xl bg-emerald-500/10 text-emerald-400">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="premium-card p-4 bg-emerald-500/5 border-emerald-500/20 flex items-center gap-4 group">
+          <div className="p-3 rounded-xl bg-emerald-500/10 text-emerald-400 shrink-0">
              <CheckCircle2 className="w-5 h-5" />
           </div>
-          <div>
+          <div className="min-w-0">
             <p className="text-[9px] font-black uppercase text-emerald-400/60 tracking-widest">Marked Present</p>
             <p className="text-xl font-black mt-0.5 tabular-nums">
               {Object.values(localAttendance).filter(v => v === 'present').length} / {filteredDB.length}
             </p>
           </div>
         </div>
-        
-        <div className="flex-1 min-w-[200px] premium-card p-4 bg-card/40 border-glass-border flex items-center gap-4">
-          <div className="p-3 rounded-xl bg-muted/40 text-muted-foreground group-hover:scale-110 transition-transform">
+
+        <div className="premium-card p-4 bg-card/40 border-glass-border flex items-center gap-4">
+          <div className="p-3 rounded-xl bg-muted/40 text-muted-foreground group-hover:scale-110 transition-transform shrink-0">
              <Users className="w-5 h-5" />
           </div>
-          <div>
+          <div className="min-w-0">
             <p className="text-[9px] font-black uppercase text-muted-foreground/60 tracking-widest">Assigned Students</p>
             <p className="text-xl font-black mt-0.5 tabular-nums">{filteredDB.length}</p>
           </div>
         </div>
 
-        <div className="flex-1 min-w-[200px] premium-card p-4 bg-purple-500/5 border-purple-500/20 flex items-center gap-4">
-          <div className="p-3 rounded-xl bg-purple-500/10 text-purple-400">
+        <div className="premium-card p-4 bg-purple-500/5 border-purple-500/20 flex items-center gap-4">
+          <div className="p-3 rounded-xl bg-purple-500/10 text-purple-400 shrink-0">
              <PieChart className="w-5 h-5" />
           </div>
-          <div>
+          <div className="min-w-0">
             <p className="text-[9px] font-black uppercase text-purple-400/60 tracking-widest">Global Punctuality</p>
             <p className="text-xl font-black mt-0.5 tabular-nums">{teacherStats?.attendance_rate || 0}%</p>
           </div>
@@ -264,11 +264,11 @@ export default function TeacherAttendance() {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-4 items-center">
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-stretch sm:items-center w-full lg:w-auto">
           <DatePicker
             value={selectedDate}
             onChange={(v) => setSelectedDate(v)}
-            className="px-4 py-4 border border-white/10 rounded-2xl bg-muted/30 text-sm font-black focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all hover:border-primary/30"
+            className="px-4 py-4 border border-white/10 rounded-2xl bg-muted/30 text-sm font-black focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all hover:border-primary/30 w-full sm:w-auto justify-center sm:justify-start"
           />
 
           <motion.button
@@ -284,7 +284,7 @@ export default function TeacherAttendance() {
                   : undefined
             }
             className={cn(
-               "relative group overflow-hidden px-10 py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-2xl transition-all flex items-center gap-3 disabled:cursor-not-allowed",
+               "relative group overflow-hidden px-6 sm:px-10 py-4 sm:py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-2xl transition-all flex items-center justify-center gap-3 disabled:cursor-not-allowed w-full sm:w-auto",
                 isSaving || saveStatus === 'success'
                   ? "bg-emerald-500 text-white shadow-emerald-500/20"
                   : saveStatus === 'error'
@@ -341,9 +341,9 @@ export default function TeacherAttendance() {
           <table className="w-full text-sm text-left border-collapse">
             <thead className="bg-muted/10">
               <tr>
-                <th className="px-10 py-6 font-black uppercase tracking-[0.3em] text-[10px] text-muted-foreground/60"><div className="flex items-center gap-2"><Hash className="w-3.5 h-3.5" /> ID</div></th>
-                <th className="px-10 py-6 font-black uppercase tracking-[0.3em] text-[10px] text-muted-foreground/60"><div className="flex items-center gap-2"><UserCircle className="w-3.5 h-3.5" /> Student Identity</div></th>
-                <th className="px-10 py-6 font-black uppercase tracking-[0.3em] text-[10px] text-muted-foreground/60 text-right">Registry Status</th>
+                <th className="px-4 sm:px-6 lg:px-10 py-4 sm:py-6 font-black uppercase tracking-[0.3em] text-[10px] text-muted-foreground/60"><div className="flex items-center gap-2"><Hash className="w-3.5 h-3.5" /> ID</div></th>
+                <th className="px-4 sm:px-6 lg:px-10 py-4 sm:py-6 font-black uppercase tracking-[0.3em] text-[10px] text-muted-foreground/60"><div className="flex items-center gap-2"><UserCircle className="w-3.5 h-3.5" /> Student Identity</div></th>
+                <th className="px-4 sm:px-6 lg:px-10 py-4 sm:py-6 font-black uppercase tracking-[0.3em] text-[10px] text-muted-foreground/60 text-right">Registry Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
@@ -391,29 +391,29 @@ export default function TeacherAttendance() {
                         key={student.id} 
                         className="group transition-all hover:bg-white/5"
                       >
-                         <td className="px-10 py-6 font-black text-xs opacity-30 tracking-[0.2em] group-hover:opacity-100 group-hover:text-primary transition-all">
+                         <td className="px-4 sm:px-6 lg:px-10 py-4 sm:py-6 font-black text-xs opacity-30 tracking-[0.2em] group-hover:opacity-100 group-hover:text-primary transition-all">
                            #{ (student.roll_number ?? idx + 1).toString().padStart(2, '0') }
                          </td>
-                        <td className="px-10 py-6">
-                           <div className="flex items-center gap-5">
+                        <td className="px-4 sm:px-6 lg:px-10 py-4 sm:py-6">
+                           <div className="flex items-center gap-3 sm:gap-5">
                               <div className={cn(
-                                "w-11 h-11 rounded-2xl flex items-center justify-center font-black transition-all border border-white/5 group-hover:scale-110 group-hover:border-primary/30",
+                                "w-10 h-10 sm:w-11 sm:h-11 shrink-0 rounded-2xl flex items-center justify-center font-black transition-all border border-white/5 group-hover:scale-110 group-hover:border-primary/30",
                                 status === 'present' ? 'bg-primary/10 text-primary' : 'bg-muted/40 text-muted-foreground'
                               )}>
                                  {student.name.charAt(0)}
                               </div>
-                              <div>
-                                 <p className="font-black tracking-tight text-lg group-hover:text-primary transition-colors">{student.name}</p>
+                              <div className="min-w-0">
+                                 <p className="font-black tracking-tight text-base sm:text-lg group-hover:text-primary transition-colors break-words">{student.name}</p>
                                  <p className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground/40 group-hover:text-primary/40 transition-colors">Registered Student</p>
                               </div>
                            </div>
                         </td>
-                        <td className="px-10 py-6 text-right">
+                        <td className="px-4 sm:px-6 lg:px-10 py-4 sm:py-6 text-right">
                           <div className="flex justify-end gap-3">
                             <button 
                               onClick={() => markStudent(student.id, 'present')}
                               className={cn(
-                                "px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] flex items-center transition-all border",
+                                "px-3.5 sm:px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] flex items-center justify-center transition-all border",
                                 status === 'present' 
                                   ? 'aurora-gradient text-white aurora-glow' 
                                   : 'bg-muted/40 border-white/5 text-muted-foreground hover:bg-primary/5 hover:text-primary hover:border-primary/40'
@@ -424,7 +424,7 @@ export default function TeacherAttendance() {
                             <button 
                               onClick={() => markStudent(student.id, 'absent')}
                               className={cn(
-                                "px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] flex items-center transition-all border",
+                                "px-3.5 sm:px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] flex items-center justify-center transition-all border",
                                 status === 'absent' 
                                   ? 'bg-red-500 text-white shadow-lg shadow-red-500/20' 
                                   : 'bg-muted/40 border-white/5 text-muted-foreground hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/40'
@@ -435,7 +435,7 @@ export default function TeacherAttendance() {
                             <button 
                               onClick={() => markStudent(student.id, 'late')}
                               className={cn(
-                                "px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] flex items-center transition-all border",
+                                "px-3.5 sm:px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] flex items-center justify-center transition-all border",
                                 status === 'late' 
                                   ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/20' 
                                   : 'bg-muted/40 border-white/5 text-muted-foreground hover:bg-amber-500/10 hover:text-amber-400 hover:border-amber-500/40'

@@ -125,7 +125,7 @@ export default function EditStudentModal({ student, onClose, onUpdated }: EditSt
                       <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Full Name</label>
                       <input className="input-obsidian" value={localStudent.name} onChange={e => update('name', e.target.value)} required />
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div className="space-y-1.5">
                         <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary ml-1">Date of Birth</label>
                         <DatePicker className="input-obsidian" placeholder="Select date of birth" value={localStudent.dob} onChange={v => update('dob', v)} />

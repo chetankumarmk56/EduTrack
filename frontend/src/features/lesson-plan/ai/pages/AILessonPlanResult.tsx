@@ -52,7 +52,6 @@ export default function AILessonPlanResult() {
     // a much larger refactor for the same observable behaviour.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setError(null);
     lessonPlanAIApi
       .fetchOutput(identity)

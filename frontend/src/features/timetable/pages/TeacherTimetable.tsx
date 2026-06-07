@@ -24,7 +24,6 @@ import {
 } from '@/features/timetable/lib';
 
 function PeriodIcon({ type }: { type: SchedulePeriodType }) {
-  // eslint-disable-next-line react-hooks/static-components -- periodIconFor
   // returns one of 4 stable lucide icon refs; aliasing isn't dynamic.
   const Icon = periodIconFor(type);
   // eslint-disable-next-line react-hooks/static-components
@@ -123,7 +122,7 @@ export default function TeacherTimetable() {
           <CalendarRange className="w-3.5 h-3.5" /> My Timetable
         </div>
         <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight text-gradient-indigo">Schedule</h1>
-        <p className="text-text-secondary text-lg font-medium max-w-2xl">
+        <p className="text-text-secondary text-base sm:text-lg font-medium max-w-2xl">
           {view === 'mine'
             ? 'Your complete weekly teaching schedule — today is highlighted.'
             : 'Full weekly timetable for one of your assigned classes.'}
@@ -195,7 +194,7 @@ export default function TeacherTimetable() {
                 className="flex flex-col gap-8"
               >
                 {/* Today's quick view */}
-                <section className="obsidian-card p-6">
+                <section className="obsidian-card p-4 sm:p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary flex items-center gap-2">
                       <Sparkles className="w-3.5 h-3.5 text-brand-indigo" /> Today · {DAY_FULL[today]}

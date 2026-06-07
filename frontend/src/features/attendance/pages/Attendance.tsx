@@ -102,7 +102,7 @@ export default function Attendance() {
            
            {/* Filters Bento */}
            <StaggerItem className="lg:col-span-3 space-y-6">
-              <div className="premium-glass p-8 rounded-[2.5rem] space-y-8">
+              <div className="premium-glass p-5 sm:p-8 rounded-[2.5rem] space-y-8">
                  <div>
                     <h3 className="text-lg font-black text-foreground tracking-tight mb-4">Filter Matrix</h3>
                     <div className="relative">
@@ -148,9 +148,9 @@ export default function Attendance() {
            {/* Results Bento */}
            <StaggerItem className="lg:col-span-9">
               <div className="premium-glass rounded-2xl sm:rounded-[3rem] overflow-hidden shadow-2xl">
-                 <div className="px-10 py-8 border-b border-glass-border flex items-center justify-between bg-slate-50">
+                 <div className="px-5 sm:px-10 py-6 sm:py-8 border-b border-glass-border flex items-center justify-between gap-3 bg-slate-50">
                     <h3 className="text-xl font-black text-foreground">Class Log</h3>
-                    <div className="text-xs font-black uppercase text-muted-foreground tracking-widest bg-slate-100 px-4 py-2 rounded-full">
+                    <div className="text-xs font-black uppercase text-muted-foreground tracking-widest bg-slate-100 px-4 py-2 rounded-full shrink-0">
                        Displaying {filteredAttendance.length} matches
                     </div>
                  </div>
@@ -159,9 +159,9 @@ export default function Attendance() {
                     <table className="w-full text-left">
                        <thead>
                           <tr className="border-b border-glass-border">
-                             <th className="px-10 py-6 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Status</th>
-                             <th className="px-10 py-6 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Subject</th>
-                             <th className="px-10 py-6 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground text-right">Date & Time</th>
+                             <th className="px-4 sm:px-6 lg:px-10 py-4 sm:py-6 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Status</th>
+                             <th className="px-4 sm:px-6 lg:px-10 py-4 sm:py-6 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Subject</th>
+                             <th className="px-4 sm:px-6 lg:px-10 py-4 sm:py-6 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground text-right">Date & Time</th>
                           </tr>
                        </thead>
                        <tbody className="divide-y divide-glass-border">
@@ -171,7 +171,7 @@ export default function Attendance() {
                               whileHover={{ backgroundColor: 'rgba(var(--primary), 0.02)' }}
                               className="group transition-colors"
                              >
-                                <td className="px-10 py-6">
+                                <td className="px-4 sm:px-6 lg:px-10 py-4 sm:py-6">
                                    <div className={cn(
                                       "inline-flex items-center gap-2 px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border",
                                       record.status.toLowerCase() === 'present' && "bg-emerald-500/10 text-emerald-600 border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.1)]",
@@ -184,17 +184,17 @@ export default function Attendance() {
                                       {record.status}
                                    </div>
                                 </td>
-                                <td className="px-10 py-6">
+                                <td className="px-4 sm:px-6 lg:px-10 py-4 sm:py-6">
                                    <p className="text-base font-black text-foreground">{record.subject}</p>
                                 </td>
-                                <td className="px-10 py-6 text-right">
+                                <td className="px-4 sm:px-6 lg:px-10 py-4 sm:py-6 text-right">
                                    <p className="text-sm font-black text-foreground">{new Date(record.date).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}</p>
                                    <p className="text-xs font-medium text-muted-foreground">Recorded at 09:00 AM</p>
                                 </td>
                              </motion.tr>
                           )) : (
                              <tr>
-                                <td colSpan={3} className="px-10 py-32 text-center">
+                                <td colSpan={3} className="px-4 py-20 sm:py-32 text-center">
                                    <div className="flex flex-col items-center">
                                       <div className="h-20 w-20 rounded-[2rem] bg-muted/10 flex items-center justify-center mb-6 border border-glass-border">
                                          <Calendar className="w-10 h-10 text-muted-foreground/30" />

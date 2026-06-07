@@ -164,15 +164,15 @@ export default function Academics() {
                   </h1>
                </div>
 
-               <div className="flex gap-4">
-                  <motion.button 
+               <div className="grid grid-cols-2 gap-3 sm:flex sm:gap-4 w-full md:w-auto">
+                  <motion.button
                      onClick={() => {
                         setSelectedLeaderboard(rankings?.class_leaderboard ?? null);
                         setLeaderboardTitle('Section Rankings');
                      }}
                      whileHover={{ y: -5 }}
                      whileTap={{ scale: 0.95 }}
-                     className="px-6 py-4 rounded-[2rem] premium-glass flex items-center gap-4 border-2 border-primary/20 shadow-xl shadow-primary/5 text-left"
+                     className="px-4 sm:px-6 py-3 sm:py-4 rounded-[2rem] premium-glass flex items-center gap-3 sm:gap-4 border-2 min-w-0 border-primary/20 shadow-xl shadow-primary/5 text-left"
                   >
                      <div className="h-12 w-12 rounded-2xl bg-amber-500 text-white flex items-center justify-center shadow-lg shadow-amber-500/20">
                         <Target className="w-6 h-6" />
@@ -190,7 +190,7 @@ export default function Academics() {
                      }}
                      whileHover={{ y: -5 }}
                      whileTap={{ scale: 0.95 }}
-                     className="px-6 py-4 rounded-[2rem] premium-glass flex items-center gap-4 border-2 border-indigo-500/20 shadow-xl shadow-indigo-500/5 text-left"
+                     className="px-4 sm:px-6 py-3 sm:py-4 rounded-[2rem] premium-glass flex items-center gap-3 sm:gap-4 border-2 min-w-0 border-indigo-500/20 shadow-xl shadow-indigo-500/5 text-left"
                   >
                      <div className="h-12 w-12 rounded-2xl bg-indigo-500 text-white flex items-center justify-center shadow-lg shadow-indigo-500/20">
                         <Award className="w-6 h-6" />
@@ -377,16 +377,16 @@ export default function Academics() {
 
                      {/* Modal Body - Scrollable */}
                      <div className="flex-1 overflow-y-auto px-5 sm:px-8 md:px-12 py-5 sm:py-8 md:py-10 space-y-8">
-                        <div className="grid grid-cols-3 gap-6">
-                           <div className="p-8 rounded-[2.5rem] bg-indigo-50 border border-indigo-100">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-6">
+                           <div className="p-5 sm:p-8 rounded-[2.5rem] bg-indigo-50 border border-indigo-100">
                               <p className="text-[10px] font-black uppercase text-indigo-400 tracking-widest mb-2">Subject Percentage</p>
                               <p className="text-3xl font-black text-indigo-900">{selectedSubjectData.average}%</p>
                            </div>
-                           <div className="p-8 rounded-[2.5rem] bg-amber-50 border border-amber-100">
+                           <div className="p-5 sm:p-8 rounded-[2.5rem] bg-amber-50 border border-amber-100">
                               <p className="text-[10px] font-black uppercase text-amber-500 tracking-widest mb-2">Tests Recorded</p>
                               <p className="text-3xl font-black text-amber-900">{selectedSubjectData.count} Tests</p>
                            </div>
-                           <div className="p-8 rounded-[2.5rem] bg-emerald-50 border border-emerald-100">
+                           <div className="p-5 sm:p-8 rounded-[2.5rem] bg-emerald-50 border border-emerald-100">
                               <p className="text-[10px] font-black uppercase text-emerald-500 tracking-widest mb-2">Teacher</p>
                               <p className="text-lg font-black text-emerald-900 truncate leading-none mt-2">{selectedSubjectData.teacher}</p>
                            </div>
@@ -401,20 +401,20 @@ export default function Academics() {
                                     initial={{ opacity: 0, x: -10 }}
                                     animate={{ opacity: 1, x: 0 }}
                                     transition={{ delay: i * 0.05 }}
-                                    className="flex items-center justify-between p-6 rounded-[2rem] bg-white border border-slate-100 hover:border-primary/20 hover:shadow-lg transition-all group"
+                                    className="flex items-center justify-between gap-3 p-4 sm:p-6 rounded-[2rem] bg-white border border-slate-100 hover:border-primary/20 hover:shadow-lg transition-all group"
                                  >
-                                    <div className="flex items-center gap-5">
-                                       <div className="h-12 w-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-primary transition-colors">
+                                    <div className="flex items-center gap-3 sm:gap-5 min-w-0">
+                                       <div className="h-12 w-12 shrink-0 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-primary transition-colors">
                                           <Calendar className="w-5 h-5" />
                                        </div>
-                                       <div>
-                                          <p className="text-base font-black text-foreground">{m.exam?.name || m.test_name || 'Test Assessment'}</p>
+                                       <div className="min-w-0">
+                                          <p className="text-base font-black text-foreground truncate">{m.exam?.name || m.test_name || 'Test Assessment'}</p>
                                           <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mt-0.5">
                                              {new Date(m.created_at || Date.now()).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
                                           </p>
                                        </div>
                                     </div>
-                                    <div className="flex items-center gap-8">
+                                    <div className="flex items-center gap-4 sm:gap-8 shrink-0">
                                        <div className="text-right">
                                           <p className="text-2xl font-black text-foreground leading-none">{m.score}<span className="text-xs text-muted-foreground ml-1">/{m.max_score}</span></p>
                                           <p className="text-[9px] font-black text-primary uppercase tracking-widest mt-1">Raw Score</p>
@@ -427,7 +427,7 @@ export default function Academics() {
                      </div>
 
                      {/* Modal Footer */}
-                     <div className="px-12 py-8 bg-slate-50 border-t border-slate-100 text-center">
+                     <div className="px-5 sm:px-12 py-6 sm:py-8 bg-slate-50 border-t border-slate-100 text-center">
                         <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.3em]">Institutional Academic Record · Validated by {selectedSubjectData.teacher}</p>
                      </div>
                   </motion.div>
@@ -471,7 +471,7 @@ export default function Academics() {
                         </button>
                      </div>
 
-                     <div className="flex-1 overflow-y-auto px-10 py-8 space-y-3">
+                     <div className="flex-1 overflow-y-auto px-5 sm:px-10 py-6 sm:py-8 space-y-3">
                         {selectedLeaderboard.map((entry, index) => {
                            const isMe = entry.student_id === activeStudent?.id;
                            return (
@@ -487,9 +487,9 @@ export default function Academics() {
                                        : "bg-white border-slate-100 hover:border-indigo-200 hover:bg-indigo-50/30"
                                  )}
                               >
-                                 <div className="flex items-center gap-6">
+                                 <div className="flex items-center gap-4 sm:gap-6 min-w-0">
                                     <div className={cn(
-                                       "h-10 w-10 rounded-xl flex items-center justify-center text-sm font-black shadow-sm",
+                                       "h-10 w-10 shrink-0 rounded-xl flex items-center justify-center text-sm font-black shadow-sm",
                                        index === 0 ? "bg-amber-400 text-amber-900" :
                                        index === 1 ? "bg-slate-300 text-slate-700" :
                                        index === 2 ? "bg-orange-300 text-orange-900" :
@@ -497,8 +497,8 @@ export default function Academics() {
                                     )}>
                                        {entry.rank}
                                     </div>
-                                    <div>
-                                       <p className={cn("text-base font-black", isMe ? "text-white" : "text-foreground")}>
+                                    <div className="min-w-0">
+                                       <p className={cn("text-base font-black truncate", isMe ? "text-white" : "text-foreground")}>
                                           {entry.name} {isMe && <span className="ml-2 text-[10px] font-black uppercase bg-white/20 px-2 py-0.5 rounded-full italic tracking-widest">You</span>}
                                        </p>
                                        <p className={cn("text-[10px] font-black uppercase tracking-widest", isMe ? "text-indigo-100" : "text-muted-foreground")}>
@@ -521,7 +521,7 @@ export default function Academics() {
                         })}
                      </div>
 
-                     <div className="px-10 py-6 bg-slate-50 border-t border-slate-100 text-center">
+                     <div className="px-5 sm:px-10 py-6 bg-slate-50 border-t border-slate-100 text-center">
                         <p className="text-[9px] font-black text-muted-foreground uppercase tracking-[0.4em]">Nexus Intelligence · Dynamic Leaderboard Matrix</p>
                      </div>
                   </motion.div>

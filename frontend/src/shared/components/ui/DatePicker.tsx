@@ -118,9 +118,13 @@ export default function DatePicker({
       const popH = popRef.current?.offsetHeight ?? 340;
       const below = window.innerHeight - r.bottom;
       const openUp = below < popH + 12 && r.top > below;
+      // Popover is 300px wide. Clamp so it never spills off either edge,
+      // even on a 320px viewport (where right-clamp alone would go negative).
+      const POP_W = 300;
+      const maxLeft = Math.max(8, window.innerWidth - POP_W - 8);
       setPos({
         top: openUp ? Math.max(8, r.top - popH - 8) : r.bottom + 8,
-        left: Math.min(r.left, window.innerWidth - 320 - 8),
+        left: Math.max(8, Math.min(r.left, maxLeft)),
         width: r.width,
       });
     };

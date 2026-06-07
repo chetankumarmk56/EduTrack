@@ -1227,7 +1227,7 @@ function ResultPanel({
 
   if (isGenerating) {
     return (
-      <div className="premium-card border-glass-border relative flex min-h-[360px] flex-col items-center justify-center gap-5 overflow-hidden rounded-3xl p-10 text-center">
+      <div className="premium-card border-glass-border relative flex min-h-[360px] flex-col items-center justify-center gap-5 overflow-hidden rounded-3xl p-6 sm:p-10 text-center">
         <div className="pointer-events-none absolute inset-0 aurora-gradient opacity-[0.06]" />
         <div className="relative">
           <div className="absolute inset-0 animate-ping rounded-full bg-emerald-500/20" />
@@ -1339,7 +1339,7 @@ function ResultPanel({
 
       {/* Questions */}
       {questions.length === 0 ? (
-        <div className="rounded-3xl border-2 border-dashed border-white/10 bg-white/[0.02] p-12 text-center">
+        <div className="rounded-3xl border-2 border-dashed border-white/10 bg-white/[0.02] p-6 sm:p-12 text-center">
           <p className="text-sm font-black uppercase tracking-[0.3em] text-slate-400">
             The generated bank has no questions.
           </p>

@@ -27,7 +27,6 @@ const PERIOD_TYPE_OPTIONS: { value: SchedulePeriodType; label: string }[] = [
 ];
 
 function PeriodIcon({ type }: { type: SchedulePeriodType }) {
-  // eslint-disable-next-line react-hooks/static-components -- periodIconFor
   // returns one of 4 stable lucide icon refs; aliasing isn't dynamic.
   const Icon = periodIconFor(type);
   // eslint-disable-next-line react-hooks/static-components
@@ -265,17 +264,17 @@ export default function AdminTimetable() {
             <CalendarRange className="w-3.5 h-3.5" /> Weekly Schedule
           </div>
           <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight text-gradient-indigo">Timetable</h1>
-          <p className="text-text-secondary text-lg font-medium max-w-2xl">
-            Configure the institutional bell schedule once, then assemble each class's weekly timetable across all seven days.
+          <p className="text-text-secondary text-base sm:text-lg font-medium max-w-2xl">
+            Configure the institutional timetable once, then assemble each class's weekly timetable across all seven days.
           </p>
         </div>
       </div>
 
-      {/* ---- Bell Schedule Section ---- */}
+      {/* ---- Time Schedule Section ---- */}
       <section className="flex flex-col gap-4">
         <div className="flex items-center justify-between px-2">
           <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary flex items-center gap-2">
-            <Clock className="w-3.5 h-3.5" /> Bell Schedule (applies to every class)
+            <Clock className="w-3.5 h-3.5" /> Time Schedule (applies to every class)
           </h3>
           <button
             onClick={openCreatePeriod}
@@ -316,7 +315,7 @@ export default function AdminTimetable() {
                     {formatTime(p.start_time)} – {formatTime(p.end_time)}
                   </p>
                 </div>
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                   <button
                     onClick={() => openEditPeriod(p)}
                     className="p-1.5 rounded-lg hover:bg-white/10 text-text-secondary hover:text-white"
@@ -345,7 +344,7 @@ export default function AdminTimetable() {
         {/* Period Form */}
         <AnimatePresence>
           {isPeriodFormOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
               <motion.div
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                 onClick={() => setIsPeriodFormOpen(false)}
@@ -353,7 +352,7 @@ export default function AdminTimetable() {
               />
               <motion.div
                 initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
-                className="relative w-full max-w-md obsidian-card border-brand-indigo/30 p-8 shadow-2xl"
+                className="relative w-full max-w-md obsidian-card border-brand-indigo/30 p-5 sm:p-8 shadow-2xl max-h-[90vh] overflow-y-auto"
               >
                 <div className="flex items-center justify-between mb-6">
                   <h2 className="text-xl font-black italic uppercase tracking-tight text-white">
@@ -604,7 +603,7 @@ export default function AdminTimetable() {
             />
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
-              className="relative w-full max-w-md obsidian-card border-brand-indigo/30 p-8 shadow-2xl"
+              className="relative w-full max-w-md obsidian-card border-brand-indigo/30 p-5 sm:p-8 shadow-2xl max-h-[90vh] overflow-y-auto"
             >
               <div className="flex items-center justify-between mb-6">
                 <div>

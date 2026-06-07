@@ -315,7 +315,7 @@ export default function MyFiles() {
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-3 mt-1 text-[11px] text-muted-foreground tabular-nums">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-[11px] text-muted-foreground tabular-nums">
                       {f.file_size > 0 && <span>{formatBytes(f.file_size)}</span>}
                       {f.file_size > 0 && <span>·</span>}
                       <span title={formatDateTime(f.uploaded_at)}>
@@ -337,7 +337,7 @@ export default function MyFiles() {
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-2 shrink-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                     {resultUrl && (
                       <button
                         onClick={() => navigate(resultUrl)}
@@ -406,7 +406,7 @@ export default function MyFiles() {
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-card border border-white/10 rounded-2xl p-8 max-w-md w-full"
+              className="bg-card border border-white/10 rounded-2xl p-6 sm:p-8 max-w-md w-full"
             >
               <div className="flex items-start gap-4 mb-6">
                 <div className="p-3 rounded-xl bg-red-500/10 text-red-400 flex-shrink-0">

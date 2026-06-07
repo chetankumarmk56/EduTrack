@@ -162,14 +162,14 @@ export default function AdminEvents() {
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-black uppercase tracking-widest">
             <Calendar className="w-3 h-3" /> Institutional Timeline
           </div>
-          <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight text-gradient-indigo">Chronos Management</h1>
-          <p className="text-text-secondary text-lg font-medium max-w-xl">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight text-gradient-indigo">Academic Year Plan</h1>
+          <p className="text-text-secondary text-base sm:text-lg font-medium max-w-xl">
             Orchestrate school-wide events, non-teaching days, and academic milestones.
           </p>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="flex bg-white/5 border border-glass-border rounded-xl p-1">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+          <div className="flex bg-white/5 border border-glass-border rounded-xl p-1 overflow-x-auto max-w-full">
             {[
               { key: 'all', label: 'All' },
               { key: 'working', label: 'Working' },
@@ -179,7 +179,7 @@ export default function AdminEvents() {
                 key={f.key}
                 onClick={() => setFilter(f.key)}
                 className={cn(
-                  "px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all",
+                  "px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all shrink-0 whitespace-nowrap",
                   filter === f.key ? "bg-white/10 text-white shadow-lg" : "text-text-secondary hover:text-white"
                 )}
               >
@@ -208,8 +208,8 @@ export default function AdminEvents() {
               exit={{ opacity: 0, scale: 0.95 }}
               className="obsidian-card group flex flex-col overflow-hidden hover:border-blue-500/30 transition-all"
             >
-              <div className="p-8 flex flex-col gap-6">
-                <div className="flex items-start justify-between">
+              <div className="p-5 sm:p-8 flex flex-col gap-6">
+                <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-4">
                     <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center border border-glass-border">
                       {getEventIcon(e)}
@@ -231,13 +231,13 @@ export default function AdminEvents() {
                   <div className="flex gap-2">
                     <button 
                       onClick={() => handleEdit(e)}
-                      className="p-3 rounded-xl bg-blue-500/5 text-blue-400 opacity-0 group-hover:opacity-100 transition-all border border-blue-500/10 hover:bg-blue-500/20"
+                      className="p-3 rounded-xl bg-blue-500/5 text-blue-400 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all border border-blue-500/10 hover:bg-blue-500/20"
                     >
                       <Pencil className="w-4 h-4" />
                     </button>
                     <button 
                       onClick={() => setPendingDeleteEvent(e as AdminEvent)}
-                      className="p-3 rounded-xl bg-rose-500/5 text-rose-500 opacity-0 group-hover:opacity-100 transition-all border border-rose-500/10 hover:bg-rose-500/20"
+                      className="p-3 rounded-xl bg-rose-500/5 text-rose-500 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all border border-rose-500/10 hover:bg-rose-500/20"
                     >
                       <Trash2 className="w-5 h-5" />
                     </button>
@@ -271,7 +271,7 @@ export default function AdminEvents() {
               </div>
 
               {/* Visibility Badges Footer */}
-              <div className="mt-auto px-8 py-4 bg-white/[0.02] border-t border-glass-border flex items-center gap-4">
+              <div className="mt-auto px-5 sm:px-8 py-4 bg-white/[0.02] border-t border-glass-border flex items-center gap-4">
                 <div className="flex -space-x-2">
                   {['parents', 'teachers', 'students'].map(role => (
                     <div

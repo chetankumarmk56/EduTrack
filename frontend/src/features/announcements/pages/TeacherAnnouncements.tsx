@@ -272,16 +272,16 @@ export default function TeacherAnnouncements() {
 
       {/* Stats Bar */}
       {!isLoading && announcements.length > 0 && (
-        <div className="grid grid-cols-3 gap-6">
+        <div className="grid grid-cols-3 gap-3 sm:gap-6">
           {[
             { label: 'Total Sent', value: announcements.length, color: 'text-brand-indigo' },
             { label: 'Class-Wide', value: announcements.filter(a => a.type === 'CLASS').length, color: 'text-emerald-400' },
             { label: 'Individual', value: announcements.filter(a => a.type === 'STUDENT').length, color: 'text-amber-400' },
 
           ].map(({ label, value, color }) => (
-            <div key={label} className="obsidian-card p-6 flex flex-col gap-1">
+            <div key={label} className="obsidian-card p-4 sm:p-6 flex flex-col gap-1">
               <p className="text-[10px] font-black uppercase tracking-widest text-text-secondary">{label}</p>
-              <p className={cn('text-4xl font-black', color)}>{value}</p>
+              <p className={cn('text-2xl sm:text-4xl font-black', color)}>{value}</p>
             </div>
           ))}
         </div>
@@ -442,7 +442,7 @@ export default function TeacherAnnouncements() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95 }}
                   className={cn(
-                    'obsidian-card group relative p-8 flex gap-6 items-start border transition-all duration-300 overflow-hidden',
+                    'obsidian-card group relative p-5 sm:p-8 flex gap-4 sm:gap-6 items-start border transition-all duration-300 overflow-hidden',
                     isImportant
                       ? 'border-rose-500/30 hover:border-rose-500/50'
                       : 'border-white/5 hover:border-brand-indigo/30',
@@ -562,14 +562,14 @@ export default function TeacherAnnouncements() {
             >
               <div className="absolute top-0 left-0 w-full h-1 aurora-gradient" />
 
-              <div className="p-8 space-y-8">
+              <div className="p-5 sm:p-8 space-y-6 sm:space-y-8">
                 {/* Modal Header */}
-                <div className="flex items-center justify-between">
-                  <div>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
                     <div className="text-brand-indigo text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
                       <Sparkles className="w-3.5 h-3.5" /> New Announcement
                     </div>
-                    <h2 className="text-3xl font-black tracking-tight mt-1">Send to Parents</h2>
+                    <h2 className="text-2xl sm:text-3xl font-black tracking-tight mt-1">Send to Parents</h2>
                   </div>
                   <button onClick={() => setIsAdding(false)} className="p-3 hover:bg-white/5 rounded-2xl border border-white/10 transition-colors">
                     <X className="w-6 h-6 opacity-50 hover:opacity-100" />
@@ -839,9 +839,9 @@ export default function TeacherAnnouncements() {
                 exit={{ scale: 0.95, opacity: 0 }}
                 className="relative w-full max-w-xl obsidian-card border border-amber-500/30 shadow-2xl max-h-[80vh] overflow-y-auto"
               >
-                <div className="p-8 space-y-6">
-                  <div className="flex items-center justify-between">
-                    <div>
+                <div className="p-5 sm:p-8 space-y-6">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
                       <div className="text-amber-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
                         <BookOpenCheck className="w-3.5 h-3.5" /> Homework confirmations
                       </div>

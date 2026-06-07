@@ -387,14 +387,14 @@ export default function TeacherDashboard() {
           { label: 'Pending Marks', value: teacherStats?.pending_marks || 0, icon: ClipboardCheck, color: 'text-amber-400', bg: 'bg-amber-500/10' },
         ].map((stat, i) => (
           <StaggerItem key={i}>
-            <div className="premium-card p-8 flex items-center gap-8 group">
-              <div className={cn("p-5 rounded-[2rem] shrink-0 transition-all duration-500 group-hover:scale-110 group-hover:rotate-6 aurora-glow", stat.bg, stat.color)}>
-                <stat.icon className="w-7 h-7" />
+            <div className="premium-card p-5 sm:p-6 lg:p-8 flex items-center gap-4 sm:gap-6 lg:gap-8 group">
+              <div className={cn("p-3.5 sm:p-4 lg:p-5 rounded-3xl lg:rounded-[2rem] shrink-0 transition-all duration-500 group-hover:scale-110 group-hover:rotate-6 aurora-glow", stat.bg, stat.color)}>
+                <stat.icon className="w-6 h-6 sm:w-7 sm:h-7" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/40 mb-1">{stat.label}</p>
                 <div className="flex items-baseline gap-1">
-                  <p className="text-3xl font-black tracking-tight tabular-nums group-hover:text-primary transition-colors">{stat.value}</p>
+                  <p className="text-2xl sm:text-3xl font-black tracking-tight tabular-nums group-hover:text-primary transition-colors">{stat.value}</p>
                 </div>
               </div>
             </div>
@@ -409,7 +409,7 @@ export default function TeacherDashboard() {
             <span className="w-2 h-2 rounded-full bg-emerald-400 aurora-glow" />
             Faculty Control Center
           </div>
-          <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black tracking-tighter text-white -ml-1">
+          <h1 className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-black tracking-tighter text-white -ml-1 break-words">
              Marks <span className="text-emerald-400 italic">Ledger</span>
           </h1>
           <div className="flex flex-wrap items-center gap-4 mt-6">
@@ -437,7 +437,7 @@ export default function TeacherDashboard() {
           onClick={requestSaveMarks}
           disabled={saveStatus === 'saving' || !activeAssignment || !activeExamId}
           className={cn(
-            "relative group overflow-hidden text-white px-10 py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-2xl flex items-center gap-3 transition-all",
+            "relative group overflow-hidden text-white px-6 sm:px-10 py-4 sm:py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-2xl flex items-center justify-center gap-3 transition-all w-full lg:w-auto shrink-0",
             saveStatus === 'success' ? "bg-emerald-500 shadow-emerald-500/20" :
             saveStatus === 'error' ? "bg-red-500 shadow-red-500/20" :
             "aurora-gradient shadow-primary/20 aurora-glow"
@@ -463,7 +463,7 @@ export default function TeacherDashboard() {
         <StaggerItem>
           <div className="premium-card bg-card/40 border-glass-border overflow-hidden">
             {/* Test Selection Bar */}
-            <div className="p-6 border-b border-white/5 flex flex-wrap gap-4 items-center bg-muted/20">
+            <div className="p-4 sm:p-6 border-b border-white/5 flex flex-wrap gap-3 sm:gap-4 items-center bg-muted/20">
               <AnimatePresence mode="popLayout">
                 {exams.map((exam) => (
                   <motion.div
@@ -471,7 +471,7 @@ export default function TeacherDashboard() {
                     key={exam.id}
                     onClick={() => setActiveExamId(exam.id)}
                     className={cn(
-                      "relative flex items-center gap-3 px-8 py-4 rounded-[1.5rem] text-[10px] font-black uppercase tracking-[0.25em] transition-all duration-300 cursor-pointer",
+                      "relative flex items-center gap-3 px-4 sm:px-8 py-3 sm:py-4 rounded-2xl sm:rounded-[1.5rem] text-[10px] font-black uppercase tracking-[0.25em] transition-all duration-300 cursor-pointer",
                       activeExamId === exam.id 
                         ? 'text-white' 
                         : 'text-muted-foreground hover:text-white'
@@ -515,7 +515,7 @@ export default function TeacherDashboard() {
                 <Plus className="w-4 h-4 mr-2" /> CREATE ASSESSMENT
               </button>
 
-              <div className="ml-auto flex items-center gap-8 pl-8 border-l border-white/5">
+              <div className="ml-auto flex items-center gap-4 sm:gap-8 sm:pl-8 sm:border-l border-white/5">
                 <div className="flex items-center gap-4">
                   <span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest opacity-60">Cap:</span>
                   <input
@@ -560,9 +560,9 @@ export default function TeacherDashboard() {
               <table className="w-full text-sm text-left border-collapse">
                 <thead className="bg-muted/10">
                   <tr>
-                    <th className="px-10 py-6 font-black uppercase tracking-[0.3em] text-[10px] text-muted-foreground/60"><div className="flex items-center gap-2"><Hash className="w-3.5 h-3.5" /> ID</div></th>
-                    <th className="px-10 py-6 font-black uppercase tracking-[0.3em] text-[10px] text-muted-foreground/60"><div className="flex items-center gap-2"><User className="w-3.5 h-3.5" /> Identity</div></th>
-                    <th className="px-10 py-6 font-black uppercase tracking-[0.3em] text-[10px] text-muted-foreground/60 text-right w-48">Evaluation</th>
+                    <th className="px-4 sm:px-6 lg:px-10 py-4 sm:py-6 font-black uppercase tracking-[0.3em] text-[10px] text-muted-foreground/60"><div className="flex items-center gap-2"><Hash className="w-3.5 h-3.5" /> ID</div></th>
+                    <th className="px-4 sm:px-6 lg:px-10 py-4 sm:py-6 font-black uppercase tracking-[0.3em] text-[10px] text-muted-foreground/60"><div className="flex items-center gap-2"><User className="w-3.5 h-3.5" /> Identity</div></th>
+                    <th className="px-4 sm:px-6 lg:px-10 py-4 sm:py-6 font-black uppercase tracking-[0.3em] text-[10px] text-muted-foreground/60 text-right w-28 sm:w-48">Evaluation</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
@@ -594,25 +594,25 @@ export default function TeacherDashboard() {
                             transition={{ duration: 0.5, delay: idx * 0.03, ease: [0.23, 1, 0.32, 1] }}
                             className="group transition-all hover:bg-white/5"
                           >
-                            <td className="px-10 py-6">
+                            <td className="px-4 sm:px-6 lg:px-10 py-4 sm:py-6">
                               <span className="text-xs font-black tabular-nums opacity-30 tracking-[0.2em] group-hover:opacity-100 group-hover:text-primary transition-all">#{student.roll.toString().padStart(2, '0')}</span>
                             </td>
-                            <td className="px-10 py-6">
-                              <div className="flex items-center gap-5">
+                            <td className="px-4 sm:px-6 lg:px-10 py-4 sm:py-6">
+                              <div className="flex items-center gap-3 sm:gap-5">
                                 <div className={cn(
-                                  "w-12 h-12 rounded-2xl flex items-center justify-center font-black transition-all border border-white/5 group-hover:border-primary/30 group-hover:scale-110 shadow-lg",
+                                  "w-10 h-10 sm:w-12 sm:h-12 shrink-0 rounded-2xl flex items-center justify-center font-black transition-all border border-white/5 group-hover:border-primary/30 group-hover:scale-110 shadow-lg",
                                   score > (activeMaxScore * 0.8) ? "aurora-gradient text-white aurora-glow border-none" : "bg-muted/40 text-foreground"
                                 )}>
                                   {student.name.charAt(0)}
                                 </div>
-                                <div>
-                                  <p className="font-black tracking-tight text-lg group-hover:text-primary transition-colors">{student.name}</p>
+                                <div className="min-w-0">
+                                  <p className="font-black tracking-tight text-base sm:text-lg group-hover:text-primary transition-colors break-words">{student.name}</p>
                                   <p className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground/40 group-hover:text-primary/40 transition-colors">Registered Candidate</p>
                                 </div>
                               </div>
                             </td>
-                            <td className="px-10 py-6 text-right w-48">
-                              <div className="flex items-center justify-end gap-5">
+                            <td className="px-4 sm:px-6 lg:px-10 py-4 sm:py-6 text-right w-28 sm:w-48">
+                              <div className="flex items-center justify-end gap-3 sm:gap-5">
                                 <motion.div whileHover={{ scale: 1.05 }} className="relative">
                                   <input
                                     type="number"
@@ -629,7 +629,7 @@ export default function TeacherDashboard() {
                                     }}
                                     title={`Max ${activeMaxScore}`}
                                     className={cn(
-                                      "w-28 h-14 rounded-2xl bg-black border border-white/10 px-5 text-right font-black text-xl focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all tabular-nums aurora-glow-focus hover:border-primary/40",
+                                      "w-20 sm:w-28 h-12 sm:h-14 rounded-2xl bg-black border border-white/10 px-3 sm:px-5 text-right font-black text-lg sm:text-xl focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all tabular-nums aurora-glow-focus hover:border-primary/40",
                                       score >= (activeMaxScore * 0.9) ? "text-primary glow-text" : "text-foreground"
                                     )}
                                   />

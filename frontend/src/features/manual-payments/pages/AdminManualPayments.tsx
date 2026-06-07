@@ -390,7 +390,7 @@ export default function AdminManualPayments() {
           <EmptyState />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left">
+            <table className="w-full min-w-[760px] text-left">
               <thead>
                 <tr className="border-b border-slate-200/60 dark:border-white/5 bg-slate-50/70 dark:bg-white/[0.02]">
                   {['#', 'Student', 'Class', 'Amount', 'UTR / Txn', 'Submitted', 'Status', ''].map((h) => (

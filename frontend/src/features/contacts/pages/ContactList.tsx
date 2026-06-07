@@ -282,7 +282,7 @@ export default function ContactList() {
                 {list.map((contact, idx) => (
                   <div
                     key={contact.studentId}
-                    className="flex items-center gap-5 px-5 py-4 hover:bg-white/5 transition-colors group"
+                    className="flex items-center gap-3 sm:gap-5 px-4 sm:px-5 py-4 hover:bg-white/5 transition-colors group"
                   >
                     {/* Avatar & Roll */}
                     <div className="relative">
@@ -322,24 +322,24 @@ export default function ContactList() {
                     )}
 
                     {/* Action buttons */}
-                    <div className="flex gap-3 shrink-0">
+                    <div className="flex gap-2 sm:gap-3 shrink-0">
                       {contact.phone ? (
                         <>
                           <motion.button
                             whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.95 }}
                             onClick={() => dialPhone(contact.phone!)}
-                            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm font-bold hover:bg-emerald-500/20 transition-all"
+                            className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm font-bold hover:bg-emerald-500/20 transition-all"
                             title="Call parent"
                           >
-                            <Phone className="w-4 h-4" /> Call
+                            <Phone className="w-4 h-4 shrink-0" /> <span className="hidden sm:inline">Call</span>
                           </motion.button>
                           <motion.button
                             whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.95 }}
                             onClick={() => openWhatsApp(contact.phone!, contact.studentName)}
-                            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#25D366]/10 border border-[#25D366]/20 text-[#25D366] text-sm font-bold hover:bg-[#25D366]/20 transition-all"
+                            className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl bg-[#25D366]/10 border border-[#25D366]/20 text-[#25D366] text-sm font-bold hover:bg-[#25D366]/20 transition-all"
                             title="WhatsApp parent"
                           >
-                            <MessageCircle className="w-4 h-4" /> WhatsApp
+                            <MessageCircle className="w-4 h-4 shrink-0" /> <span className="hidden sm:inline">WhatsApp</span>
                           </motion.button>
                         </>
                       ) : (
