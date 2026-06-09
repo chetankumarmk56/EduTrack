@@ -3,6 +3,13 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "browserslist": [
+    "safari >= 15",
+    "ios_saf >= 15",
+    "last 2 versions",
+    "> 0.5%",
+    "not dead"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -37,11 +44,13 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
+    "browserslist": "^4.28.2",
     "eslint": "^9.39.4",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.4.0",
     "jsdom": "^25.0.1",
+    "lightningcss": "^1.32.0",
     "terser": "^5.46.2",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.57.0",

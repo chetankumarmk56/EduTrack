@@ -6,6 +6,27 @@
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>parent-portal</title>
+  <!--
+    Temporary Safari diagnostic. Runs as a classic (non-module) script BEFORE
+    the app bundle so it also catches module parse/load failures — the kind
+    that leave #root empty (black screen) on older iOS. The first error is
+    surfaced in the tab title so a failing phone can be triaged without a Mac.
+    Remove once iPhone rendering is confirmed fixed.
+  -->
+  <script>
+    (function () {
+      function show(prefix, msg) {
+        try { document.title = prefix + ': ' + String(msg).slice(0, 120); } catch (e) {}
+      }
+      window.addEventListener('error', function (e) {
+        // Resource (script/css) load errors have no .message; report the URL.
+        show('ERR', (e && e.message) || (e && e.target && (e.target.src || e.target.href)) || 'load failed');
+      }, true);
+      window.addEventListener('unhandledrejection', function (e) {
+        show('REJ', (e && e.reason && (e.reason.message || e.reason)) || 'unhandled rejection');
+      });
+    })();
+  </script>
 </head>
 
 <body>
