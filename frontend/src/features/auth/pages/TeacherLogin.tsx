@@ -136,7 +136,7 @@ export default function TeacherLogin() {
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="teacher.name@school.edu"
                     autoComplete="email"
-                    className="flex h-11 w-full rounded-md border border-border bg-background pl-10 pr-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 transition-colors"
+                    className="flex h-11 w-full rounded-md border border-border bg-background pl-10 pr-3 py-2 text-base sm:text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 transition-colors"
                   />
                 </div>
               </div>
@@ -151,7 +151,7 @@ export default function TeacherLogin() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="*********"
-                  className="flex h-11 w-full rounded-md border border-border bg-background px-10 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 transition-colors"
+                  className="flex h-11 w-full rounded-md border border-border bg-background px-10 py-2 text-base sm:text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 transition-colors"
                 />
               </div>
             </div>

@@ -190,7 +190,7 @@ export default function Login() {
                     placeholder="e.g. 9876543210"
                     autoComplete="tel"
                     inputMode="tel"
-                    className="flex h-11 w-full rounded-md border border-border bg-background px-10 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 transition-colors"
+                    className="flex h-11 w-full rounded-md border border-border bg-background px-10 py-2 text-base sm:text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 transition-colors"
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">
@@ -202,12 +202,12 @@ export default function Login() {
                 <label className="text-sm font-medium leading-none">
                   Student Date of Birth
                 </label>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-3 gap-2 sm:gap-3">
                   <div className="relative">
                     <select
                       value={dobDay}
                       onChange={(e) => setDobDay(e.target.value)}
-                      className="flex h-11 w-full appearance-none rounded-md border border-border bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
+                      className="flex h-11 w-full appearance-none rounded-md border border-border bg-background pl-3 pr-8 py-2 text-base sm:text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
                     >
                       <option value="" disabled>Day</option>
                       {days.map(d => (
@@ -221,7 +221,7 @@ export default function Login() {
                     <select
                       value={dobMonth}
                       onChange={(e) => setDobMonth(e.target.value)}
-                      className="flex h-11 w-full appearance-none rounded-md border border-border bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
+                      className="flex h-11 w-full appearance-none rounded-md border border-border bg-background pl-3 pr-8 py-2 text-base sm:text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
                     >
                       <option value="" disabled>Month</option>
                       {months.map(m => (
@@ -235,7 +235,7 @@ export default function Login() {
                     <select
                       value={dobYear}
                       onChange={(e) => setDobYear(e.target.value)}
-                      className="flex h-11 w-full appearance-none rounded-md border border-border bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
+                      className="flex h-11 w-full appearance-none rounded-md border border-border bg-background pl-3 pr-8 py-2 text-base sm:text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
                     >
                       <option value="" disabled>Year</option>
                       {years.map(y => (

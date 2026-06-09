@@ -243,29 +243,29 @@ export default function Landing() {
         ))}
       </div>
 
-      <div className="relative z-20 w-full max-w-7xl mx-auto py-20">
-        <motion.div 
+      <div className="relative z-20 w-full max-w-7xl mx-auto py-12 sm:py-20">
+        <motion.div
           style={{ x: heroX, y: heroY }}
-          className="text-center mb-24 px-4 overflow-visible"
+          className="text-center mb-14 sm:mb-24 px-4 overflow-visible"
         >
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="inline-flex mb-10 items-center gap-3 px-6 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-2xl shadow-2xl"
+            className="inline-flex max-w-full mb-6 sm:mb-10 items-center gap-2 sm:gap-3 px-4 sm:px-6 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-2xl shadow-2xl"
           >
-            <Sparkles className="w-4 h-4 text-indigo-400 animate-pulse" />
-            <span className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-300">The Future of Institutional Synergy</span>
+            <Sparkles className="w-4 h-4 shrink-0 text-indigo-400 animate-pulse" />
+            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.25em] sm:tracking-[0.4em] text-slate-300">The Future of Institutional Synergy</span>
           </motion.div>
 
-          <div className="relative inline-block mb-12">
-             <motion.div 
+          <div className="relative inline-block mb-8 sm:mb-12">
+             <motion.div
                 initial={{ opacity: 0, scale: 0 }}
                 animate={{ opacity: 1, scale: 1 }}
                 whileHover={{ scale: 1.15, rotate: 5 }}
                 transition={{ type: "spring", damping: 12, delay: 0.2 }}
-                className="relative z-10 h-28 w-28 flex items-center justify-center rounded-[2rem] bg-gradient-to-br from-indigo-500 to-violet-700 shadow-[0_0_60px_rgba(99,102,241,0.6)] cursor-pointer"
+                className="relative z-10 h-20 w-20 sm:h-28 sm:w-28 flex items-center justify-center rounded-[1.5rem] sm:rounded-[2rem] bg-gradient-to-br from-indigo-500 to-violet-700 shadow-[0_0_60px_rgba(99,102,241,0.6)] cursor-pointer"
              >
-                <GraduationCap className="h-14 w-14 text-white" />
+                <GraduationCap className="h-10 w-10 sm:h-14 sm:w-14 text-white" />
              </motion.div>
              <motion.div 
                animate={{ rotate: 360 }}
@@ -279,8 +279,8 @@ export default function Landing() {
              />
           </div>
 
-          <motion.h1 
-            className="text-5xl sm:text-7xl md:text-8xl lg:text-9xl font-black text-white tracking-tighter mb-6 sm:mb-8 leading-none select-none"
+          <motion.h1
+            className="text-[clamp(2.75rem,11vw,9rem)] font-black text-white tracking-tighter mb-6 sm:mb-8 leading-none select-none break-words"
           >
             {"Arken Edu".split("").map((char, i) => (
               <motion.span
@@ -299,7 +299,7 @@ export default function Landing() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.8 }}
-            className="text-xl md:text-2xl text-slate-400 max-w-3xl mx-auto font-medium leading-relaxed"
+            className="text-base sm:text-xl md:text-2xl text-slate-400 max-w-3xl mx-auto font-medium leading-relaxed"
           >
             A high-fidelity digital ecosystem orchestrating the synergy between 
             <span className="text-white hover:text-indigo-400 transition-colors cursor-default"> Faculty</span>, 
@@ -336,16 +336,16 @@ export default function Landing() {
                    style={{ background: item.glowColor || 'rgba(255,255,255,0.05)' }}
                 />
                 
-                <div className={`relative inline-flex p-6 rounded-3xl bg-gradient-to-br ${item.gradient} mb-10 items-center justify-center transition-transform duration-700 group-hover:scale-110 group-hover:rotate-6 shadow-2xl`}>
-                  <item.icon className="w-12 h-12 text-white" />
+                <div className={`relative inline-flex p-4 sm:p-6 rounded-2xl sm:rounded-3xl bg-gradient-to-br ${item.gradient} mb-6 sm:mb-10 items-center justify-center transition-transform duration-700 group-hover:scale-110 group-hover:rotate-6 shadow-2xl`}>
+                  <item.icon className="w-9 h-9 sm:w-12 sm:h-12 text-white" />
                 </div>
 
-                <h3 className="relative text-3xl font-black text-white mb-4 flex items-center gap-4">
+                <h3 className="relative text-2xl sm:text-3xl font-black text-white mb-3 sm:mb-4 flex items-center gap-3 sm:gap-4">
                   {item.title}
-                  <ArrowRight className="w-8 h-8 opacity-0 -translate-x-4 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-700 text-white/50" />
+                  <ArrowRight className="w-6 h-6 sm:w-8 sm:h-8 opacity-0 -translate-x-4 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-700 text-white/50" />
                 </h3>
-                
-                <p className="relative text-slate-400 font-medium leading-relaxed mb-8 group-hover:text-slate-200 transition-colors">
+
+                <p className="relative text-sm sm:text-base text-slate-400 font-medium leading-relaxed mb-6 sm:mb-8 group-hover:text-slate-200 transition-colors">
                   {item.desc}
                 </p>
 
@@ -363,7 +363,7 @@ export default function Landing() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 1.5 }}
-          className="mt-32 text-center"
+          className="mt-16 sm:mt-32 text-center px-4"
         >
           <div className="inline-flex flex-wrap justify-center items-center gap-5 sm:gap-10 px-6 sm:px-12 py-4 sm:py-5 rounded-2xl sm:rounded-[2.5rem] bg-white/[0.02] border border-white/5 backdrop-blur-xl shadow-2xl">
              <div className="flex flex-col items-center">

@@ -181,7 +181,7 @@ export default function AdminLogin() {
                     type="text"
                     value={instId}
                     onChange={(e) => { setInstId(e.target.value); setError(null); }}
-                    className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 text-white rounded-lg pl-10 pr-4 py-2.5 outline-none transition-all focus:ring-1 focus:ring-indigo-500 disabled:opacity-50 font-mono"
+                    className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 text-white rounded-lg pl-10 pr-4 py-3 text-base sm:text-sm outline-none transition-all focus:ring-1 focus:ring-indigo-500 disabled:opacity-50 font-mono"
                     placeholder="e.g. stmarys2026"
                   />
                 </div>
@@ -202,7 +202,7 @@ export default function AdminLogin() {
                     type="text"
                     value={username}
                     onChange={(e) => { setUsername(e.target.value); setError(null); }}
-                    className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 text-white rounded-lg pl-10 pr-4 py-2.5 outline-none transition-all focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
+                    className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 text-white rounded-lg pl-10 pr-4 py-3 text-base sm:text-sm outline-none transition-all focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
                     placeholder="Enter Identifier (Admin)"
                   />
                 </div>
@@ -223,7 +223,7 @@ export default function AdminLogin() {
                     type="password"
                     value={password}
                     onChange={(e) => { setPassword(e.target.value); setError(null); }}
-                    className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 text-white rounded-lg pl-10 pr-4 py-2.5 outline-none transition-all focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
+                    className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 text-white rounded-lg pl-10 pr-4 py-3 text-base sm:text-sm outline-none transition-all focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
                     placeholder="Enter token (Password)"
                   />
                 </div>

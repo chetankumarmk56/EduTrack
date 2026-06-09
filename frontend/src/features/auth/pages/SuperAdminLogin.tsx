@@ -137,7 +137,7 @@ export default function SuperAdminLogin() {
                     type="text"
                     value={username}
                     onChange={(e) => { setUsername(e.target.value); setError(null); }}
-                    className="w-full bg-slate-900/50 border border-slate-700/50 focus:border-cyan-500 text-cyan-50 rounded-lg pl-11 pr-4 py-3 outline-none transition-all focus:ring-1 focus:ring-cyan-500"
+                    className="w-full bg-slate-900/50 border border-slate-700/50 focus:border-cyan-500 text-cyan-50 rounded-lg pl-11 pr-4 py-3 text-base sm:text-sm outline-none transition-all focus:ring-1 focus:ring-cyan-500"
                     placeholder="Enter Global Username"
                   />
                 </div>
@@ -153,7 +153,7 @@ export default function SuperAdminLogin() {
                     type="password"
                     value={password}
                     onChange={(e) => { setPassword(e.target.value); setError(null); }}
-                    className="w-full bg-slate-900/50 border border-slate-700/50 focus:border-cyan-500 text-cyan-50 rounded-lg pl-11 pr-4 py-3 outline-none transition-all focus:ring-1 focus:ring-cyan-500"
+                    className="w-full bg-slate-900/50 border border-slate-700/50 focus:border-cyan-500 text-cyan-50 rounded-lg pl-11 pr-4 py-3 text-base sm:text-sm outline-none transition-all focus:ring-1 focus:ring-cyan-500"
                     placeholder="Enter Encrypted Password"
                   />
                 </div>
