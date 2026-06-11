@@ -2,7 +2,7 @@ import axios from 'axios';
 import type { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import toast from 'react-hot-toast';
 import { getErrorMessage } from '@/shared/lib/errorHandler';
-import { getCurrentPortalRole } from '@/shared/lib/portalRole';
+import { getCurrentPortalRole, isPublicPath } from '@/shared/lib/portalRole';
 
 // Opt-in per-request flag: skip the global error toast on failure. Used by
 // fire-and-forget calls (e.g. the async Lesson Plan generate) where the
@@ -152,11 +152,11 @@ client.interceptors.response.use(
 
       console.error(`[Auth] 401 Unauthorized (${errorCode || 'UNKNOWN'}) for ${originalRequest.url}:`, errorDetail);
 
-      // If we are already retrying, on a login page, or on the public
-      // landing page, don't try to refresh. The landing route is the
-      // public entry — a 401 from a backgrounded /auth/me there should
-      // just leave the user on Landing, not bounce them to login.
-      const onPublicPage = window.location.pathname === '/' || window.location.pathname.includes('-login');
+      // If we are already retrying, on a login page, or on a public
+      // page (landing + legal/compliance pages), don't try to refresh. A
+      // 401 from a backgrounded /auth/me on a public route should just
+      // leave the visitor on that page, not bounce them to login.
+      const onPublicPage = isPublicPath();
       if (originalRequest._retry || onPublicPage) {
         return Promise.reject(error);
       }
@@ -164,7 +164,7 @@ client.interceptors.response.use(
       // If it's a terminal auth error (like INVALID_TOKEN), don't even try to refresh
       if (errorCode === 'INVALID_TOKEN') {
         console.warn("[Auth] Terminal token error. Skipping refresh.");
-        const onPublicPageTerminal = window.location.pathname === '/' || window.location.pathname.includes('-login');
+        const onPublicPageTerminal = isPublicPath();
         if (!onPublicPageTerminal) {
           // No token in localStorage anymore (it lives in an HttpOnly
           // cookie). Just drop the user metadata so the next mount
@@ -216,7 +216,7 @@ client.interceptors.response.use(
         // or the public landing page. The access token cookie is HttpOnly
         // so the server clears it for us on /logout. Here we only wipe
         // the JS-visible bits.
-        const onPublicPageAfterRefresh = window.location.pathname === '/' || window.location.pathname.includes('-login');
+        const onPublicPageAfterRefresh = isPublicPath();
         if (!onPublicPageAfterRefresh) {
           localStorage.removeItem(`edu_user_${role}`);
           localStorage.removeItem(`edu_institution_id_${role}`);

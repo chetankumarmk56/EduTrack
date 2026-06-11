@@ -15,3 +15,23 @@ export const getCurrentPortalRole = (pathname?: string): PortalRole => {
   if (path.startsWith('/teacher') || path.includes('teacher-login')) return 'teacher';
   return 'parent';
 };
+
+/**
+ * Public routes that must render for anonymous visitors. These are the landing
+ * page, the *-login pages, and the legal / compliance pages required to be
+ * reachable without a session (Google Play needs to read the privacy and
+ * account-deletion pages without authenticating). A backgrounded /auth/me 401
+ * fired on these paths must NOT bounce the visitor to the login page.
+ */
+const PUBLIC_PATH_PREFIXES = [
+  '/privacy-policy',
+  '/terms-of-service',
+  '/data-processing-agreement',
+  '/account-deletion',
+  '/data-deletion',
+];
+
+export const isPublicPath = (pathname: string = window.location.pathname): boolean =>
+  pathname === '/' ||
+  pathname.includes('-login') ||
+  PUBLIC_PATH_PREFIXES.some((p) => pathname.startsWith(p));

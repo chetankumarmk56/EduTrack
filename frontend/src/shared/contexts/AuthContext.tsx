@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, useMemo, useRef, type R
 import { useLocation } from 'react-router-dom';
 import { authApi } from '@/features/auth/api';
 import { type UserRole } from '@/shared/types';
-import { getCurrentPortalRole } from '@/shared/lib/portalRole';
+import { getCurrentPortalRole, isPublicPath } from '@/shared/lib/portalRole';
 
 export interface AuthUser {
   id: number;
@@ -82,6 +82,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let isMounted = true;
 
     const hydrateAndInit = async () => {
+      // Public compliance pages (privacy policy, account deletion, terms…)
+      // must render for anonymous visitors. Don't probe /auth/me there — it
+      // 401s, spams the console with auth errors, and (before the interceptor
+      // allowlist fix) bounced logged-out visitors to the login page, which
+      // breaks Google Play's requirement that these pages be publicly readable.
+      // Read window.location directly (like getInitialState) so this doesn't
+      // add a new effect dependency; currentRole already keys the effect.
+      if (isPublicPath(window.location.pathname)) {
+        if (isMounted) setAuthState('unauthenticated');
+        return;
+      }
+
       // Avoid double-hydrating the same role in the same mount cycle.
       if (hydrationRef.current === currentRole) {
         return;
