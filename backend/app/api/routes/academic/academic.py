@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+import io
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
@@ -9,9 +11,13 @@ from app.schemas.academic import (
     GradeCreate, GradeUpdate, GradeResponse,
     SectionCreate, SectionUpdate, SectionResponse,
     SchoolClassCreate, SchoolClassUpdate, SchoolClassResponse,
-    SubjectCreate, SubjectUpdate, SubjectResponse
+    SubjectCreate, SubjectUpdate, SubjectResponse,
+    AcademicYearResponse, PromotionPreviewRequest, PromotionPreviewResponse,
+    PromotionExecuteRequest, PromotionExecuteSummary,
 )
 from app.services.academic import academic_service
+from app.services.academic.academic_year_service import academic_year_service
+from app.services.academic.promotion_service import promotion_service
 
 
 class SectionBulkCreate(BaseModel):
@@ -257,3 +263,141 @@ async def delete_school_class(
     success = await academic_service.delete_school_class(db, admin.institution_id, class_id)
     if not success:
         raise HTTPException(status_code=404, detail="Class not found")
+
+
+# --- Academic Years & Year-End Promotion (admin only) ---
+
+@router.get("/years", response_model=List[AcademicYearResponse])
+async def list_academic_years(
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(get_current_user),
+):
+    return await academic_year_service.list_years(db, user.institution_id)
+
+
+@router.post("/promotion/preview", response_model=PromotionPreviewResponse)
+async def preview_promotion(
+    payload: PromotionPreviewRequest = PromotionPreviewRequest(),
+    db: AsyncSession = Depends(get_db),
+    admin: UserContext = Depends(require_admin),
+):
+    """Dry-run: per-class students with overall %, arrears, and a default
+    promote/retain decision. No writes."""
+    return await promotion_service.preview_promotion(
+        db, admin.institution_id, payload.retained_student_ids
+    )
+
+
+@router.get("/promotion/preview/export")
+async def export_promotion_preview(
+    format: str = Query("xlsx", pattern="^(xlsx|csv)$"),
+    db: AsyncSession = Depends(get_db),
+    admin: UserContext = Depends(require_admin),
+):
+    """Export the promotion preview for offline Principal/Admin sign-off."""
+    preview = await promotion_service.preview_promotion(db, admin.institution_id, [])
+    rows = _flatten_preview_rows(preview)
+    label = (preview.get("active_year") or {}).get("label") or "current"
+    fname = f"promotion-preview_{label}"
+
+    if format == "csv":
+        payload = _export_preview_csv(rows, preview)
+        return StreamingResponse(
+            io.BytesIO(payload),
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{fname}.csv"'},
+        )
+    try:
+        payload = _export_preview_xlsx(rows, preview)
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return StreamingResponse(
+        io.BytesIO(payload),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{fname}.xlsx"'},
+    )
+
+
+@router.post("/promotion/execute", response_model=PromotionExecuteSummary)
+async def execute_promotion(
+    payload: PromotionExecuteRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: UserContext = Depends(require_admin),
+):
+    """Run the year-end promotion (transactional, idempotent)."""
+    try:
+        return await promotion_service.execute_promotion(
+            db,
+            admin.institution_id,
+            retained_student_ids=payload.retained_student_ids,
+            next_year_label=payload.next_year_label,
+            performed_by_id=admin.id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# --- Promotion preview export helpers ---
+
+_EXPORT_HEADERS = [
+    "Student Name", "Admission Number", "Current Class", "Current Section",
+    "Overall %", "Promotion Decision", "Outstanding Arrears",
+]
+
+
+def _flatten_preview_rows(preview: dict) -> list[list]:
+    """Flatten the per-class preview into export rows (7 columns each)."""
+    out: list[list] = []
+    for grp in preview.get("classes", []):
+        for s in grp.get("students", []):
+            out.append([
+                s.get("name") or "",
+                s.get("admission_number") or "",
+                grp.get("class_name") or "",
+                grp.get("section_name") or "",
+                "" if s.get("overall_percentage") is None else s["overall_percentage"],
+                s.get("decision") or "",
+                s.get("arrears") or 0.0,
+            ])
+    for s in preview.get("unassigned", []):
+        out.append([
+            s.get("name") or "", s.get("admission_number") or "", "", "",
+            "" if s.get("overall_percentage") is None else s["overall_percentage"],
+            s.get("decision") or "", s.get("arrears") or 0.0,
+        ])
+    return out
+
+
+def _export_preview_csv(rows: list[list], preview: dict) -> bytes:
+    import csv
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    year = (preview.get("active_year") or {}).get("label") or ""
+    writer.writerow([f"Promotion Preview — {year} → {preview.get('next_year_label') or ''}"])
+    writer.writerow([])
+    writer.writerow(_EXPORT_HEADERS)
+    for r in rows:
+        writer.writerow(r)
+    return buf.getvalue().encode("utf-8")
+
+
+def _export_preview_xlsx(rows: list[list], preview: dict) -> bytes:
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font
+    except ImportError:
+        raise RuntimeError(
+            "openpyxl is required for Excel exports. Install with: pip install openpyxl"
+        )
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Promotion Preview"
+    header_row = ws.append
+    header_row(_EXPORT_HEADERS)
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+    for r in rows:
+        ws.append(r)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()

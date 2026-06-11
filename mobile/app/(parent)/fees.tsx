@@ -246,6 +246,16 @@ export default function FeesScreen() {
           </Animated.View>
         )}
 
+        {(dues?.previous_year_due ?? 0) > 0 && (
+          <Animated.View entering={FadeInDown.delay(220)} style={styles.arrearsBanner}>
+            <Ionicons name="time-outline" size={18} color={Colors.warning} />
+            <Text style={styles.arrearsText}>
+              Includes ₹{(dues?.previous_year_due ?? 0).toLocaleString('en-IN')} due from last year
+              {dues?.arrears?.[0]?.academic_year ? ` (${dues.arrears[0].academic_year})` : ''}
+            </Text>
+          </Animated.View>
+        )}
+
         <View style={styles.sectionRow}>
           <Text style={styles.sectionTitle}>Breakdown</Text>
           <Text style={styles.sectionSub}>{fees.length} categor{fees.length === 1 ? 'y' : 'ies'}</Text>
@@ -459,6 +469,19 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase', letterSpacing: 0.6,
   },
   summaryDivider: { width: 1, marginVertical: 2, backgroundColor: Colors.divider },
+
+  arrearsBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: `${Colors.warning}15`,
+    borderWidth: 1,
+    borderColor: `${Colors.warning}40`,
+  },
+  arrearsText: { flex: 1, fontSize: 12.5, fontWeight: '700', color: Colors.warning },
 
   sectionRow: {
     flexDirection: 'row',

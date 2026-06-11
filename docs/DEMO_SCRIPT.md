@@ -1,7 +1,7 @@
-# EduTrack — 2-minute demo recording script
+# ArkenEdu — 2-minute demo recording script
 
 **Target length:** 1:45–2:05.
-**Audience:** school principals / admins evaluating EduTrack, or recruiters watching a portfolio reel.
+**Audience:** school principals / admins evaluating ArkenEdu, or recruiters watching a portfolio reel.
 **Goal:** show three workflows that prove the product is real, in roughly 30s each, with a tight hook and close.
 
 ---
@@ -48,9 +48,9 @@
 
 ### 0:00–0:10 — Hook (open on landing page)
 
-**[On screen]** EduTrack marketing site / landing page (or the admin login screen with the EduTrack logo visible).
+**[On screen]** ArkenEdu marketing site / landing page (or the admin login screen with the ArkenEdu logo visible).
 
-> "This is EduTrack. It's a school management platform that replaces the WhatsApp groups, paper attendance registers, and Excel fee sheets that most Indian schools still run on. Let me show you what it does in under two minutes."
+> "This is ArkenEdu. It's a school management platform that replaces the WhatsApp groups, paper attendance registers, and Excel fee sheets that most Indian schools still run on. Let me show you what it does in under two minutes."
 
 ---
 
@@ -76,7 +76,7 @@
 
 **[On screen]** Tab B — Admin → Finance → Manual Payments. One pending row visible — parent name, amount ₹15,000, screenshot thumbnail.
 
-> "A lot of parents pay fees by UPI directly to the school's bank account, then send a screenshot. Most ERPs don't handle this — EduTrack does."
+> "A lot of parents pay fees by UPI directly to the school's bank account, then send a screenshot. Most ERPs don't handle this — ArkenEdu does."
 
 **[Action]** Click the pending row. Drawer slides in showing the screenshot enlarged + fee allocation breakdown.
 
@@ -94,7 +94,7 @@
 
 **[On screen]** Teacher portal → AI Lesson Plan.
 
-> "Teachers spend hours on lesson plans. EduTrack does the first draft in 30 seconds."
+> "Teachers spend hours on lesson plans. ArkenEdu does the first draft in 30 seconds."
 
 **[Action]** Fill the form: Subject = "Mathematics", Grade = "8", Topic = "Quadratic Equations", Duration = "45 mins". Click **Generate**.
 
@@ -108,9 +108,9 @@
 
 ### 1:40–2:00 — Close (cut back to landing or logo)
 
-**[On screen]** EduTrack logo / landing page. Optionally show a single slide with three stats: "100+ automated tests · 3 surfaces · 1 backend".
+**[On screen]** ArkenEdu logo / landing page. Optionally show a single slide with three stats: "100+ automated tests · 3 surfaces · 1 backend".
 
-> "Three surfaces — admin web, teacher portal, parent mobile — one backend, real multi-tenancy, production-grade security. EduTrack is the platform a school can actually run on. Get in touch at [your-email] — I'd love to give your school a free pilot."
+> "Three surfaces — admin web, teacher portal, parent mobile — one backend, real multi-tenancy, production-grade security. ArkenEdu is the platform a school can actually run on. Get in touch at [your-email] — I'd love to give your school a free pilot."
 
 ---
 

@@ -14,7 +14,7 @@ async def initialize_portal(
     user: UserContext = Depends(get_current_user)
 ) -> Any:
     """
-    Consolidated initialization endpoint for EduTrack portals.
+    Consolidated initialization endpoint for ArkenEdu portals.
     Reduces client-side network overhead by aggregating all mandatory 
     metadata and role-specific stats into a single fast-tracked payload.
     """

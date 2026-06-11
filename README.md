@@ -1,8 +1,8 @@
-# EduTrack
+# ArkenEdu
 
 A multi-tenant school management SaaS — admin web portal, parent/teacher web portal, and a React Native mobile app — backed by a single FastAPI service.
 
-EduTrack covers the day-to-day workflows a 50–2,000 student school actually runs on: attendance, marks, announcements with homework confirmation, fee collection (parent UPI with admin verification + admin-recorded cash/manual UPI), transport tracking, timetables, parent communication (push + voice), and AI-assisted lesson planning / question generation.
+ArkenEdu covers the day-to-day workflows a 50–2,000 student school actually runs on: attendance, marks, announcements with homework confirmation, fee collection (parent UPI with admin verification + admin-recorded cash/manual UPI), transport tracking, timetables, parent communication (push + voice), and AI-assisted lesson planning / question generation.
 
 - **Backend:** Python 3.11 / FastAPI / SQLAlchemy 2 (async) / Alembic / PostgreSQL / Redis
 - **Web frontend:** React 19 / Vite / TypeScript / Tailwind v4
@@ -293,4 +293,4 @@ Optional but recommended:
 
 ## License
 
-Proprietary — © EduTrack. All rights reserved.
+Proprietary — © ArkenEdu. All rights reserved.

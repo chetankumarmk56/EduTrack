@@ -14,7 +14,10 @@ class Exam(Base, TimestampMixin):
     
     school_class_id = Column(Integer, ForeignKey("school_classes.id"), index=True, nullable=True)
     subject_id = Column(Integer, ForeignKey("subjects.id"), index=True, nullable=True)
-    
+
+    # Academic-year scope (stamped at write time). Nullable for legacy rows.
+    academic_year_id = Column(Integer, ForeignKey("academic_years.id"), index=True, nullable=True)
+
     institution_id = Column(Integer, ForeignKey("institutions.id"), index=True)
     institution = relationship("Institution")
 
@@ -40,6 +43,10 @@ class Mark(Base, TimestampMixin):
     
     score = Column(Integer)
     max_score = Column(Integer, default=100)
+
+    # Academic-year scope (stamped at write time). Powers the clean year
+    # boundary and the per-student/class percentages in promotion preview.
+    academic_year_id = Column(Integer, ForeignKey("academic_years.id"), index=True, nullable=True)
 
     institution_id = Column(Integer, ForeignKey("institutions.id"), nullable=False, default=1, index=True)
     institution = relationship("Institution", back_populates="marks")

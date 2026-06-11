@@ -1,7 +1,7 @@
 """
 Tenant-isolation safety rails (app.core.tenant).
 
-EduTrack enforces multi-tenancy per-query — there is no DB row-level
+ArkenEdu enforces multi-tenancy per-query — there is no DB row-level
 security — so the helpers in app.core.tenant are the single defence against
 cross-tenant IDOR (admin of School A touching School B's row). These tests
 pin the two guarantees that make the helpers safe:

@@ -11,7 +11,7 @@ export default function LandingScreen() {
   const { isAuthenticated, isLoading, user } = useAuth();
   const router = useRouter();
 
-  if (isLoading) return <LoadingScreen message="Starting EduTrack..." />;
+  if (isLoading) return <LoadingScreen message="Starting ArkenEdu..." />;
   
   if (isAuthenticated) {
     return <Redirect href={user?.role === 'teacher' ? "/(teacher)/dashboard" : "/(parent)/dashboard"} />;
@@ -28,7 +28,7 @@ export default function LandingScreen() {
           <View style={styles.logoBox}>
             <Text style={styles.logoEmoji}>🎓</Text>
           </View>
-          <Text style={styles.appName}>EduTrack</Text>
+          <Text style={styles.appName}>ArkenEdu</Text>
           <Text style={styles.tagline}>The future of academic management</Text>
         </Animated.View>
 

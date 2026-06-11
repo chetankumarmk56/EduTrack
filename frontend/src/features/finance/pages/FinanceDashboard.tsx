@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Plus, AlertCircle, CheckCircle2, X, Loader2, RefreshCw } from 'lucide-react';
+import { Plus, AlertCircle, CheckCircle2, X, Loader2, RefreshCw, History, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import type { FinanceSummaryResponse, DefaulterResponse, ClassFinanceBreakdownResponse } from '@/features/finance/api';
+import type { FinanceSummaryResponse, DefaulterResponse, ClassFinanceBreakdownResponse, ArrearsStudentResponse } from '@/features/finance/api';
 import { financeApi } from '@/features/finance/api';
 import { SkeletonHeader, SkeletonStatGrid, SkeletonTable } from '@/shared/components/ui/Skeleton';
 import { cn } from '@/shared/lib/utils';
@@ -16,6 +16,8 @@ export default function FinanceDashboard() {
   const { grades, schoolClasses } = useApp();
   const [summary, setSummary] = useState<FinanceSummaryResponse | null>(null);
   const [defaulters, setDefaulters] = useState<DefaulterResponse[]>([]);
+  const [arrears, setArrears] = useState<ArrearsStudentResponse[]>([]);
+  const [showArrears, setShowArrears] = useState(false);
   const [classBreakdown, setClassBreakdown] = useState<ClassFinanceBreakdownResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'classes' | 'ledger' | 'defaulters' | 'reminders'>('classes');
@@ -33,14 +35,16 @@ export default function FinanceDashboard() {
     setLoadError(null);
     try {
       setIsLoading(true);
-      const [sumData, defData, cbData] = await Promise.all([
+      const [sumData, defData, cbData, arrData] = await Promise.all([
         financeApi.getSummary(),
         financeApi.getDefaulters(),
         financeApi.getClassBreakdown(),
+        financeApi.getArrears().catch(() => [] as ArrearsStudentResponse[]),
       ]);
       setSummary(sumData);
       setDefaulters(defData);
       setClassBreakdown(cbData);
+      setArrears(arrData);
     } catch (err) {
       console.error("Dashboard Data Fetch Error:", err);
       setLoadError(err instanceof Error ? err.message : 'Failed to load financial data. Please refresh.');
@@ -91,6 +95,52 @@ export default function FinanceDashboard() {
             Finance <span className="text-primary italic">Command</span>
           </h1>
         </div>
+
+        {/* Carried-forward arrears: students promoted while still owing a
+            previous year's fee. Informational — never blocks anything. */}
+        {arrears.length > 0 && (
+          <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowArrears((v) => !v)}
+              className="w-full flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 text-left"
+            >
+              <span className="flex items-center gap-3 min-w-0">
+                <History className="w-5 h-5 text-amber-600 shrink-0" />
+                <span className="text-sm font-bold text-amber-800 dark:text-amber-300">
+                  {arrears.length} student{arrears.length === 1 ? '' : 's'} carrying{' '}
+                  ₹{arrears.reduce((s, a) => s + (a.previous_year_due || 0), 0).toLocaleString('en-IN')}{' '}
+                  in previous-year arrears
+                </span>
+              </span>
+              <ChevronDown className={cn('w-4 h-4 text-amber-600 shrink-0 transition-transform', showArrears && 'rotate-180')} />
+            </button>
+            {showArrears && (
+              <div className="px-2 sm:px-3 pb-3 space-y-2">
+                {arrears.map((a) => (
+                  <div key={a.student_id} className="flex items-center justify-between gap-3 rounded-xl bg-white/60 dark:bg-white/[0.03] px-4 py-2.5">
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-foreground truncate">
+                        {a.student_name}
+                        {a.current_class_name && (
+                          <span className="ml-2 text-[11px] font-medium text-muted-foreground">now in {a.current_class_name}</span>
+                        )}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground truncate">
+                        {a.admission_number ? `${a.admission_number} · ` : ''}
+                        {a.arrears.map((x) => `${x.academic_year ?? '—'} (${x.class_name ?? '—'})`).join(', ')}
+                        {a.phone ? ` · ${a.phone}` : ''}
+                      </p>
+                    </div>
+                    <p className="text-sm font-black text-amber-600 shrink-0">
+                      ₹{(a.previous_year_due || 0).toLocaleString('en-IN')}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Tab bar + action buttons — scrollable on small screens */}
         <div className="overflow-x-auto -mx-1 px-1 pb-1">

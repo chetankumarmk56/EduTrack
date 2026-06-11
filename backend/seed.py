@@ -200,7 +200,7 @@ def get_or_create_student_fee(db, student_id, class_id, institution_id, total_am
 
 def seed_db():
     print("=" * 62)
-    print("  EduTrack — Database Seeder")
+    print("  ArkenEdu — Database Seeder")
     print("=" * 62)
 
     from app.core.database import sync_engine, Base

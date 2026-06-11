@@ -7,6 +7,7 @@ from fastapi import HTTPException
 from app.models import Attendance, Student
 from app.schemas import attendance as schemas
 from app.models.directory import Teacher, TeacherAssignment
+from app.services.academic.academic_year_service import academic_year_service
 
 class AttendanceService:
     @staticmethod
@@ -74,7 +75,8 @@ class AttendanceService:
             await db.refresh(existing)
             return existing
         else:
-            db_att = Attendance(**att.model_dump(), institution_id=institution_id)
+            year_id = await academic_year_service.resolve_active_year_id(db, institution_id)
+            db_att = Attendance(**att.model_dump(), institution_id=institution_id, academic_year_id=year_id)
             db.add(db_att)
             await db.commit()
             
@@ -150,6 +152,8 @@ class AttendanceService:
             else:
                 existing_att_map[a.student_id].append(a)
 
+        # Resolve the active year once for the whole batch; new rows stamped, updates untouched.
+        year_id = await academic_year_service.resolve_active_year_id(db, institution_id)
         results = []
         for item in batch.records:
             student = students.get(item.student_id)
@@ -179,7 +183,8 @@ class AttendanceService:
                     subject=batch.subject,
                     subject_id=batch.subject_id,
                     school_class_id=batch.school_class_id,
-                    institution_id=institution_id
+                    institution_id=institution_id,
+                    academic_year_id=year_id,
                 )
                 db.add(db_att)
                 existing = db_att

@@ -84,6 +84,12 @@ class Student(Base, TimestampMixin):
     name = Column(String, index=True)
     dob = Column(String) # YYYY-MM-DD
     whatsapp = Column(String, nullable=True)
+
+    # Stable institution-wide admission identity. Unlike roll_number (per-class,
+    # recomputed alphabetically) this never changes when a student moves class
+    # or year — it is the key column for the promotion-preview export. Backfilled
+    # as ADM-{institution_id}-{id} by migration; admin-editable thereafter.
+    admission_number = Column(String, nullable=True, index=True)
     
     # Core Relational Link. Indexed: every class roster, class-attendance
     # join, finance class-breakdown, announcement class-size count, and the

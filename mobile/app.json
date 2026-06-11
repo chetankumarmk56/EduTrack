@@ -1,16 +1,16 @@
 {
   "expo": {
-    "name": "EduTrack",
-    "slug": "edutrack",
+    "name": "ArkenEdu",
+    "slug": "arkenedu",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "edutrack",
+    "scheme": "arkenedu",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.edutrack.mobile",
+      "bundleIdentifier": "com.arkenedu.mobile",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -23,7 +23,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.edutrack.mobile"
+      "package": "com.arkenedu.mobile"
     },
     "web": {
       "output": "static",
@@ -54,7 +54,7 @@
       "icon": "./assets/images/icon.png",
       "color": "#0f0f1a",
       "androidMode": "default",
-      "androidCollapsedTitle": "EduTrack"
+      "androidCollapsedTitle": "ArkenEdu"
     },
     "experiments": {
       "typedRoutes": true

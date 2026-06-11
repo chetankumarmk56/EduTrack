@@ -28,11 +28,17 @@ class StudentFee(Base, TimestampMixin):
     last_notified_at = Column(DateTime(timezone=True), nullable=True, index=True)
     last_called_at = Column(DateTime(timezone=True), nullable=True, index=True)
 
+    # Academic-year scope (stamped at write time). Lets dues queries label a
+    # fee as current-year vs previous-year arrears without changing the
+    # (student_id, class_id) uniqueness model. Nullable for legacy rows.
+    academic_year_id = Column(Integer, ForeignKey("academic_years.id"), index=True, nullable=True)
+
     institution_id = Column(Integer, ForeignKey("institutions.id"), index=True)
 
     # Relationships
     student = relationship("Student")
     school_class = relationship("SchoolClass")
+    academic_year = relationship("AcademicYear")
     institution = relationship("Institution")
 
     __table_args__ = (

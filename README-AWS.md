@@ -1,4 +1,4 @@
-# EduTrack — AWS Deployment Guide
+# ArkenEdu — AWS Deployment Guide
 
 End-to-end guide to move the backend off **Render** and the database off **Neon** to **AWS**, with **auto-scaling**, **load balancing**, **managed Redis**, and **production-grade observability**. The Vercel frontend stays as-is — only its `VITE_API_BASE_URL` will change to point at the new ALB / domain.
 

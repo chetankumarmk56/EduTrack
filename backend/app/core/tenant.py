@@ -1,7 +1,7 @@
 """
 Central tenant-scoping helpers.
 
-EduTrack is multi-tenant: every row that belongs to a school carries an
+ArkenEdu is multi-tenant: every row that belongs to a school carries an
 ``institution_id``. Isolation is enforced per-query — there is no database-
 level row security — so EVERY read/write of a tenant-owned row must filter on
 ``institution_id``. History shows that hand-writing that filter in each query

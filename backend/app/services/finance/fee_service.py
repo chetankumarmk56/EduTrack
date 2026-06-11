@@ -7,10 +7,88 @@ from datetime import datetime
 from app.core.logger import logger
 from app.models.finance import Payment, StudentFee, StudentFeeStatus, PaymentAllocation
 from app.models.directory import Student
-from app.schemas.finance import StudentDuesResponse, CategoryWiseDue
+from app.schemas.finance import (
+    StudentDuesResponse, CategoryWiseDue, PreviousYearArrear, ArrearsStudentResponse,
+)
 
 
 class FeeServiceMixin:
+    @staticmethod
+    async def _active_year_id(db: AsyncSession, institution_id: int) -> Optional[int]:
+        """Active academic year id for read paths — never creates one."""
+        from app.services.academic.academic_year_service import academic_year_service
+        year = await academic_year_service.get_active_year(
+            db, institution_id, create_if_missing=False
+        )
+        return year.id if year else None
+
+    @staticmethod
+    def _is_previous_year_arrear(fee, active_year_id: Optional[int]) -> bool:
+        """A still-owed fee that belongs to a year other than the active one."""
+        return bool(
+            fee.due_amount and fee.due_amount > 0
+            and fee.academic_year_id is not None
+            and active_year_id is not None
+            and fee.academic_year_id != active_year_id
+        )
+
+    async def get_institutional_arrears(
+        self, db: AsyncSession, institution_id: int
+    ) -> List[ArrearsStudentResponse]:
+        """Students carrying unpaid fees from a previous (non-active) year.
+
+        Powers the admin finance "carried-forward arrears" view. Returns []
+        when the institution has no active year (can't classify yet).
+        """
+        active_year_id = await self._active_year_id(db, institution_id)
+        if active_year_id is None:
+            return []
+
+        from app.models.directory import Parent  # noqa: F401 — relationship target
+
+        res = await db.execute(
+            select(StudentFee)
+            .options(
+                selectinload(StudentFee.school_class),
+                selectinload(StudentFee.academic_year),
+                selectinload(StudentFee.student).selectinload(Student.school_class),
+                selectinload(StudentFee.student).selectinload(Student.parent),
+            )
+            .where(
+                StudentFee.institution_id == institution_id,
+                StudentFee.academic_year_id.is_not(None),
+                StudentFee.academic_year_id != active_year_id,
+                StudentFee.due_amount > 0,
+                StudentFee.status != StudentFeeStatus.PAID,
+            )
+        )
+
+        by_student: dict[int, ArrearsStudentResponse] = {}
+        for fee in res.scalars().all():
+            st = fee.student
+            if not st:
+                continue
+            entry = by_student.get(st.id)
+            if entry is None:
+                entry = ArrearsStudentResponse(
+                    student_id=st.id,
+                    student_name=st.name,
+                    admission_number=st.admission_number,
+                    current_class_name=st.school_class.display_name if st.school_class else None,
+                    phone=(st.parent.primary_phone if st.parent else None),
+                    previous_year_due=0.0,
+                    arrears=[],
+                )
+                by_student[st.id] = entry
+            entry.previous_year_due = round(entry.previous_year_due + fee.due_amount, 2)
+            entry.arrears.append(PreviousYearArrear(
+                academic_year=fee.academic_year.label if fee.academic_year else None,
+                class_name=fee.school_class.display_name if fee.school_class else None,
+                due=fee.due_amount,
+            ))
+
+        return sorted(by_student.values(), key=lambda e: e.previous_year_due, reverse=True)
+
     async def get_or_create_student_fee(
         self,
         db: AsyncSession,
@@ -53,6 +131,10 @@ class FeeServiceMixin:
             return existing
 
         from datetime import date
+        # Local import keeps the finance package free of an import-time
+        # dependency on the academic service.
+        from app.services.academic.academic_year_service import academic_year_service
+        year_id = await academic_year_service.resolve_active_year_id(db, institution_id)
         try:
             async with db.begin_nested():
                 new_fee = StudentFee(
@@ -64,6 +146,7 @@ class FeeServiceMixin:
                     amount_paid=0.0,
                     due_date=due_date if due_date else date.today(),
                     status=StudentFeeStatus.UNPAID,
+                    academic_year_id=year_id,
                 )
                 db.add(new_fee)
                 await db.flush()
@@ -95,16 +178,27 @@ class FeeServiceMixin:
         if not student:
             return None
 
-        stmt = select(StudentFee).where(
-            StudentFee.student_id == student_id,
-            StudentFee.institution_id == institution_id,
+        active_year_id = await self._active_year_id(db, institution_id)
+
+        stmt = (
+            select(StudentFee)
+            .options(
+                selectinload(StudentFee.school_class),
+                selectinload(StudentFee.academic_year),
+            )
+            .where(
+                StudentFee.student_id == student_id,
+                StudentFee.institution_id == institution_id,
+            )
         )
         result = await db.execute(stmt)
         fees = result.scalars().all()
 
         total_due = 0.0
         total_paid = 0.0
+        previous_year_due = 0.0
         breakdown = []
+        arrears: list[PreviousYearArrear] = []
         due_date = None
         today = date_type.today()
 
@@ -122,6 +216,13 @@ class FeeServiceMixin:
                         due=fee.due_amount,
                     )
                 )
+            if self._is_previous_year_arrear(fee, active_year_id):
+                previous_year_due += fee.due_amount
+                arrears.append(PreviousYearArrear(
+                    academic_year=fee.academic_year.label if fee.academic_year else None,
+                    class_name=fee.school_class.display_name if fee.school_class else None,
+                    due=fee.due_amount,
+                ))
 
         is_overdue = bool(due_date and due_date < today and total_due > 0)
 
@@ -133,6 +234,8 @@ class FeeServiceMixin:
             due_date=due_date,
             is_overdue=is_overdue,
             breakdown=breakdown,
+            previous_year_due=round(previous_year_due, 2),
+            arrears=arrears,
         )
 
     async def get_students_dues_bulk(
@@ -147,6 +250,8 @@ class FeeServiceMixin:
         if not student_ids:
             return []
 
+        active_year_id = await self._active_year_id(db, institution_id)
+
         student_result = await db.execute(
             select(Student).where(
                 Student.id.in_(student_ids),
@@ -156,7 +261,12 @@ class FeeServiceMixin:
         students_by_id = {s.id: s for s in student_result.scalars().all()}
 
         fee_result = await db.execute(
-            select(StudentFee).where(
+            select(StudentFee)
+            .options(
+                selectinload(StudentFee.school_class),
+                selectinload(StudentFee.academic_year),
+            )
+            .where(
                 StudentFee.student_id.in_(student_ids),
                 StudentFee.institution_id == institution_id,
             )
@@ -176,7 +286,9 @@ class FeeServiceMixin:
             fees = fees_by_student.get(sid, [])
             total_due = 0.0
             total_paid = 0.0
+            previous_year_due = 0.0
             breakdown: List[CategoryWiseDue] = []
+            arrears: List[PreviousYearArrear] = []
             due_date = None
 
             for fee in fees:
@@ -193,6 +305,13 @@ class FeeServiceMixin:
                             due=fee.due_amount,
                         )
                     )
+                if self._is_previous_year_arrear(fee, active_year_id):
+                    previous_year_due += fee.due_amount
+                    arrears.append(PreviousYearArrear(
+                        academic_year=fee.academic_year.label if fee.academic_year else None,
+                        class_name=fee.school_class.display_name if fee.school_class else None,
+                        due=fee.due_amount,
+                    ))
 
             is_overdue = bool(due_date and due_date < today and total_due > 0)
             responses.append(
@@ -204,6 +323,8 @@ class FeeServiceMixin:
                     due_date=due_date,
                     is_overdue=is_overdue,
                     breakdown=breakdown,
+                    previous_year_due=round(previous_year_due, 2),
+                    arrears=arrears,
                 )
             )
 

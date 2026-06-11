@@ -9,10 +9,18 @@
       "distribution": "internal"
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://api.arkenedu.com/api",
+        "EXPO_PUBLIC_WEB_PORTAL_URL": "https://www.arkenedu.com"
+      }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://api.arkenedu.com/api",
+        "EXPO_PUBLIC_WEB_PORTAL_URL": "https://www.arkenedu.com"
+      }
     }
   },
   "submit": {

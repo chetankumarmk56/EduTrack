@@ -1,5 +1,5 @@
 """
-Rate limiting configuration for EduTrack API.
+Rate limiting configuration for ArkenEdu API.
 Prevents brute-force/credential-stuffing on auth endpoints.
 
 Storage

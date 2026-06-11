@@ -5,11 +5,11 @@ from typing import Optional
 
 class Settings(BaseSettings):
     """
-    Centralized configuration management for EduTrack.
+    Centralized configuration management for ArkenEdu.
     Uses pydantic-settings for robust environment variable handling.
     """
     # General
-    APP_NAME: str = "EduTrack SaaS"
+    APP_NAME: str = "ArkenEdu"
     VERSION: str = "1.0.0"
     API_V1_STR: str = "/api"
     ENVIRONMENT: str = "dev" # dev, prod, test

@@ -18,6 +18,7 @@ import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { directoryService } from '../../services';
 import { authService } from '@/features/auth/services/authService';
+import apiClient from '@/shared/services/apiClient';
 import { Colors } from '@/shared/constants/Colors';
 import { LoadingScreen } from '@/shared/components/ui/Feedback';
 import { useAuth } from '@/features/auth/hooks/useAuth';
@@ -109,6 +110,34 @@ export default function TeacherProfile() {
     logout();
     router.replace('/login');
   };
+
+  // Apple Guideline 5.1.1(v) / Google Play account-deletion policy: an in-app
+  // path to initiate deletion. Accounts are school-provisioned, so this creates
+  // a deletion request that a super-admin reviews and approves; on approval the
+  // account is deactivated. Full procedure: arkenedu.com/account-deletion.
+  const handleRequestDeletion = () =>
+    Alert.alert(
+      'Request Account Deletion',
+      'Submit a request to delete your account and associated data. Your school administrator reviews and approves it; once approved, your access is removed. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Submit Request',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await apiClient.post('account-deletion/requests', { reason: null });
+              Alert.alert(
+                'Request submitted',
+                'Your school will review your account deletion request.',
+              );
+            } catch (e: any) {
+              Alert.alert('Could not submit', e?.message || 'Please try again later.');
+            }
+          },
+        },
+      ],
+    );
 
   const dismissPwModal = () => {
     setShowPwModal(false);
@@ -293,10 +322,28 @@ export default function TeacherProfile() {
               </View>
               <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
             </TouchableOpacity>
+
+            <View style={styles.rowDivider} />
+
+            {/* Request Account Deletion */}
+            <TouchableOpacity
+              style={styles.actionRow}
+              onPress={handleRequestDeletion}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.actionIcon, { backgroundColor: '#fff7ed' }]}>
+                <Ionicons name="trash-outline" size={18} color="#d97706" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.actionLabel}>Request Account Deletion</Text>
+                <Text style={styles.actionSub}>Delete your account and data</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
+            </TouchableOpacity>
           </View>
         </Animated.View>
 
-        <Text style={styles.footer}>EduTrack · Faculty Portal</Text>
+        <Text style={styles.footer}>ArkenEdu · Faculty Portal</Text>
       </ScrollView>
 
       {/* ── Change Password Modal ── */}

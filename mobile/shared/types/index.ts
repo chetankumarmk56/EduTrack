@@ -37,6 +37,9 @@ export interface StudentDues {
     paid: number;
     due: number;
   }[];
+  // Carried-over arrears from a previous (non-active) academic year.
+  previous_year_due?: number;
+  arrears?: { academic_year: string | null; class_name: string | null; due: number }[];
 }
 
 export interface ParentFee {

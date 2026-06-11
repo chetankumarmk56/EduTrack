@@ -165,6 +165,9 @@ class StudentService:
         if db_student.school_class_id:
             await StudentService._sync_student_fee(db, db_student.id, db_student.school_class_id, institution_id)
             await StudentService._recompute_roll_numbers(db, institution_id, db_student.school_class_id)
+            # Keep the per-year roster complete for mid-year joiners.
+            from app.services.academic.enrollment_service import ensure_active_enrollment
+            await ensure_active_enrollment(db, institution_id, db_student)
 
         await db.commit()
         return await StudentService.get_student(db, institution_id, db_student.id)
@@ -357,6 +360,9 @@ class StudentService:
         # AUTOMATION: Sync StudentFee if class is assigned or changed
         if "school_class_id" in update_data and update_data["school_class_id"]:
             await StudentService._sync_student_fee(db, db_student.id, update_data["school_class_id"], institution_id)
+            # Mirror the class change onto the current-year enrollment snapshot.
+            from app.services.academic.enrollment_service import ensure_active_enrollment
+            await ensure_active_enrollment(db, institution_id, db_student)
 
         # Recompute roll numbers for any class whose membership or name order shifted.
         classes_to_recompute: set[int] = set()

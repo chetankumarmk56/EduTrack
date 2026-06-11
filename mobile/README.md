@@ -1,6 +1,6 @@
-# EduTrack Mobile App 📱
+# ArkenEdu Mobile App 📱
 
-A production-ready React Native + Expo Parent Portal mobile application for the EduTrack school management platform. Built with Expo Router (file-based routing), TypeScript, and a beautiful dark-themed UI optimized for mobile.
+A production-ready React Native + Expo Parent Portal mobile application for the ArkenEdu school management platform. Built with Expo Router (file-based routing), TypeScript, and a beautiful dark-themed UI optimized for mobile.
 
 **Status:** ✅ **COMPLETE & PRODUCTION READY**
 
@@ -100,7 +100,7 @@ mobile/
 │   ├── Colors.ts                # Complete dark-theme colour palette
 │   └── index.ts                 # API_BASE_URL, STORAGE_KEYS, PRIORITY_CONFIG
 │
-└── app.json                     # Expo config (EduTrack branding, dark UI style)
+└── app.json                     # Expo config (ArkenEdu branding, dark UI style)
 ```
 
 ---
@@ -390,7 +390,7 @@ git push origin feature/my-feature
 
 ## 📄 License
 
-This project is part of the EduTrack school management system.
+This project is part of the ArkenEdu school management system.
 
 ---
 

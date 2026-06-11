@@ -21,6 +21,12 @@ export interface CategoryWiseDue {
   due: number;
 }
 
+export interface PreviousYearArrear {
+  academic_year: string | null;
+  class_name: string | null;
+  due: number;
+}
+
 export interface StudentDuesResponse {
   student_id: number;
   student_name: string;
@@ -29,6 +35,18 @@ export interface StudentDuesResponse {
   due_date: string | null;   // ISO date string
   is_overdue: boolean;
   breakdown: CategoryWiseDue[];
+  previous_year_due?: number;
+  arrears?: PreviousYearArrear[];
+}
+
+export interface ArrearsStudentResponse {
+  student_id: number;
+  student_name: string;
+  admission_number?: string | null;
+  current_class_name?: string | null;
+  phone?: string | null;
+  previous_year_due: number;
+  arrears: PreviousYearArrear[];
 }
 
 export interface ClassFinanceRow {
@@ -131,6 +149,12 @@ export const financeApi = {
 
   getDefaulters: async () => {
     const response = await client.get<DefaulterResponse[]>('finance/defaulters');
+    return response.data;
+  },
+
+  /** Students carrying unpaid fees from a previous (non-active) academic year. */
+  getArrears: async () => {
+    const response = await client.get<ArrearsStudentResponse[]>('finance/arrears');
     return response.data;
   },
 

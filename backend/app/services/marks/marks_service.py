@@ -5,6 +5,7 @@ from typing import List
 from app.models import Mark, Student, Exam
 from app.schemas import mark as schemas
 from app.models.directory import Teacher, TeacherAssignment
+from app.services.academic.academic_year_service import academic_year_service
 
 class MarksService:
     @staticmethod
@@ -52,7 +53,8 @@ class MarksService:
             await db.refresh(existing)
             return existing
         else:
-            db_mark = Mark(**mark.model_dump(), institution_id=institution_id)
+            year_id = await academic_year_service.resolve_active_year_id(db, institution_id)
+            db_mark = Mark(**mark.model_dump(), institution_id=institution_id, academic_year_id=year_id)
             db.add(db_mark)
             await db.commit()
             
@@ -159,6 +161,9 @@ class MarksService:
                     existing_by_legacy[key] = row
 
         # ── Apply updates / inserts in-memory ──────────────────────────────
+        # Resolve the active year once for the whole batch; new rows are
+        # stamped with it, updates keep their original year.
+        year_id = await academic_year_service.resolve_active_year_id(db, institution_id)
         results: list[Mark] = []
         for mark in marks:
             student = students.get(mark.student_id)
@@ -189,7 +194,7 @@ class MarksService:
                 if mark.exam_id:
                     existing.exam_id = mark.exam_id
             else:
-                existing = Mark(**mark.model_dump(), institution_id=institution_id)
+                existing = Mark(**mark.model_dump(), institution_id=institution_id, academic_year_id=year_id)
                 db.add(existing)
                 # Insert into the local index so a duplicate later in the
                 # same batch (rare but possible — a teacher submits the
@@ -307,11 +312,13 @@ class MarksService:
 
     @staticmethod
     async def create_exam(db: AsyncSession, institution_id: int, exam: schemas.ExamCreate, school_class_id: int = None, subject_id: int = None):
+        year_id = await academic_year_service.resolve_active_year_id(db, institution_id)
         db_exam = Exam(
-            **exam.model_dump(), 
+            **exam.model_dump(),
             institution_id=institution_id,
             school_class_id=school_class_id,
-            subject_id=subject_id
+            subject_id=subject_id,
+            academic_year_id=year_id,
         )
         db.add(db_exam)
         await db.commit()

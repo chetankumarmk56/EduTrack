@@ -104,6 +104,12 @@ class CategoryWiseDue(BaseModel):
     paid: float
     due: float
 
+class PreviousYearArrear(BaseModel):
+    """An unpaid fee carried over from a year that is no longer active."""
+    academic_year: Optional[str] = None
+    class_name: Optional[str] = None
+    due: float
+
 class StudentDuesResponse(BaseModel):
     student_id: int
     student_name: str
@@ -112,6 +118,20 @@ class StudentDuesResponse(BaseModel):
     due_date: Optional[date]
     is_overdue: bool
     breakdown: List[CategoryWiseDue]
+    # Carried-over arrears from a previous (non-active) academic year. Included
+    # in total_due, but broken out so the UI can flag "due from last year".
+    previous_year_due: float = 0.0
+    arrears: List[PreviousYearArrear] = []
+
+class ArrearsStudentResponse(BaseModel):
+    """A student carrying previous-year arrears — for the admin finance view."""
+    student_id: int
+    student_name: str
+    admission_number: Optional[str] = None
+    current_class_name: Optional[str] = None
+    phone: Optional[str] = None
+    previous_year_due: float
+    arrears: List[PreviousYearArrear] = []
 
 class PaginatedPaymentResponse(BaseModel):
     total: int

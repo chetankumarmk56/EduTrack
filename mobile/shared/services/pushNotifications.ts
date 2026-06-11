@@ -79,7 +79,7 @@ async function getExpoPushToken(): Promise<string | null> {
   // can be issued for high-priority delivery.
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {
-      name: 'EduTrack Announcements',
+      name: 'ArkenEdu Announcements',
       importance: Notifications.AndroidImportance.HIGH,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#0f0f1a',

@@ -5,8 +5,10 @@ import {
   PlusCircle, X, Pencil, Loader2,
   BookOpen, GraduationCap, ChevronRight,
   Layers, School, Library, AlertCircle, CheckCircle2,
+  ArrowUpCircle,
 } from 'lucide-react';
 import { academicApi } from '@/features/academics/api';
+import PromotionWizard from '@/features/academics/components/PromotionWizard';
 import { useApp } from '@/shared/contexts/AppContext';
 import { cn } from '@/shared/lib/utils';
 import { getErrorMessage } from '@/shared/lib/errorHandler';
@@ -67,6 +69,9 @@ export default function AdminClasses() {
   const [sectionDeleteId, setSectionDeleteId] = useState<number | null>(null);
   const [subjectDeleteId, setSubjectDeleteId] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Year-end promotion wizard
+  const [showPromotion, setShowPromotion] = useState(false);
 
   useEffect(() => {
     refreshDirectory();
@@ -334,7 +339,22 @@ export default function AdminClasses() {
             Configure the institutional framework by defining scholastic classes, sections, and subjects.
           </p>
         </div>
+
+        <button
+          type="button"
+          onClick={() => setShowPromotion(true)}
+          className="self-start md:self-auto shrink-0 inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-brand-indigo text-white font-black text-sm shadow-lg shadow-brand-indigo/20 hover:opacity-90 transition-opacity"
+        >
+          <ArrowUpCircle className="w-5 h-5" />
+          Promote to Next Year
+        </button>
       </div>
+
+      <PromotionWizard
+        open={showPromotion}
+        onClose={() => setShowPromotion(false)}
+        onPromoted={refreshDirectory}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         

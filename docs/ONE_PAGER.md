@@ -1,5 +1,5 @@
 
-# EduTrack — School Operations, Simplified
+# ArkenEdu — School Operations, Simplified
 
 **A complete school-management platform for 50–2,000 student schools.**
 Web portals for admins and teachers. A mobile app for parents. One backend that ties it all together.
@@ -14,7 +14,7 @@ The existing alternatives are either **₹2–5 lakh/year enterprise ERPs** buil
 
 ---
 
-## What EduTrack does
+## What ArkenEdu does
 
 A single platform that covers the day-to-day workflows a school actually runs on:
 
@@ -94,4 +94,4 @@ A single platform that covers the day-to-day workflows a school actually runs on
 
 ---
 
-*EduTrack — built by someone who's actually shipped to schools.*
+*ArkenEdu — built by someone who's actually shipped to schools.*

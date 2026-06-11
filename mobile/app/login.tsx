@@ -60,7 +60,7 @@ export default function LoginScreen() {
             <View style={[styles.logoBox, { borderColor: `${activeColor}35`, shadowColor: activeColor }]}>
               <Text style={styles.logoEmoji}>🎓</Text>
             </View>
-            <Text style={styles.appName}>EduTrack</Text>
+            <Text style={styles.appName}>ArkenEdu</Text>
             <Text style={styles.tagline}>Your Academic Companion</Text>
           </Animated.View>
 

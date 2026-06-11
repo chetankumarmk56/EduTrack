@@ -146,6 +146,8 @@ class AcademicService:
             from datetime import date
             from app.models.finance import StudentFeeStatus
             from app.models.directory import Student
+            from app.services.academic.academic_year_service import academic_year_service
+            year_id = await academic_year_service.resolve_active_year_id(db, institution_id)
 
             for sc in school_classes:
                 if 'tuition_fee' in update_data:
@@ -202,7 +204,8 @@ class AcademicService:
                                 due_amount=new_fee,
                                 amount_paid=0.0,
                                 due_date=new_due_date if new_due_date else date.today(),
-                                status=StudentFeeStatus.UNPAID
+                                status=StudentFeeStatus.UNPAID,
+                                academic_year_id=year_id,
                             )
                             db.add(new_student_fee)
                             logger.info(
@@ -672,6 +675,8 @@ class AcademicService:
             from datetime import date as date_type
             from app.models.finance import StudentFee, StudentFeeStatus
             from app.models.directory import Student as _Student
+            from app.services.academic.academic_year_service import academic_year_service
+            year_id = await academic_year_service.resolve_active_year_id(db, institution_id)
 
             new_fee = db_class.total_fee
             new_due_date = db_class.fee_due_date
@@ -714,6 +719,7 @@ class AcademicService:
                             amount_paid=0.0,
                             due_date=new_due_date if new_due_date else date_type.today(),
                             status=StudentFeeStatus.UNPAID,
+                            academic_year_id=year_id,
                         ))
 
         await db.commit()

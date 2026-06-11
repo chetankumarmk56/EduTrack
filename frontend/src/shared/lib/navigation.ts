@@ -16,6 +16,7 @@ import {
   Globe,
   Wallet,
   Landmark,
+  UserX,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -67,12 +68,14 @@ export const adminNavItems: NavItem[] = [
   { name: 'Staff Attendance', path: '/admin/teacher-attendance', icon: UserCheck },
   { name: 'Finance', path: '/admin/finance', icon: CreditCard },
   { name: 'Payment Verification', path: '/admin/manual-payments', icon: Landmark },
+  { name: 'Deletion Requests', path: '/admin/account-deletions', icon: UserX },
 ];
 
 export const superAdminNavItems: NavItem[] = [
   { name: 'Schools', path: '/superadmin/dashboard', icon: Building2 },
   { name: 'Schools Overview', path: '/superadmin/schools-overview', icon: Globe },
   { name: 'Admins', path: '/superadmin/admins', icon: Users },
+  { name: 'Deletion Requests', path: '/superadmin/account-deletions', icon: UserX },
 ];
 
 export const navItemsByRoutePrefix: { prefix: string; items: NavItem[] }[] = [

@@ -19,7 +19,11 @@ class Attendance(Base, TimestampMixin):
     # Core Relational Links
     school_class_id = Column(Integer, ForeignKey("school_classes.id"), index=True, nullable=True)
     subject_id = Column(Integer, ForeignKey("subjects.id"), index=True, nullable=True)
-    
+
+    # Academic-year scope. Stamped with the institution's active year at write
+    # time so a new year starts with clean attendance. Nullable for legacy rows.
+    academic_year_id = Column(Integer, ForeignKey("academic_years.id"), index=True, nullable=True)
+
     institution_id = Column(Integer, ForeignKey("institutions.id"), nullable=False, default=1, index=True)
     institution = relationship("Institution", back_populates="attendance")
 

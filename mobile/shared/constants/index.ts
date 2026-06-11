@@ -19,7 +19,7 @@ export const STORAGE_KEYS = {
 };
 
 // App info
-export const APP_NAME = 'EduTrack';
+export const APP_NAME = 'ArkenEdu';
 export const APP_TAGLINE = 'Your Academic Companion';
 
 // Priority config for announcements

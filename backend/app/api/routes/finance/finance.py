@@ -11,6 +11,7 @@ from app.core.dependencies import get_current_user, require_payment_admin, UserC
 from app.schemas.finance import (
     StudentDuesResponse, PaymentResponse, PaginatedPaymentResponse,
     ManualPaymentCreate, ManualPaymentResponse, FinanceSummaryResponse, DefaulterResponse,
+    ArrearsStudentResponse,
     ClassFinanceBreakdownResponse,
     LedgerEntryResponse, PaginatedLedgerResponse, LedgerSummary,
     FeeReminderPreviewResponse, FeeReminderEligibleRow,
@@ -236,6 +237,15 @@ async def get_institutional_defaulters(
 ):
     """Optimized list of students with outstanding dues."""
     return await finance_service.get_defaulters(db, admin.institution_id)
+
+
+@router.get("/arrears", response_model=List[ArrearsStudentResponse])
+async def get_institutional_arrears(
+    db: AsyncSession = Depends(get_db),
+    admin: UserContext = Depends(require_payment_admin)
+):
+    """Students carrying unpaid fees from a previous (non-active) academic year."""
+    return await finance_service.get_institutional_arrears(db, admin.institution_id)
 
 
 @router.post("/backfill-fees", status_code=200)

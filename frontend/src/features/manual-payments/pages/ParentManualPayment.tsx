@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/shared/lib/utils';
 import { useAuth } from '@/shared/contexts/AuthContext';
 import { Skeleton, SkeletonHeader, SkeletonStatGrid } from '@/shared/components/ui/Skeleton';
-import { financeApi } from '@/features/finance/api';
+import { financeApi, type StudentDuesResponse } from '@/features/finance/api';
 
 import { manualPaymentsApi } from '../api';
 import type {
@@ -38,7 +38,7 @@ export default function ParentManualPayment() {
   const [students, setStudents] = useState<ManualPaymentStudentRef[]>([]);
   const [schoolInfo, setSchoolInfo] = useState<SchoolPaymentInfo | null>(null);
   const [history, setHistory] = useState<ManualPaymentRequest[]>([]);
-  const [dues, setDues] = useState<Array<{ student_id: number; student_name: string; total_due: number; total_paid: number }>>([]);
+  const [dues, setDues] = useState<StudentDuesResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -59,7 +59,7 @@ export default function ParentManualPayment() {
         setStudents(studentsRes);
         setSchoolInfo(schoolRes);
         setHistory(historyRes?.items || []);
-        setDues(duesRes as Array<{ student_id: number; student_name: string; total_due: number; total_paid: number }>);
+        setDues(duesRes as StudentDuesResponse[]);
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -216,6 +216,13 @@ export default function ParentManualPayment() {
                         <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
                           Paid: {formatINR(d.total_paid)}
                         </p>
+                        {(d.previous_year_due ?? 0) > 0 && (
+                          <p className="mt-1 inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400">
+                            <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                            Includes {formatINR(d.previous_year_due ?? 0)} due from last year
+                            {d.arrears?.[0]?.academic_year ? ` (${d.arrears[0].academic_year})` : ''}
+                          </p>
+                        )}
                       </div>
                       <p
                         className={cn(

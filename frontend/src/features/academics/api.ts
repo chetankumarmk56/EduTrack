@@ -40,6 +40,64 @@ export interface SubjectCreate {
 //   grade_id?: number;
 // }
 
+// ── Academic year + year-end promotion ──────────────────────────────────────
+
+export interface AcademicYear {
+  id: number;
+  label: string;
+  start_date?: string | null;
+  end_date?: string | null;
+  is_active: boolean;
+  status: string;
+}
+
+export type PromotionDecision = 'PROMOTE' | 'RETAIN' | 'GRADUATE';
+
+export interface PromotionStudentRow {
+  student_id: number;
+  name?: string | null;
+  admission_number?: string | null;
+  roll_number?: number | null;
+  overall_percentage?: number | null;
+  arrears: number;
+  decision: PromotionDecision;
+}
+
+export interface PromotionClassGroup {
+  school_class_id: number;
+  class_name?: string | null;
+  grade_id?: number | null;
+  grade_level?: number | null;
+  section_name?: string | null;
+  is_top_grade: boolean;
+  target_class_name?: string | null;
+  will_create_target: boolean;
+  student_count: number;
+  class_overall_percentage?: number | null;
+  students: PromotionStudentRow[];
+}
+
+export interface PromotionPreview {
+  active_year?: { id: number; label: string } | null;
+  next_year_label?: string | null;
+  already_promoted: boolean;
+  totals: { students: number; promote: number; retain: number; graduate: number; unassigned: number };
+  auto_create_classes: string[];
+  classes: PromotionClassGroup[];
+  unassigned: PromotionStudentRow[];
+}
+
+export interface PromotionSummary {
+  from_year?: { id: number; label: string } | null;
+  to_year?: { id: number; label: string } | null;
+  promoted: number;
+  retained: number;
+  graduated: number;
+  skipped: number;
+  created_classes: string[];
+  already_promoted: boolean;
+}
+
 export const academicApi = {
   // Grades (Classes)
   // Unused — not called anywhere in the frontend.
@@ -158,6 +216,35 @@ export const academicApi = {
 
   updateSchoolClass: async (id: number, data: SchoolClassUpdate) => {
     const response = await client.put<SchoolClass>(`academic/school-classes/${id}`, data);
+    return response.data;
+  },
+
+  // ── Academic years & promotion ──
+  getAcademicYears: async () => {
+    const response = await client.get<AcademicYear[]>('academic/years');
+    return response.data;
+  },
+
+  previewPromotion: async (retainedStudentIds: number[] = []) => {
+    const response = await client.post<PromotionPreview>('academic/promotion/preview', {
+      retained_student_ids: retainedStudentIds,
+    });
+    return response.data;
+  },
+
+  exportPromotionPreview: async (format: 'xlsx' | 'csv') => {
+    const response = await client.get('academic/promotion/preview/export', {
+      params: { format },
+      responseType: 'blob',
+    });
+    return response.data as Blob;
+  },
+
+  executePromotion: async (retainedStudentIds: number[], nextYearLabel?: string) => {
+    const response = await client.post<PromotionSummary>('academic/promotion/execute', {
+      retained_student_ids: retainedStudentIds,
+      next_year_label: nextYearLabel,
+    });
     return response.data;
   },
 

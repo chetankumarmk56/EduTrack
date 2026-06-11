@@ -12,6 +12,12 @@ import ToastHub from '@/shared/components/ui/ToastHub';
 // others — the biggest single win for initial load time.
 import Landing from '@/features/landing/pages/Landing';
 
+// Public legal / compliance pages (code-split; reachable without auth)
+const PrivacyPolicy = lazy(() => import('@/features/legal/pages/PrivacyPolicy'));
+const TermsOfService = lazy(() => import('@/features/legal/pages/TermsOfService'));
+const DataProcessingAgreement = lazy(() => import('@/features/legal/pages/DataProcessingAgreement'));
+const AccountDeletion = lazy(() => import('@/features/legal/pages/AccountDeletion'));
+
 // Parent / Student portal
 const DashboardLayout = lazy(() => import('@/shared/components/layout/DashboardLayout'));
 const Dashboard = lazy(() => import('@/features/dashboard/pages/Dashboard'));
@@ -55,6 +61,7 @@ const FinanceDashboard = lazy(() => import('@/features/finance/pages/FinanceDash
 const AdminManualPayments = lazy(() => import('@/features/manual-payments/pages/AdminManualPayments'));
 const AdminProfile = lazy(() => import('@/features/account/pages/AdminProfile'));
 const TeacherAttendanceAdmin = lazy(() => import('@/features/teacher-attendance/pages/TeacherAttendanceAdmin'));
+const AdminAccountDeletions = lazy(() => import('@/features/account-deletion/pages/AdminAccountDeletions'));
 
 // Super Admin portal
 const SuperAdminLayout = lazy(() => import('@/shared/components/layout/SuperAdminLayout'));
@@ -63,6 +70,7 @@ const SuperAdminDashboard = lazy(() => import('@/features/super-admin/pages/Supe
 const SchoolsOverview = lazy(() => import('@/features/super-admin/pages/SchoolsOverview'));
 const SuperAdminCredentials = lazy(() => import('@/features/super-admin/pages/SuperAdminCredentials'));
 const SuperAdminProfile = lazy(() => import('@/features/account/pages/SuperAdminProfile'));
+const SuperAdminAccountDeletions = lazy(() => import('@/features/account-deletion/pages/SuperAdminAccountDeletions'));
 
 function RouteFallback() {
   return (
@@ -113,6 +121,13 @@ function App() {
           <Suspense fallback={<RouteFallback />}>
           <Routes>
             <Route path="/" element={<Landing />} />
+
+            {/* Public legal / compliance pages */}
+            <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+            <Route path="/terms-of-service" element={<TermsOfService />} />
+            <Route path="/data-processing-agreement" element={<DataProcessingAgreement />} />
+            <Route path="/account-deletion" element={<AccountDeletion />} />
+
             <Route path="/parent-login" element={<GuestRoute><Login /></GuestRoute>} />
 
             <Route path="/parent" element={
@@ -173,6 +188,7 @@ function App() {
               <Route path="finance" element={<FinanceDashboard />} />
               <Route path="manual-payments" element={<AdminManualPayments />} />
               <Route path="teacher-attendance" element={<TeacherAttendanceAdmin />} />
+              <Route path="account-deletions" element={<AdminAccountDeletions />} />
               <Route path="profile" element={<AdminProfile />} />
             </Route>
 
@@ -187,6 +203,7 @@ function App() {
               <Route path="dashboard" element={<SuperAdminDashboard />} />
               <Route path="schools-overview" element={<SchoolsOverview />} />
               <Route path="admins" element={<SuperAdminCredentials />} />
+              <Route path="account-deletions" element={<SuperAdminAccountDeletions />} />
               <Route path="profile" element={<SuperAdminProfile />} />
             </Route>
 

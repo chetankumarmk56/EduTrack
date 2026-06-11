@@ -9,6 +9,7 @@ import {
   MapPin, CalendarDays
 } from 'lucide-react';
 import { StaggerContainer, StaggerItem } from '@/shared/components/ui/PageWrapper';
+import RequestAccountDeletion from '@/features/account-deletion/components/RequestAccountDeletion';
 
 export default function Profile() {
   const { user } = useAuth();
@@ -210,6 +211,10 @@ export default function Profile() {
               </div>
             </StaggerItem>
           </StaggerContainer>
+
+          <div className="mt-6">
+            <RequestAccountDeletion />
+          </div>
         </div>
       </div>
     </div>
