@@ -153,13 +153,14 @@ export default function TermsOfService() {
       <h2 id="contact">22. Contact</h2>
       <ul>
         <li>Support: <a href="mailto:support@arkenedu.com">support@arkenedu.com</a></li>
+        <li>Account &amp; data deletion: <a href="/account-deletion">Account and Data Deletion</a></li>
         <li>Legal: <a href="mailto:legal@arkenedu.com">legal@arkenedu.com</a></li>
         <li>Privacy: <a href="mailto:privacy@arkenedu.com">privacy@arkenedu.com</a></li>
         <li>Website: <a href="https://arkenedu.com">arkenedu.com</a></li>
       </ul>
 
       <hr />
-      <p>By using ArkenEdu, you acknowledge that you have read and agree to these Terms of Service, the <a href="/privacy-policy">Privacy Policy</a>, and, where applicable, the <a href="/data-processing-agreement">Data Processing Agreement</a>.</p>
+      <p>By using ArkenEdu, you acknowledge that you have read and agree to these Terms of Service, the <a href="/privacy-policy">Privacy Policy</a>, and, where applicable, the <a href="/data-processing-agreement">Data Processing Agreement</a>. To request deletion of an account or personal data, see <a href="/account-deletion">Account and Data Deletion</a>.</p>
     </LegalPage>
   );
 }

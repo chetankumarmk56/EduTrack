@@ -7,6 +7,8 @@ This assessment is based on ArkenEdu's actual platform structure, user roles, da
 
 > **Update — code remediation applied (10 June 2026).** The code-addressable P0 items have been fixed: the mobile app was rebranded EduTrack → **ArkenEdu** (`com.arkenedu.mobile`); the Privacy Policy, Terms, DPA, and Account-Deletion pages are now live React routes linked from the website footer; and an in-app "Request Account Deletion" action was added to the mobile parent and teacher profile screens. Remaining items are **operational** (appoint a DPO, seed demo accounts, verify the AWS region) or **product work** (consent records, AI minimisation) that cannot be closed by editing code alone. Status is tracked in the matrix below.
 
+> **Update — 11 June 2026.** The in-app "Request Account Deletion" action has been **removed** from the mobile parent/teacher profiles and the web profile + admin/super-admin approval screens, and the backing `account_deletion_requests` table was dropped (migration `a4c6e8b0d2f5`). The ArkenEdu app has **no account self-registration**, so iOS Guideline 5.1.1(v) does not require an in-app deletion path. Account/data deletion is now **administrative only** — users contact their School Administrator, who can escalate to ArkenEdu support — and is documented on the public, login-free page `https://arkenedu.com/account-deletion`. R4 remains satisfied by that public page.
+
 ---
 
 ## 1. Priority matrix
@@ -16,7 +18,7 @@ This assessment is based on ArkenEdu's actual platform structure, user roles, da
 | R1 | Mobile app brand/identifier mismatch (was "EduTrack") | High | P0 | ✅ **Resolved in code** — renamed to ArkenEdu (`com.arkenedu.mobile`, slug `arkenedu`); confirm store listing + developer name |
 | R2 | No legal pages published / linked (web or app) | High | P0 | ✅ **Resolved in code** — `/privacy-policy`, `/terms-of-service`, `/data-processing-agreement`, `/account-deletion` routes + footer links |
 | R3 | No reviewer demo accounts + login-gated app | High | P0 | ⬜ **Operational** — seed parent/teacher/admin demo logins; add to both stores' review notes |
-| R4 | Account-deletion path not exposed | High | P0 | ✅ **Resolved in code** — public `/account-deletion` page + in-app action in mobile parent & teacher profiles |
+| R4 | Account-deletion path not exposed | High | P0 | ✅ **Resolved in code** — public, login-free `/account-deletion` page documenting the administrative deletion process (no in-app self-service action; the app has no self-registration, so iOS 5.1.1(v) does not require one) |
 | R5 | Children's data / DPDP parental-consent flow not evidenced | High | P1 | ⬜ **Product work** — add per-student consent record + parent acknowledgement |
 | R6 | AI tools may receive student PII (teacher free-text) | Med–High | P1 | ⬜ **Product work** — in-UI warning + org disable toggle + confirm no-training terms |
 | R7 | Signed DPA + sub-processor list not packaged | Med | P1 | ◐ **Partial** — DPA page live; add a signable DPA + maintained `/legal/sub-processors` |
@@ -34,7 +36,7 @@ This assessment is based on ArkenEdu's actual platform structure, user roles, da
 ## 2. Missing legal / compliance documents and artifacts
 
 - ✅ **Published Privacy Policy, Terms of Service, and DPA** — now live React routes (`/privacy-policy`, `/terms-of-service`, `/data-processing-agreement`) linked from the website footer. *(R2 done; ensure the store listings also link `https://arkenedu.com/privacy-policy`.)*
-- ✅ **Public account-deletion page** (`/account-deletion`) **and in-app deletion-request action** (mobile parent & teacher profiles). *(R4 done.)*
+- ✅ **Public account-deletion page** (`/account-deletion`) documenting the administrative deletion process — School Administrators action deletions and can escalate to ArkenEdu support; there is no in-app self-service action (the app has no self-registration). *(R4 done.)*
 - **Sub-processor list page** (`/legal/sub-processors`) kept current — required for enterprise procurement and DPA Section 8. *(R7)*
 - **Named Grievance Officer / Data Protection point of contact** with contact details published, as expected under the SPDI Rules and DPDP Act. The documents use role-based contacts (grievance@ / dpo@arkenedu.com); appoint and name an individual. *(R9)*
 - **Security overview / trust page** for sales (encryption, RBAC, hosting, backups, incident response) and a **responsible-disclosure policy**. *(R13)*
@@ -89,7 +91,7 @@ Residual objection risk: schools with strict procurement may push back on **AI s
 ## 7. Apple review risks
 
 - **R3 — Demo account** required (Guideline 2.1) — same as Play (still open).
-- ✅ **R4 — In-app account deletion** (Guideline 5.1.1(v)) now satisfied: a "Request Account Deletion" action was added to the mobile parent and teacher profile screens (it initiates a verified deletion request), alongside the public `/account-deletion` page.
+- ✅ **R4 — Account deletion** (Guideline 5.1.1(v)): the app offers **no account self-registration**, so an in-app deletion path is not required. Deletion is administrative (via the School Administrator, escalating to ArkenEdu support) and documented on the public, login-free `/account-deletion` page. State this in App Review notes.
 - **App Privacy labels** must match the data flows (mobile-app-compliance §3.B); declare **"Data Not Used to Track You."**
 - **Kids Category (5.1.4):** do **not** enrol unless intended; position as Education. If enrolled, third-party analytics/ads are prohibited and parental gating is required.
 - **Guideline 5.1.1 / 5.1.2 (data collection & storage):** ensure consent and purpose strings are clear; the notifications permission should be requested in context.
@@ -111,7 +113,7 @@ Gaps/roadmap worth disclosing honestly: **MFA** for privileged roles; **audit lo
 1. ✅ **R1 (done in code):** mobile app renamed to ArkenEdu (`com.arkenedu.mobile`, slug `arkenedu`), in-app strings + API name rebranded. **Remaining manual step:** ensure the Play / App Store **listing name and developer name** read "ArkenEdu".
 2. ✅ **R2 (done in code):** `/privacy-policy`, `/terms-of-service`, `/data-processing-agreement`, and `/account-deletion` are live routes linked from the website footer. **Remaining manual step:** set the Privacy Policy URL in both store listings and add a "Terms/Privacy" line to sign-in screens.
 3. ⬜ **R3 (operational):** create seeded **reviewer demo accounts** (parent, teacher, admin) and add credentials to Play and App Store review notes.
-4. ✅ **R4 (done in code):** public `/account-deletion` page **and** in-app "Request Account Deletion" action in the mobile parent & teacher profiles. **Remaining manual step:** set the deletion URL in the Play Data Safety form.
+4. ✅ **R4 (done in code):** public, login-free `/account-deletion` page documenting the administrative deletion process (no in-app self-service action; the app has no self-registration, so iOS 5.1.1(v) does not require one). **Remaining manual step:** set the deletion URL in the Play Data Safety form.
 
 **P1 — before/while onboarding real schools**
 5. **R9:** Appoint and **name a Grievance Officer / DPO** with published contact details.

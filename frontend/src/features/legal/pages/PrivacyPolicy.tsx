@@ -320,15 +320,19 @@ export default function PrivacyPolicy() {
 
       <h2 id="deleting-your-account-and-data">15. Deleting your account and data</h2>
       <p>
-        Because accounts are provisioned by Schools, account deletion is normally handled by your
-        School, which can deactivate or remove accounts and records directly. To request deletion of
-        your account and associated personal data, you may (1) ask your School administrator, or (2)
-        contact ArkenEdu at <a href="mailto:privacy@arkenedu.com">privacy@arkenedu.com</a> with the
-        subject “Account Deletion Request”. We will verify the request, coordinate with the relevant
-        School where we act as processor, and action the deletion in accordance with sections 13 and
-        14. See our <a href="/account-deletion">Account Deletion</a> page for the full procedure.
-        Certain data may be retained after deletion where required by law, to resolve disputes, to
-        enforce agreements, or in routine backups that are cycled out on a defined schedule.
+        Because accounts are provisioned and managed by Schools, account deletion is handled
+        administratively rather than by public self-service sign-up. There is no self-registration on
+        the Platform, and account holders do not delete their own accounts directly. To request
+        deletion of an account or associated personal data, <strong>contact your School Administrator
+        first</strong> — they can deactivate or remove accounts and records directly in the Platform. A{' '}
+        <strong>School Administrator may also submit a deletion request to ArkenEdu support on behalf
+        of their institution</strong> at <a href="mailto:support@arkenedu.com">support@arkenedu.com</a>.
+        Where ArkenEdu acts as the School’s Data Processor, we will verify the request, coordinate with
+        the relevant School, and action the deletion in accordance with sections 13 and 14. Account
+        access can be revoked even where certain records must be retained for legal, academic,
+        financial, auditing, or compliance purposes, or in routine backups that are cycled out on a
+        defined schedule. See our <a href="/account-deletion">Account and Data Deletion</a> page for
+        the full procedure and timelines.
       </p>
 
       <h2 id="cookies">16. Cookies and similar technologies</h2>

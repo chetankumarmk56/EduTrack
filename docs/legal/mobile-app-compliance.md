@@ -44,7 +44,7 @@ Server-side, the backend logs requests and uses **Sentry** for error/diagnostic 
 
 ## 3.A Google Play — Data Safety form guidance
 
-Complete the Data Safety section as follows. Across the form: **Is data encrypted in transit?** → **Yes** (HTTPS/TLS). **Do you provide a way to request data deletion?** → **Yes** (link `https://arkenedu.com/account-deletion`; deletion via School admin or privacy@arkenedu.com). **Do you collect/share data for advertising or marketing?** → **No**. **Do you use data for tracking across apps/websites?** → **No**.
+Complete the Data Safety section as follows. Across the form: **Is data encrypted in transit?** → **Yes** (HTTPS/TLS). **Do you provide a way to request data deletion?** → **Yes** (link `https://arkenedu.com/account-deletion`; `https://arkenedu.com/data-deletion` redirects to the same page; deletion is requested via the School Administrator, who can escalate to ArkenEdu support at support@arkenedu.com). **Do you collect/share data for advertising or marketing?** → **No**. **Do you use data for tracking across apps/websites?** → **No**.
 
 For each data type the app handles:
 
@@ -106,7 +106,7 @@ In App Store Connect → App Privacy, declare the following. **Tracking:** decla
 - Provide a reachable **Privacy Policy URL** in App Store Connect (`https://arkenedu.com/privacy-policy`).
 - Provide a **demo/reviewer account** (the app is gated behind school-provisioned login; Apple will reject if reviewers cannot sign in). Supply working credentials for a seeded demo school covering parent, teacher, and admin roles, plus any necessary instructions, in App Review notes.
 - Apple **Guideline 5.1.4 (Kids)**: if you target the Kids category you must not include third-party analytics/ads and must obtain parental consent — ArkenEdu is positioned as a school-administration app, not a Kids-category app; choose the appropriate category (e.g., Education) and an age rating consistent with the content. Do not enrol in the Kids Category unless intended, as it imposes stricter rules.
-- Account deletion: Apple **Guideline 5.1.1(v)** requires apps that support account creation to also support **in-app account deletion / a deletion path**. Because accounts are school-provisioned, surface an in-app "Request account deletion" action that initiates the request (to the School admin / privacy@arkenedu.com) and document it; do not rely solely on an external page.
+- Account deletion: Apple **Guideline 5.1.1(v)** requires apps that **support account creation** to also offer in-app account deletion. The ArkenEdu app offers **no account creation or self-registration** — accounts are provisioned and managed by School Administrators — so the 5.1.1(v) in-app-deletion trigger does not apply. Account/data deletion is handled **administratively** (users contact their School Administrator, who can escalate to ArkenEdu support) and is documented on the public, login-free page `https://arkenedu.com/account-deletion`. State this in App Review notes so reviewers understand why there is no in-app self-service deletion button.
 - `ITSAppUsesNonExemptEncryption = false` is already set (standard HTTPS) — correct.
 
 ---
@@ -115,7 +115,7 @@ In App Store Connect → App Privacy, declare the following. **Tracking:** decla
 
 - [x] **App name/identifiers aligned** to ArkenEdu (`com.arkenedu.mobile`, slug `arkenedu`) with in-app strings rebranded (R1 done). Confirm the **store listing name and developer name** also read "ArkenEdu".
 - [ ] Privacy Policy live at `https://arkenedu.com/privacy-policy` and linked in both store listings.
-- [ ] Public account-deletion page live at `https://arkenedu.com/account-deletion`; in-app deletion-request action present (iOS 5.1.1(v)).
+- [ ] Public account-deletion page live at `https://arkenedu.com/account-deletion` (login-free). App has no account self-registration, so iOS 5.1.1(v) in-app deletion does not apply — note the administrative deletion process in App Review notes.
 - [ ] Google Play Data Safety form completed per Section 3.A; content rating/target-audience questionnaire completed accurately.
 - [ ] Apple App Privacy completed per Section 3.B; "Data Not Used to Track You" selected.
 - [ ] Reviewer demo accounts (parent/teacher/admin) provided in review notes for both stores.

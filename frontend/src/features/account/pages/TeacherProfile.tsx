@@ -4,7 +4,6 @@ import { Mail, Phone, BookOpen, Clock, Users, Briefcase, GraduationCap, Building
 import { useApp } from '@/shared/contexts/AppContext';
 import { useAuth } from '@/shared/contexts/AuthContext';
 import ChangePasswordCard from '@/features/account/components/ChangePasswordCard';
-import RequestAccountDeletion from '@/features/account-deletion/components/RequestAccountDeletion';
 
 export default function TeacherProfile() {
   const { user } = useAuth();
@@ -171,14 +170,6 @@ export default function TeacherProfile() {
             transition={{ delay: 0.2 }}
           >
             <ChangePasswordCard />
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-          >
-            <RequestAccountDeletion />
           </motion.div>
         </div>
       </div>

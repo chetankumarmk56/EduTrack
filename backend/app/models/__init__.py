@@ -20,7 +20,6 @@ from app.models.teacher_attendance import (
     TeacherAttendanceStatus, TeacherLeaveType, TeacherLeaveStatus,
 )
 from app.models.uploaded_file import UploadedFile
-from app.models.account_deletion import AccountDeletionRequest, AccountDeletionStatus
 from app.core.database import Base
 
 # Grouped export list for easy project-wide access
@@ -39,5 +38,4 @@ __all__ = [
     "TeacherAttendance", "TeacherLeaveRequest", "TeacherAttendanceAuditLog",
     "TeacherAttendanceStatus", "TeacherLeaveType", "TeacherLeaveStatus",
     "UploadedFile",
-    "AccountDeletionRequest", "AccountDeletionStatus",
 ]

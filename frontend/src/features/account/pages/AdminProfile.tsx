@@ -4,7 +4,6 @@ import { useAuth } from '@/shared/contexts/AuthContext';
 import { useApp } from '@/shared/contexts/AppContext';
 import AccountIdentityCard from '@/features/account/components/AccountIdentityCard';
 import ChangePasswordCard from '@/features/account/components/ChangePasswordCard';
-import RequestAccountDeletion from '@/features/account-deletion/components/RequestAccountDeletion';
 
 export default function AdminProfile() {
   const { user } = useAuth();
@@ -29,10 +28,6 @@ export default function AdminProfile() {
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
         <ChangePasswordCard />
-      </motion.div>
-
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-        <RequestAccountDeletion />
       </motion.div>
     </div>
   );

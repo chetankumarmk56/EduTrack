@@ -41,7 +41,6 @@ from app.api.routes.system import router as system_router
 from app.api.routes.timetable import router as timetable_router
 from app.api.routes.teacher_attendance import router as teacher_attendance_router
 from app.api.routes.devices import router as devices_router
-from app.api.routes.account_deletion import router as account_deletion_router
 
 # Initialize Logging
 logger = setup_logging()
@@ -412,7 +411,6 @@ app.include_router(system_router)
 app.include_router(timetable_router)
 app.include_router(teacher_attendance_router)
 app.include_router(devices_router)
-app.include_router(account_deletion_router)
 
 @app.get("/")
 async def read_root():

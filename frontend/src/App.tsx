@@ -61,7 +61,6 @@ const FinanceDashboard = lazy(() => import('@/features/finance/pages/FinanceDash
 const AdminManualPayments = lazy(() => import('@/features/manual-payments/pages/AdminManualPayments'));
 const AdminProfile = lazy(() => import('@/features/account/pages/AdminProfile'));
 const TeacherAttendanceAdmin = lazy(() => import('@/features/teacher-attendance/pages/TeacherAttendanceAdmin'));
-const AdminAccountDeletions = lazy(() => import('@/features/account-deletion/pages/AdminAccountDeletions'));
 
 // Super Admin portal
 const SuperAdminLayout = lazy(() => import('@/shared/components/layout/SuperAdminLayout'));
@@ -70,7 +69,6 @@ const SuperAdminDashboard = lazy(() => import('@/features/super-admin/pages/Supe
 const SchoolsOverview = lazy(() => import('@/features/super-admin/pages/SchoolsOverview'));
 const SuperAdminCredentials = lazy(() => import('@/features/super-admin/pages/SuperAdminCredentials'));
 const SuperAdminProfile = lazy(() => import('@/features/account/pages/SuperAdminProfile'));
-const SuperAdminAccountDeletions = lazy(() => import('@/features/account-deletion/pages/SuperAdminAccountDeletions'));
 
 function RouteFallback() {
   return (
@@ -127,6 +125,8 @@ function App() {
             <Route path="/terms-of-service" element={<TermsOfService />} />
             <Route path="/data-processing-agreement" element={<DataProcessingAgreement />} />
             <Route path="/account-deletion" element={<AccountDeletion />} />
+            {/* Canonical deletion page lives at /account-deletion; /data-deletion is a convenience alias. */}
+            <Route path="/data-deletion" element={<Navigate to="/account-deletion" replace />} />
 
             <Route path="/parent-login" element={<GuestRoute><Login /></GuestRoute>} />
 
@@ -188,7 +188,6 @@ function App() {
               <Route path="finance" element={<FinanceDashboard />} />
               <Route path="manual-payments" element={<AdminManualPayments />} />
               <Route path="teacher-attendance" element={<TeacherAttendanceAdmin />} />
-              <Route path="account-deletions" element={<AdminAccountDeletions />} />
               <Route path="profile" element={<AdminProfile />} />
             </Route>
 
@@ -203,7 +202,6 @@ function App() {
               <Route path="dashboard" element={<SuperAdminDashboard />} />
               <Route path="schools-overview" element={<SchoolsOverview />} />
               <Route path="admins" element={<SuperAdminCredentials />} />
-              <Route path="account-deletions" element={<SuperAdminAccountDeletions />} />
               <Route path="profile" element={<SuperAdminProfile />} />
             </Route>
 

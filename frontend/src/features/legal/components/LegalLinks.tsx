@@ -9,7 +9,7 @@ const LEGAL_LINKS = [
   { to: '/privacy-policy', label: 'Privacy Policy' },
   { to: '/terms-of-service', label: 'Terms of Service' },
   { to: '/data-processing-agreement', label: 'Data Processing Agreement' },
-  { to: '/account-deletion', label: 'Account Deletion' },
+  { to: '/account-deletion', label: 'Account & Data Deletion' },
 ] as const;
 
 interface LegalLinksProps {

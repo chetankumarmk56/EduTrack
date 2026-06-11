@@ -16,7 +16,7 @@ The legal pages must be **publicly accessible without authentication** (app-stor
 
 Recommended supporting routes:
 - `https://arkenedu.com/legal` — an index page linking to all three documents, sub-processor list, and contact.
-- `https://arkenedu.com/account-deletion` — a public page describing how to request account and data deletion (referenced by Google Play). May redirect to `privacy-policy#deleting-your-account-and-data`.
+- `https://arkenedu.com/account-deletion` — the canonical public page describing how to request account and data deletion (referenced by Google Play and Apple). `https://arkenedu.com/data-deletion` is a convenience alias that redirects here, so either URL is safe to submit; prefer the canonical `/account-deletion`.
 
 Each page should set a self-referencing `<link rel="canonical">`, render server-side or be pre-rendered for crawlers, expose the "Last updated" date, and serve over HTTPS only.
 
