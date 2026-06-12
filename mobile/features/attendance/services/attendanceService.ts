@@ -26,6 +26,16 @@ export const attendanceService = {
   },
 
   /**
+   * Get class attendance already recorded for a specific date. Used to
+   * pre-fill the teacher attendance screen so previously-saved marks survive
+   * a refresh instead of resetting everyone to Present.
+   */
+  getClassAttendanceForDate: async (classId: number, date: string): Promise<any[]> => {
+    const res = await apiClient.get(`attendance/class/${classId}/${date}`);
+    return Array.isArray(res.data) ? res.data : [];
+  },
+
+  /**
    * Get attendance statistics (percentage, days present/absent, etc.)
    */
   getAttendanceStats: async (studentId: number): Promise<any> => {

@@ -60,10 +60,25 @@ export default function TeacherAttendance() {
         });
       setStudents(filtered);
 
-      // Initialize attendance with Present for all (backend expects TitleCase)
+      // Pre-fill from any attendance already saved for today, so a refresh
+      // reflects the real state instead of resetting everyone to Present.
+      let savedByStudent: Record<number, string> = {};
+      try {
+        const saved = await attendanceService.getClassAttendanceForDate(
+          selectedClassId,
+          localDateStr(new Date()),
+        );
+        savedByStudent = Object.fromEntries(saved.map((a: any) => [a.student_id, a.status]));
+      } catch (e) {
+        // Non-fatal: if today's records can't load, fall back to all-Present.
+        console.warn('Could not load saved attendance for today:', e);
+      }
+
+      // Backend stores TitleCase ('Present'/'Absent'/'Late'); this screen is
+      // binary, so treat anything that isn't 'Absent' as 'Present'.
       const initial: Record<number, 'Present' | 'Absent'> = {};
       filtered.forEach(s => {
-        initial[s.id] = 'Present';
+        initial[s.id] = savedByStudent[s.id] === 'Absent' ? 'Absent' : 'Present';
       });
       setAttendance(initial);
     } catch (error) {
