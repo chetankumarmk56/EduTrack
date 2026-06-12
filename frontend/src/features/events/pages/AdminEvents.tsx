@@ -197,7 +197,7 @@ export default function AdminEvents() {
       </div>
 
       {/* Events Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         <AnimatePresence mode="popLayout">
           {filteredEvents.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).map((e) => (
             <motion.div

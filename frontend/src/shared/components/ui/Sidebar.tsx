@@ -101,7 +101,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
           {onMobileClose && (
             <button
               onClick={onMobileClose}
-              className="md:hidden ml-auto p-1.5 rounded-lg hover:bg-white/10 transition-colors shrink-0"
+              className="lg:hidden ml-auto p-1.5 rounded-lg hover:bg-white/10 transition-colors shrink-0"
             >
               <X className="h-5 w-5" />
             </button>
@@ -179,7 +179,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
         initial={{ x: -20, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         transition={{ duration: 0.5, ease: 'circOut' }}
-        className="fixed left-4 top-4 bottom-4 z-40 w-64 floating-panel hidden md:flex flex-col overflow-hidden"
+        className="fixed left-4 top-4 bottom-4 z-40 w-64 floating-panel hidden lg:flex flex-col overflow-hidden"
       >
         {sidebarContent}
       </motion.aside>
@@ -196,7 +196,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
               onClick={onMobileClose}
-              className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
+              className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
             />
             {/* Drawer */}
             <motion.aside
@@ -205,7 +205,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarPr
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="fixed left-0 top-0 bottom-0 z-50 w-72 floating-panel md:hidden flex flex-col overflow-hidden rounded-r-3xl rounded-l-none"
+              className="fixed left-0 top-0 bottom-0 z-50 w-72 floating-panel lg:hidden flex flex-col overflow-hidden rounded-r-3xl rounded-l-none"
             >
               {sidebarContent}
             </motion.aside>

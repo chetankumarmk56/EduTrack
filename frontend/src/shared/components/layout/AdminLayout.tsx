@@ -34,7 +34,7 @@ export default function AdminLayout() {
         <TeacherAurora isDark={isDark} />
         <div className="relative z-10">
           <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
-          <div className="md:ml-72 flex min-h-screen min-w-0 flex-col md:pr-4">
+          <div className="lg:ml-72 flex min-h-screen min-w-0 flex-col lg:pr-4">
             <TopNav onMenuClick={() => setMobileMenuOpen(prev => !prev)} />
             <main className="flex-1 w-full min-w-0 max-w-full p-3 sm:p-4 md:p-6 overflow-x-clip pb-24 md:pb-8">
               <AnimatePresence mode="wait">

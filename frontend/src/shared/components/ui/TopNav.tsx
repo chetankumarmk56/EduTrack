@@ -59,11 +59,11 @@ export default function TopNav({ onMenuClick }: TopNavProps) {
         <div className="flex items-center gap-4 min-w-max">
           <button
             onClick={onMenuClick}
-            className="rounded-xl p-2 md:hidden hover:bg-muted/50 transition-colors"
+            className="rounded-xl p-2 lg:hidden hover:bg-muted/50 transition-colors"
           >
             <Menu className="h-6 w-6" />
           </button>
-          <div className="md:hidden">
+          <div className="lg:hidden">
             <span className="text-xl font-black tracking-tight text-primary glow-text">
               {institutionName?.[0] || 'E'}.
             </span>

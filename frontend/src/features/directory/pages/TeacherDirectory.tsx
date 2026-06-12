@@ -248,7 +248,7 @@ export default function TeacherDirectory() {
       </div>
 
       {/* Teacher Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-5">
         {isDirectoryLoading && teachers.length === 0 ? (
           Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="obsidian-card p-7 space-y-6 animate-pulse border-glass-border">

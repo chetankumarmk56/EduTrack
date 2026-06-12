@@ -4,7 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import React, { Component, useEffect, type ReactNode } from 'react';
 import 'react-native-reanimated';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { Text, TouchableOpacity, View, StyleSheet, ScrollView } from 'react-native';
+import { Text, TouchableOpacity, View, StyleSheet, ScrollView, Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from '@/features/auth/hooks/useAuth';
 import { Colors } from '@/shared/constants/Colors';
@@ -94,12 +94,19 @@ function NotificationDeepLinkHandler() {
   // case is a stale token that Expo will already have invalidated, in which
   // case nothing arrives.
   useEffect(() => {
+    // expo-notifications has no native module on web; skip all push wiring.
+    if (Platform.OS === 'web') return;
     installForegroundHandler();
   }, []);
 
   // Tap handler — runs once the user is logged in (we won't deep-link into
   // protected routes otherwise; the AuthGuard would bounce them back).
   useEffect(() => {
+    // Push notifications aren't available in the browser. These
+    // expo-notifications native APIs (getLastNotificationResponseAsync,
+    // addNotificationResponseReceivedListener, addPushTokenListener) throw an
+    // UnavailabilityError / warn on web, so bail out entirely there.
+    if (Platform.OS === 'web') return;
     if (!isAuthenticated) return;
 
     // Cold-start: app was launched by tapping a notification. Run after a
