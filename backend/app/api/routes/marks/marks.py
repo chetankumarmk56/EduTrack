@@ -1,5 +1,5 @@
 from datetime import date, datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
@@ -72,10 +72,16 @@ async def record_mark(
 @limiter.limit(RATE_LIMITS["marks_batch"])
 async def record_marks_batch(
     request: Request,
+    response: Response,
     marks: List[schemas.MarkCreate],
     db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(require_faculty)
 ):
+    # `response: Response` is REQUIRED here: the limiter is built with
+    # headers_enabled=True, so slowapi injects X-RateLimit-* headers after the
+    # handler runs and raises "parameter `response` must be an instance of
+    # starlette.responses.Response" if no Response param exists — which 500s the
+    # request *after* the DB write has already committed.
     teacher_id = user.id if user.role == "teacher" else None
     return await marks_service.record_marks_batch(db, user.institution_id, marks, teacher_user_id=teacher_id)
 

@@ -259,6 +259,7 @@ async def logout(
 @limiter.limit(RATE_LIMITS["auth_change_password"])
 async def change_password(
     request: Request,
+    response: Response,
     payload: ChangePasswordRequest,
     db: AsyncSession = Depends(get_db),
     current_user: UserContext = Depends(get_current_user),

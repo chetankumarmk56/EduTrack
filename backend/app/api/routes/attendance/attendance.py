@@ -1,5 +1,5 @@
 from datetime import date, timedelta
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
@@ -71,10 +71,16 @@ async def mark_attendance(
 @limiter.limit(RATE_LIMITS["attendance_batch"])
 async def mark_attendance_batch(
     request: Request,
+    response: Response,
     batch: schemas.AttendanceBatch,
     db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(require_faculty)
 ):
+    # `response: Response` is REQUIRED here: the limiter runs with
+    # headers_enabled=True, so slowapi injects X-RateLimit-* headers after the
+    # handler and raises "parameter `response` must be an instance of
+    # starlette.responses.Response" if there's no Response param — which 500s
+    # the request *after* attendance has already been committed.
     teacher_id = user.id if user.role == "teacher" else None
     return await attendance_service.mark_attendance_batch(db, user.institution_id, batch, teacher_user_id=teacher_id)
 
