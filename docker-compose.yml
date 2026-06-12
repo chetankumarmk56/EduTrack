@@ -96,84 +96,16 @@ services:
 volumes:
   postgres_data:
 
-
-
-
-
-
-
-
-
-
 # =============================================================================
-# PRODUCTION (EC2) — connects to AWS RDS Postgres, NOT a local db container.
+# This file is the LOCAL DEV stack (Postgres + Redis + API + worker, all on
+# your machine, with hot-reload).
 #
-# To use on the server: comment out the entire LOCAL block above (lines 1-99)
-# and uncomment everything below. There is no `db` service here because the
-# database lives in RDS; only redis runs as a local container.
+# PRODUCTION (EC2 + RDS) uses a separate file: docker-compose.prod.yml.
+# It drops the local `db` service (the database lives in RDS), runs the baked
+# gunicorn image (no bind-mount, no --reload), and reads DATABASE_URL from
+# backend/.env on the server — secrets are never committed to the repo.
 #
-# Differences from local:
-#   * DATABASE_URL points at the RDS endpoint (real credentials below).
-#   * No source bind-mount and no `--reload` — the prod image is run as baked,
-#     using the Dockerfile's default gunicorn command.
-#   * backend/worker no longer `depends_on: db` (RDS is always-on, external).
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# See README-AWS.md for the full EC2 + RDS runbook.
 # =============================================================================
-
-# services:
-#   redis:
-#     # Shared Redis used for rate limiting (slowapi) + websocket pub/sub.
-#     # Single replica is fine; the data is ephemeral by design.
-#     image: redis:7-alpine
-#     container_name: edutrack_redis
-#     restart: always
-#     healthcheck:
-#       test: ["CMD", "redis-cli", "ping"]
-#       interval: 5s
-#       timeout: 3s
-#       retries: 10
-
-#   backend:
-#     build: ./backend
-#     container_name: edutrack_api
-#     restart: always
-#     ports:
-#       - "8000:8000"
-#     # Pull everything from backend/.env (S3 creds, third-party API keys,
-#     # etc.). The explicit `environment:` block below overrides the values
-#     # that must be container/prod-specific (DB = RDS, Redis = `redis` service).
-#     env_file:
-#       - ./backend/.env
-#     environment:
-#       - DATABASE_URL=postgresql://EduTrack:1si21ec010@edutrackdb1.c7w0c02k2syy.ap-south-1.rds.amazonaws.com:5432/postgres
-#       - ENVIRONMENT=${ENVIRONMENT:-prod}
-#       - FRONTEND_URL=${FRONTEND_URL:-https://www.arkenedu.com}
-#       - REDIS_URL=redis://redis:6379/0
-#       # Scheduler runs in the `worker` service; keep it off on the web replicas.
-#       - FEE_REMINDER_SCHEDULER_ENABLED=false
-#       - WEB_CONCURRENCY=${WEB_CONCURRENCY:-2}
-#     depends_on:
-#       redis:
-#         condition: service_healthy
-
-#   # Background worker. Runs the in-process scheduler (Wednesday fee-reminder
-#   # push, future cron-style jobs) outside the web replicas so:
-#   #   * Scaling the web tier doesn't spawn duplicate cron jobs.
-#   #   * A blocked dispatch can't tie up an ASGI worker.
-#   # Keep this at exactly one replica — the cron_locks table is a safety
-#   # net, not a license to run more than one.
-#   worker:
-#     build: ./backend
-#     container_name: edutrack_worker
-#     restart: always
-#     command: ["python", "worker.py"]
-#     env_file:
-#       - ./backend/.env
-#     environment:
-#       - DATABASE_URL=postgresql://EduTrack:1si21ec010@edutrackdb1.c7w0c02k2syy.ap-south-1.rds.amazonaws.com:5432/postgres
-#       - ENVIRONMENT=${ENVIRONMENT:-prod}
-#       - FRONTEND_URL=${FRONTEND_URL:-https://www.arkenedu.com}
-#       - REDIS_URL=redis://redis:6379/0
-#       - FEE_REMINDER_SCHEDULER_ENABLED=true
-#     depends_on:
-#       redis:
-#         condition: service_healthy

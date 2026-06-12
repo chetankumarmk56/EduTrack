@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 import { authApi } from '@/features/auth/api';
 import { type UserRole } from '@/shared/types';
@@ -162,7 +162,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [currentRole]);
 
-  const login = (_newToken: string, newUser: AuthUser) => {
+  const login = useCallback((_newToken: string, newUser: AuthUser) => {
     const storageRole = newUser.role;
     console.debug(`[Auth] Manual Login for ${storageRole}. Syncing state.`);
 
@@ -188,9 +188,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAuthState('authenticated');
       hydrationRef.current = currentRole;
     }
-  };
+  }, [currentRole]);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     // Hit the server first and wait for the response. /api/auth/logout
     // returns Set-Cookie headers that delete the HttpOnly access +
     // refresh cookies; if we fire-and-forget and let the caller do
@@ -216,17 +216,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     Object.keys(localStorage)
       .filter(k => k.startsWith('edu_cache_') || k === 'edu_active_assignment_id')
       .forEach(k => localStorage.removeItem(k));
-  };
+  }, [currentRole]);
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
-  const isTeacher = user?.role === 'teacher';
-  const isParent = user?.role === 'parent' || user?.role === 'student';
+  // Memoized so route changes (AuthProvider re-renders on every navigation
+  // via useLocation) don't hand a fresh object to every useAuth consumer.
+  const contextValue = useMemo<AuthContextType>(() => {
+    const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
+    const isTeacher = user?.role === 'teacher';
+    const isParent = user?.role === 'parent' || user?.role === 'student';
+    return { user, token, authState, login, logout, isAdmin, isTeacher, isParent };
+  }, [user, token, authState, login, logout]);
 
   return (
-    <AuthContext.Provider value={{
-      user, token, authState, login, logout,
-      isAdmin, isTeacher, isParent
-    }}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );

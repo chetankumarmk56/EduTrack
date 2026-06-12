@@ -7,7 +7,7 @@ ArkenEdu covers the day-to-day workflows a 50–2,000 student school actually ru
 - **Backend:** Python 3.11 / FastAPI / SQLAlchemy 2 (async) / Alembic / PostgreSQL / Redis
 - **Web frontend:** React 19 / Vite / TypeScript / Tailwind v4
 - **Mobile:** Expo SDK 54 / React Native 0.81 / expo-router
-- **Infra:** Render + Neon today; Vercel for the web SPA. AWS migration playbook in [`README-AWS.md`](README-AWS.md).
+- **Infra:** AWS — EC2 running the Docker Compose stack + RDS Postgres, behind host nginx (TLS via certbot). The web SPA is a static Vite build served by nginx on the same box. Full runbook in [`README-AWS.md`](README-AWS.md).
 
 ---
 
@@ -52,11 +52,11 @@ SCHOOL/
 │   ├── features/         # parallel feature slices
 │   └── services/         # shared mobile services (push, auth, api)
 │
-├── deployment/           # nginx config, reverse-proxy templates
-├── docker-compose.yml    # local dev stack (Postgres + Redis + API + worker)
-├── render.yaml           # Render IaC (web + cron job)
-├── README-AWS.md         # production AWS deployment guide
-└── docs/                 # one-pager, demo script, internal docs
+├── deployment/             # nginx config, reverse-proxy templates
+├── docker-compose.yml      # local dev stack (Postgres + Redis + API + worker)
+├── docker-compose.prod.yml # production stack (EC2 + RDS: Redis + API + worker)
+├── README-AWS.md           # production AWS (EC2 + RDS) deployment guide
+└── docs/                   # one-pager, demo script, internal docs
 ```
 
 ---
@@ -65,8 +65,8 @@ SCHOOL/
 
 ```
 ┌──────────────────┐   ┌──────────────────┐   ┌──────────────────┐
-│ Web SPA (Vercel) │   │ Mobile (Expo)    │   │ Admin scripts /  │
-│ React 19 + Vite  │   │ React Native     │   │ Render cron jobs │
+│ Web SPA (static) │   │ Mobile (Expo)    │   │ Admin scripts /  │
+│ React 19 + Vite  │   │ React Native     │   │ cron (systemd)   │
 └─────────┬────────┘   └─────────┬────────┘   └─────────┬────────┘
           │ HTTPS                │ HTTPS                │ HTTPS
           │ HttpOnly cookies     │ Bearer tokens        │ X-Cron-Secret
@@ -90,7 +90,7 @@ SCHOOL/
                            │          │
                 ┌──────────▼──┐   ┌───▼─────────┐    ┌──────────────┐
                 │ Postgres    │   │ Redis       │    │ AWS S3       │
-                │ (Neon/RDS)  │   │ rate-limit  │    │ uploads +    │
+                │ (AWS RDS)   │   │ rate-limit  │    │ uploads +    │
                 │             │   │ + pub/sub   │    │ presigned    │
                 │             │   │ + WS fanout │    │ URLs (1h)    │
                 └─────────────┘   └─────────────┘    └──────────────┘
@@ -225,24 +225,20 @@ A `verify` skill in `.claude/` documents the manual happy-path checks for each m
 
 ## Deployment
 
-Two supported deployment targets:
+Production runs on **AWS EC2 + RDS** (live at `api.arkenedu.com` / `www.arkenedu.com`).
 
-### Option 1 — Render + Neon + Vercel (current production)
+- **Backend** → the prod Docker Compose stack ([`docker-compose.prod.yml`](docker-compose.prod.yml): `backend` + `worker` + `redis`) on a single Ubuntu EC2 box. Run `docker compose -f docker-compose.prod.yml up -d --build`; migrations apply via `docker compose -f docker-compose.prod.yml run --rm backend alembic upgrade head`.
+- **Database** → AWS RDS PostgreSQL. The `DATABASE_URL` lives in `backend/.env` on the server (never committed).
+- **Edge / TLS** → host nginx terminates HTTPS (Let's Encrypt via certbot) and reverse-proxies `api.arkenedu.com` → `127.0.0.1:8000`.
+- **Cron** → the `worker` container owns the fee-reminder scheduler. An optional external cron can hit `/api/finance/fee-reminders/dispatch` with `X-Cron-Secret`.
+- **Frontend** → static Vite build served by nginx (same box). Set `VITE_API_BASE_URL=https://api.arkenedu.com/api`.
 
-- **Backend** → Render web service, defined in [`render.yaml`](render.yaml). Render runs `alembic upgrade head && gunicorn -c gunicorn_conf.py app.main:app` on every deploy.
-- **Cron** → Render cron job at `30 3 * * 3` (Wed 09:00 IST) calls `/api/finance/fee-reminders/dispatch` with `X-Cron-Secret`.
-- **Database** → Neon Postgres (serverless, branch-per-env friendly).
-- **Redis** → Upstash or Render Redis.
-- **Frontend** → Vercel (auto-deploys from `main`). Set `VITE_API_BASE_URL` to the Render URL.
-
-Pushing to `main` triggers `.github/workflows/deploy-prod.yml`, which:
+Pushing to `main` triggers [`.github/workflows/deploy-prod.yml`](.github/workflows/deploy-prod.yml), which:
 1. Runs `gitleaks` + `pip-audit`.
-2. Fires the Render and Vercel deploy hooks in parallel.
-3. Polls `/health` for up to 6 minutes to confirm the rollout.
+2. SSHes into the EC2 box, pulls `main`, rebuilds the image, runs `alembic upgrade head`, and `docker compose up -d`.
+3. Polls `/health` to confirm the rollout.
 
-### Option 2 — AWS (ECS Fargate + RDS + ElastiCache + ALB)
-
-Follow [`README-AWS.md`](README-AWS.md) for the full runbook: VPC, RDS, ElastiCache, ECS service with auto-scaling, ALB, ACM, Route 53, CloudWatch alarms, and secret management via SSM Parameter Store.
+Full step-by-step runbook (provisioning EC2 + RDS + S3, nginx + certbot, DNS): [`README-AWS.md`](README-AWS.md).
 
 ---
 
@@ -255,7 +251,7 @@ The full list with descriptions lives in [`backend/app/core/config.py`](backend/
 | `SECRET_KEY` | JWT signing — 32+ random chars. Generate with `python -c 'import secrets; print(secrets.token_urlsafe(32))'`. |
 | `DATABASE_URL` | `postgresql+asyncpg://user:pass@host:port/db` |
 | `REDIS_URL` | `redis://...` — required for multi-replica rate limiting and websocket pub/sub. |
-| `FRONTEND_URL` | The Vercel URL — used for CORS allow-list and email links. |
+| `FRONTEND_URL` | The web SPA's URL (e.g. `https://www.arkenedu.com`) — used for CORS allow-list and email links. |
 | `ENVIRONMENT` | `prod` enables HSTS, secure cookies, and strict storage/credential checks. |
 | `AWS_S3_BUCKET` + `AWS_S3_REGION` + `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` | S3 is the only supported storage backend in prod. Startup hard-fails if these are unset. |
 | `CRON_SECRET` | Shared secret for the fee-reminder cron job. |
@@ -276,7 +272,7 @@ Optional but recommended:
 - **Health endpoints:** `GET /health` (no DB) and `GET /ready` (validates DB). Use `/health` for liveness probes, `/ready` for readiness.
 - **Logs:** structured JSON in prod (`LOG_JSON=true` by default when `ENVIRONMENT=prod`), human-readable in dev. Every line carries `request_id` so you can grep one tag end-to-end.
 - **Rate limiting:** slowapi with Redis backend. Falls back to in-memory per-worker counters when `REDIS_URL` is unset — fine for a single replica, not fine in prod.
-- **Backups:** Neon does PITR automatically. If you migrate to RDS, configure automated snapshots + a weekly logical dump to S3.
+- **Backups:** enable RDS automated backups (PITR) and a sensible retention window; optionally add a weekly logical `pg_dump` to S3 for off-site recovery.
 - **Migrations:** never edit a merged Alembic revision in place. Add a new revision instead. The deploy pipeline runs `alembic upgrade head` before booting workers.
 
 ---

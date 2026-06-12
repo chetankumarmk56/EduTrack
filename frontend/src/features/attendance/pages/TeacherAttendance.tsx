@@ -4,6 +4,7 @@ import { useAuth } from '@/shared/contexts/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle2, Save, AlertCircle, Check, ChevronDown, Hash, UserCircle, Clock, Users, PieChart } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
+import { localDateStr } from '@/shared/lib/format';
 import { attendanceApi } from '@/features/attendance/api';
 import { directoryApi } from '@/features/directory/api';
 import { getErrorMessage } from '@/shared/lib/errorHandler';
@@ -15,7 +16,9 @@ import type { Student } from '@/shared/types';
 export default function TeacherAttendance() {
   const { user } = useAuth();
   const { teacherDirectory, teacherStats, fetchTeacherStats, activeAssignmentId, setActiveAssignmentId, refreshDirectory } = useApp();
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  // Local calendar date — toISOString() here gave the UTC date, which
+  // defaulted the form to *yesterday* before 05:30 IST.
+  const [selectedDate, setSelectedDate] = useState(localDateStr(new Date()));
   const [isSaving, setIsSaving] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');

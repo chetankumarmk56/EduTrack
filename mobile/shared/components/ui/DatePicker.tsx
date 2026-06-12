@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
   Platform,
-  TextInput 
 } from 'react-native';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { Colors } from '@/shared/constants/Colors';
+import { localDateStr, parseLocalDate } from '@/shared/utils/formatters';
 
 interface DatePickerProps {
   value: Date | null;
@@ -53,14 +53,17 @@ export function DatePicker({ value, onChange, label, placeholder = 'Select date'
               cursor: 'pointer',
               width: '100%'
             }}
-            value={value ? value.toISOString().split('T')[0] : ''}
+            // Local-date round-trip: toISOString() rendered the UTC day
+            // (off by one east/west of UTC), and `new Date("YYYY-MM-DD")`
+            // parses as UTC midnight — both shift the selected day.
+            value={value ? localDateStr(value) : ''}
             onChange={(e) => {
-              const date = new Date(e.target.value);
+              const date = parseLocalDate(e.target.value);
               if (!isNaN(date.getTime())) {
                 onChange(date);
               }
             }}
-            max={new Date().toISOString().split('T')[0]}
+            max={localDateStr(new Date())}
           />
         </View>
       </View>

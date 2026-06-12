@@ -2,9 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { directoryService, attendanceService, type StudentProfile } from '../../services';
+import { localDateStr } from '@/shared/utils/formatters';
 import { Colors } from '@/shared/constants/Colors';
-import { Card, SectionHeader } from '@/shared/components/ui/Card';
-import { LoadingScreen, ErrorState } from '@/shared/components/ui/Feedback';
+import { SectionHeader } from '@/shared/components/ui/Card';
+import { LoadingScreen } from '@/shared/components/ui/Feedback';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
@@ -104,7 +105,9 @@ export default function TeacherAttendance() {
       
       await attendanceService.markBatch({
         school_class_id: selectedClassId,
-        date: new Date().toISOString().split('T')[0],
+        // Local calendar date — toISOString() gave the UTC date, which
+        // recorded attendance under *yesterday* before 05:30 IST.
+        date: localDateStr(new Date()),
         records
       });
       

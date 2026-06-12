@@ -161,10 +161,12 @@ class AnnouncementService:
                     homework_service,
                 )
 
-                for a in hw_announcements:
-                    per_viewer_status[a.id] = await homework_service.get_my_children_status(
-                        db, a, viewer_user_id, institution_id
-                    )
+                # One bulk call for the page — the per-announcement variant
+                # re-resolved the same parent + children for every homework
+                # row (3-4 queries each).
+                per_viewer_status = await homework_service.get_my_children_status_bulk(
+                    db, hw_announcements, viewer_user_id, institution_id
+                )
 
         # Cache target counts for class-scoped homework so we don't refetch
         # the class size for each row.

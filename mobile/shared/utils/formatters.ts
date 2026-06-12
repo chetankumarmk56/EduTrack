@@ -1,5 +1,22 @@
 import { AttendanceRecord, Mark } from '@/shared/types';
 
+// Local-calendar date string ("YYYY-MM-DD"). Never use
+// `toISOString().split('T')[0]` for this — that returns the UTC date,
+// which is still *yesterday* before 05:30 IST and once caused attendance
+// to be recorded under the wrong day.
+export function localDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/** Parse a "YYYY-MM-DD" string as a local-time Date (avoids the UTC-midnight shift). */
+export function parseLocalDate(iso: string): Date {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+
 export function computeGradeLabel(pct: number) {
   if (pct >= 90) return 'A+';
   if (pct >= 80) return 'A';

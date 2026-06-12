@@ -22,10 +22,11 @@ manual flow.
 
 Production wiring
 -----------------
-* Web pods: ``FEE_REMINDER_SCHEDULER_ENABLED=false`` (default in render.yaml).
-* Optional worker pod: launch with ``python worker.py``; run exactly one
-  replica — the per-institution cron_locks row is a belt-and-braces guard
-  if someone scales it up.
+* Web containers: ``FEE_REMINDER_SCHEDULER_ENABLED=false`` (the default on the
+  ``backend`` service in docker-compose.prod.yml).
+* Worker container: ``docker-compose.prod.yml`` runs this entrypoint with the
+  flag forced on. Run exactly one replica — the per-institution cron_locks row
+  is a belt-and-braces guard if someone scales it up.
 
 If no institution will ever want recurring reminders, this worker can be
 omitted entirely. The admin click-to-send endpoint is the source of truth.

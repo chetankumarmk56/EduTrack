@@ -114,8 +114,9 @@ def set_auth_cookies(
     so it's never sent on any other endpoint.
     """
     # SameSite policy is resolved centrally (see _cookie_samesite): 'none'
-    # for a cross-site frontend (Vercel + Render), 'lax' for a same-site
-    # subdomain deploy (www + api under one domain). Lax cookies are dropped
+    # for a cross-site frontend (SPA on a different site than the API), 'lax'
+    # for a same-site subdomain deploy (www + api under one domain). Lax
+    # cookies are dropped
     # on cross-site XHR, which is why a cross-site frontend must use None;
     # None mandates Secure=True, which _cookie_common_attrs enforces.
     common = _cookie_common_attrs()

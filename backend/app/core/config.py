@@ -104,8 +104,9 @@ class Settings(BaseSettings):
     # single-instance dev box, NOT fine for multi-replica prod.
     REDIS_URL: Optional[str] = None
 
-    # Shared secret used by external cron jobs (Render Cron / EventBridge /
-    # GitHub Actions) to authenticate against /api/finance/fee-reminders/dispatch
+    # Shared secret used by external cron jobs (a systemd timer / cron on the
+    # EC2 host, or GitHub Actions) to authenticate against
+    # /api/finance/fee-reminders/dispatch
     # without holding a JWT. Send via `X-Cron-Secret` header. Leave unset to
     # disable secret-based access (admin JWT still works).
     CRON_SECRET: Optional[str] = None
@@ -130,8 +131,8 @@ class Settings(BaseSettings):
         description="Cookie domain for production, e.g. '.yourdomain.com' (leading dot for subdomains)"
     )
     # Override the auth-cookie SameSite policy. Empty = auto: 'none' in prod
-    # (for a frontend hosted on a *different site* than the API, e.g.
-    # Vercel + Render) and 'lax' in dev.
+    # (for a frontend hosted on a *different site* than the API, e.g. a
+    # CDN/static host on a different domain) and 'lax' in dev.
     #
     # When the SPA and API share one registrable domain — e.g.
     # www.arkenedu.com (SPA) + api.arkenedu.com (API), which are *same-site* —
@@ -248,8 +249,8 @@ class Settings(BaseSettings):
             # attachments, payment QR images, parent payment screenshots,
             # generated receipt PDFs — go through AWS S3. Without it,
             # uploads would write to the container's local disk, which is
-            # ephemeral on Fargate/Render/Fly/Heroku and unreachable across
-            # replicas. Hard-fail at startup so the operator sees the
+            # ephemeral across container rebuilds/redeploys (and unreachable
+            # across replicas). Hard-fail at startup so the operator sees the
             # problem at deploy time instead of when a parent opens a
             # broken attachment two days later.
             s3_configured = bool(self.AWS_S3_BUCKET and self.AWS_S3_REGION)

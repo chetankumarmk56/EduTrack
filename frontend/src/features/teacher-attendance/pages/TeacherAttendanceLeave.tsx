@@ -5,6 +5,7 @@ import {
   CheckCircle2, AlertCircle, Loader2, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
+import { localDateStr, parseLocalDate } from '@/shared/lib/format';
 import { getErrorMessage } from '@/shared/lib/errorHandler';
 import { teacherAttendanceApi, type TeacherAttendanceRecord, type TeacherLeaveRecord } from '@/features/teacher-attendance/api';
 import { SkeletonStatGrid, SkeletonTable, SkeletonList } from '@/shared/components/ui/Skeleton';
@@ -41,19 +42,6 @@ const LEAVE_STATUS_COLORS: Record<string, string> = {
 };
 
 const LEAVE_TYPES = ['CASUAL', 'SICK', 'EARNED', 'MATERNITY', 'PATERNITY', 'OTHER'];
-
-function localDateStr(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
-/** Parse a "YYYY-MM-DD" string as a local-time Date (avoids UTC-shift bugs). */
-function parseLocalDate(iso: string): Date {
-  const [y, m, d] = iso.split('-').map(Number);
-  return new Date(y, (m ?? 1) - 1, d ?? 1);
-}
 
 export default function TeacherAttendanceLeave() {
   const [tab, setTab] = useState<Tab>('today');

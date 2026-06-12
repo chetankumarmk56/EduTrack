@@ -38,6 +38,13 @@ describe('AuthContext hydration', () => {
   beforeEach(() => {
     localStorage.clear();
     mocked.getMe.mockReset();
+    // AuthContext reads window.location.pathname (not the router) inside
+    // its hydration effect. jsdom defaults to '/', which isPublicPath()
+    // treats as the public landing page — hydration short-circuits to
+    // 'unauthenticated' and never calls /auth/me. Keep jsdom's URL in
+    // sync with the MemoryRouter entry so the effect behaves like a real
+    // browser on the dashboard route.
+    window.history.pushState({}, '', '/parent/dashboard');
   });
 
   it('becomes authenticated when /auth/me succeeds', async () => {

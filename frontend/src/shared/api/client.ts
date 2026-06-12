@@ -25,16 +25,12 @@ const client: AxiosInstance = axios.create({
   },
 });
 
-// Request signature builder. Returns null for non-GET requests (mutations
-// are never deduped). Kept around so future dedup logic has a single
-// canonical place to compute the key; the actual in-flight cache was
-// removed because it never populated and confused the 401-retry path.
-const getRequestSignature = (config: InternalAxiosRequestConfig): string | null => {
-  if (config.method !== 'get') return null;
-  const params = new URLSearchParams(config.params || {}).toString();
-  const key = params ? `${config.url}?${params}` : config.url;
-  return key || null;
-};
+// Role-scoped login route. Centralised because both the terminal-401 path
+// and the failed-refresh path must agree on where to bounce the user.
+const loginPathForRole = (role: string): string =>
+  role === 'admin' ? '/admin-login' :
+    role === 'teacher' ? '/teacher-login' :
+      role === 'super_admin' ? '/superadmin-login' : '/parent-login';
 
 // Queue to handle multiple simultaneous requests during token refresh
 interface QueuedRequest {
@@ -92,10 +88,6 @@ client.interceptors.request.use(
 // Response Interceptor: Handle 401 with Token Rotation + Dedup cleanup
 client.interceptors.response.use(
   (response) => {
-    // Touch the signature so the helper stays warm for future use; the
-    // result is intentionally discarded.
-    void getRequestSignature(response.config as InternalAxiosRequestConfig);
-
     // Global Success Toast for mutations if a message is returned
     const method = response.config.method?.toLowerCase();
     const url = response.config.url || '';
@@ -132,8 +124,6 @@ client.interceptors.response.use(
   },
   async (error) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
-    void getRequestSignature(originalRequest);
-
     const role = getCurrentPortalRole();
 
     // 1. AVOID REFRESH LOOPS & DEADLOCKS:
@@ -171,10 +161,7 @@ client.interceptors.response.use(
           // hydrates fresh from /api/auth/me, which will 401 and route
           // here, this time to the login page.
           localStorage.removeItem(`edu_user_${role}`);
-          const loginRedirect = `${role === 'admin' ? '/admin-login' :
-            role === 'teacher' ? '/teacher-login' :
-              role === 'super_admin' ? '/superadmin-login' : '/parent-login'}?reason=expired`;
-          window.location.href = loginRedirect;
+          window.location.href = `${loginPathForRole(role)}?reason=expired`;
         }
         return Promise.reject(error);
       }
@@ -222,9 +209,7 @@ client.interceptors.response.use(
           localStorage.removeItem(`edu_institution_id_${role}`);
 
           // Determine the appropriate login redirect based on the current portal
-          const loginRedirect = `${role === 'admin' ? '/admin-login' :
-            role === 'teacher' ? '/teacher-login' :
-              role === 'super_admin' ? '/superadmin-login' : '/parent-login'}?reason=expired`;
+          const loginRedirect = `${loginPathForRole(role)}?reason=expired`;
 
           console.debug(`[Auth] Redirecting to ${loginRedirect} due to failed session.`);
           window.location.href = loginRedirect;

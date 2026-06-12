@@ -1,0 +1,76 @@
+# =============================================================================
+# PRODUCTION stack — EC2 + RDS.
+#
+# Run on the server:
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Differences from the local docker-compose.yml:
+#   * NO `db` service — Postgres lives in AWS RDS. DATABASE_URL is read from
+#     backend/.env on the server (the RDS connection string with credentials).
+#     Secrets are NEVER committed to the repo.
+#   * Runs the baked gunicorn image (Dockerfile CMD) — no source bind-mount,
+#     no --reload.
+#   * The API listens on 127.0.0.1:8000 only; the host's nginx (TLS via
+#     certbot) reverse-proxies api.arkenedu.com → 127.0.0.1:8000.
+#   * Run DB migrations once per deploy, before bringing the app up:
+#       docker compose -f docker-compose.prod.yml run --rm backend alembic upgrade head
+#
+# See README-AWS.md for the full runbook.
+# =============================================================================
+
+services:
+  redis:
+    # Rate limiting (slowapi) + websocket pub/sub. Single node; data is
+    # ephemeral by design. Swap REDIS_URL in backend/.env for ElastiCache
+    # if you'd rather use managed Redis.
+    image: redis:7-alpine
+    container_name: edutrack_redis
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: ./backend
+    image: edutrack-backend:latest
+    container_name: edutrack_api
+    restart: always
+    # Bind to loopback only — the public edge is the host nginx, which
+    # terminates TLS and proxies to this port. Never expose 8000 publicly.
+    ports:
+      - "127.0.0.1:8000:8000"
+    # Everything (DATABASE_URL → RDS, SECRET_KEY, S3 creds, OpenAI/Twilio keys,
+    # ADDITIONAL_CORS_ORIGINS, COOKIE_SAMESITE, …) comes from backend/.env on
+    # the server. The environment block below only pins infra-specific values.
+    env_file:
+      - ./backend/.env
+    environment:
+      - ENVIRONMENT=prod
+      # Redis is a sibling container on the compose network.
+      - REDIS_URL=redis://redis:6379/0
+      # Scheduler runs in the `worker` service; keep it off on the web tier.
+      - FEE_REMINDER_SCHEDULER_ENABLED=false
+      - WEB_CONCURRENCY=${WEB_CONCURRENCY:-2}
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # Background worker — owns the fee-reminder scheduler loop. Exactly one
+  # replica (the cron_locks table is a safety net, not a license to scale).
+  worker:
+    build: ./backend
+    image: edutrack-backend:latest
+    container_name: edutrack_worker
+    restart: always
+    command: ["python", "worker.py"]
+    env_file:
+      - ./backend/.env
+    environment:
+      - ENVIRONMENT=prod
+      - REDIS_URL=redis://redis:6379/0
+      - FEE_REMINDER_SCHEDULER_ENABLED=true
+    depends_on:
+      redis:
+        condition: service_healthy

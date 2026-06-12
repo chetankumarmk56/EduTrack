@@ -50,7 +50,7 @@ A single platform that covers the day-to-day workflows a school actually runs on
 - **Backend** — Python 3.11, FastAPI, async SQLAlchemy 2, PostgreSQL, Redis.
 - **Web** — React 19, Vite, TypeScript, Tailwind v4.
 - **Mobile** — Expo SDK 54, React Native 0.81.
-- **Infra** — Render + Neon + Vercel today; AWS ECS/RDS/ElastiCache deployment runbook included.
+- **Infra** — AWS: EC2 (Docker Compose) + RDS Postgres + S3, behind nginx/certbot; full deployment runbook included.
 - **Security** — HttpOnly cookies, bcrypt off the event loop, account lockout, CSP + HSTS, rate limiting, gitleaks in CI.
 
 ---

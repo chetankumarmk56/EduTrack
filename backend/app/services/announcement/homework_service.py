@@ -73,7 +73,7 @@ async def _children_of_parent(db: AsyncSession, parent_id: int) -> List[Student]
     return list(p.students) if p else []
 
 
-async def _student_is_targeted(announcement: Announcement, student: Student) -> bool:
+def _student_is_targeted(announcement: Announcement, student: Student) -> bool:
     """A homework announcement targets a child if:
        - it's STUDENT-scoped and the IDs match, or
        - it's CLASS-scoped and the child is in that class.
@@ -138,7 +138,7 @@ async def confirm_homework(
         raise HTTPException(
             status_code=403, detail="This student is not linked to your account"
         )
-    if not await _student_is_targeted(announcement, student):
+    if not _student_is_targeted(announcement, student):
         raise HTTPException(
             status_code=400,
             detail="This homework was not assigned to the selected student",
@@ -318,7 +318,7 @@ async def get_my_children_status(
         return []
 
     children = await _children_of_parent(db, parent.id)
-    targeted = [c for c in children if await _student_is_targeted(announcement, c)]
+    targeted = [c for c in children if _student_is_targeted(announcement, c)]
     if not targeted:
         return []
 
@@ -345,9 +345,78 @@ async def get_my_children_status(
     return out
 
 
+async def get_my_children_status_bulk(
+    db: AsyncSession,
+    announcements: List[Announcement],
+    user_id: int,
+    institution_id: int,
+) -> dict[UUID, List[dict]]:
+    """Bulk variant of :func:`get_my_children_status` for feed pages.
+
+    Resolves the caller's parent profile and children once and answers all
+    homework rows with a single confirmation query — the per-announcement
+    variant repeated those lookups for every row on the page (a 3-4×N
+    query fan-out on the parent announcements feed).
+
+    Returns a sparse dict keyed by announcement id; announcements with no
+    targeted child are simply absent (callers default to []), matching the
+    single-row variant's empty-list result.
+    """
+    homework = [
+        a for a in announcements if a.category == AnnouncementCategory.HOMEWORK
+    ]
+    if not homework:
+        return {}
+
+    parent = await _resolve_parent_for_user(db, user_id, institution_id)
+    if not parent:
+        return {}
+
+    children = await _children_of_parent(db, parent.id)
+    if not children:
+        return {}
+
+    targeted_by_announcement: dict[UUID, List[Student]] = {}
+    for a in homework:
+        targeted = [c for c in children if _student_is_targeted(a, c)]
+        if targeted:
+            targeted_by_announcement[a.id] = targeted
+    if not targeted_by_announcement:
+        return {}
+
+    confirmed_res = await db.execute(
+        select(HomeworkConfirmation).where(
+            HomeworkConfirmation.announcement_id.in_(list(targeted_by_announcement)),
+            HomeworkConfirmation.student_id.in_({c.id for c in children}),
+        )
+    )
+    by_key = {
+        (row.announcement_id, row.student_id): row
+        for row in confirmed_res.scalars().all()
+    }
+
+    out: dict[UUID, List[dict]] = {}
+    for ann_id, targeted in targeted_by_announcement.items():
+        entries: List[dict] = []
+        for child in targeted:
+            row = by_key.get((ann_id, child.id))
+            entries.append(
+                {
+                    "student_id": child.id,
+                    "student_name": child.name,
+                    "confirmed": row is not None,
+                    "confirmed_at": row.confirmed_at if row else None,
+                    "confirmed_by_parent_id": row.parent_id if row else None,
+                }
+            )
+        out[ann_id] = entries
+    return out
+
+
 homework_service = type("HomeworkServiceNS", (), {
     "confirm_homework": staticmethod(confirm_homework),
     "list_confirmations_for_teacher": staticmethod(list_confirmations_for_teacher),
     "homework_target_count": staticmethod(homework_target_count),
     "get_my_children_status": staticmethod(get_my_children_status),
+    "get_my_children_status_bulk": staticmethod(get_my_children_status_bulk),
 })()

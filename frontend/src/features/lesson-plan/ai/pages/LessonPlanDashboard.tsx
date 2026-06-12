@@ -61,6 +61,8 @@ import type {
   LessonPlanScheduleItem,
 } from '@/features/lesson-plan/ai/types';
 import type { Event as SchoolEvent } from '@/shared/types';
+// Shared local-date helpers, aliased to this file's established names.
+import { localDateStr as toKey, parseLocalDate as parseISO } from '@/shared/lib/format';
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -104,15 +106,6 @@ const CHAPTER_PALETTE: ChapterColor[] = [
 
 function pickColor(idx: number): ChapterColor {
   return CHAPTER_PALETTE[((idx % CHAPTER_PALETTE.length) + CHAPTER_PALETTE.length) % CHAPTER_PALETTE.length];
-}
-
-function parseISO(iso: string): Date {
-  const [y, m, d] = iso.split('-').map(Number);
-  return new Date(y, (m || 1) - 1, d || 1);
-}
-
-function toKey(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function sameDay(a: Date, b: Date): boolean {

@@ -1,3 +1,21 @@
+// Local-calendar date string ("YYYY-MM-DD"). Never use
+// `toISOString().split('T')[0]` for this — that returns the UTC date,
+// which is yesterday's date for anyone east of UTC before their local
+// morning (e.g. before 05:30 in India) and has caused real
+// wrong-day-attendance bugs in this app.
+export function localDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/** Parse a "YYYY-MM-DD" string as a local-time Date (avoids UTC-shift bugs). */
+export function parseLocalDate(iso: string): Date {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+
 export function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return '—';
   if (bytes < 1024) return `${bytes} B`;

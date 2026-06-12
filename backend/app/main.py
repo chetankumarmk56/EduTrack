@@ -55,8 +55,9 @@ async def lifespan(app: FastAPI):
       from the first request.
     * Starts the in-process Wednesday fee-reminder scheduler when
       FEE_REMINDER_SCHEDULER_ENABLED is true. In production the scheduler
-      should run from a dedicated cron/worker, not from the web replicas
-      (set the flag to false in render.yaml / docker-compose).
+      should run from the dedicated worker container, not from the web
+      replicas (the flag is false on the web service in
+      docker-compose.prod.yml and true only on the worker service).
 
     Each component is started/stopped independently so a slow Redis ping
     can't take down the whole process.
@@ -150,7 +151,7 @@ _CSP_HEADER = (
 # request — including ones from deeper middleware like CORS or
 # security-headers — carries the correlation ID.
 #
-# Accepts an inbound X-Request-Id from upstream (Render edge / nginx /
+# Accepts an inbound X-Request-Id from upstream (nginx / an ALB /
 # CloudFront set this) so traces stitch end-to-end. Falls back to a
 # fresh UUID when absent. Either way the value is echoed in the
 # X-Request-Id response header so clients can quote it in bug reports.

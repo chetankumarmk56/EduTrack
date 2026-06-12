@@ -4,11 +4,13 @@ Verifies the gunicorn config used in prod:
 * Uses UvicornWorker (so async handlers actually run async).
 * Respects ``WEB_CONCURRENCY`` env override.
 * Falls back to a sane CPU-derived default, capped so a 16-vCPU
-  builder doesn't try to spawn 33 workers in a 1 GB Render box.
+  builder doesn't try to spawn 33 workers in a 1 GB container.
 * Honours proxy headers — without this, rate limits would collapse to
   the load-balancer IP.
-* Dockerfile + render.yaml actually invoke gunicorn (catches the
-  "config exists but nothing references it" regression).
+* The Dockerfile actually invokes gunicorn (catches the
+  "config exists but nothing references it" regression). The prod
+  Docker Compose (docker-compose.prod.yml) runs the image's baked CMD,
+  so this one check covers prod too.
 
 These are config-shape tests; we don't actually launch gunicorn here.
 The shape guarantees are what gets us safely past `git push`.
@@ -18,8 +20,6 @@ import importlib.util
 import os
 import re
 import sys
-
-import pytest
 
 sys.path.append(os.getcwd())
 
@@ -50,7 +50,7 @@ def test_worker_class_is_uvicorn():
 
 def test_proxy_headers_allowed_for_all():
     """
-    Behind nginx / Render edge / CloudFront the client IP is in the
+    Behind nginx / an ALB / CloudFront the client IP is in the
     X-Forwarded-For header. Without forwarded_allow_ips='*' gunicorn
     would refuse to read it and the rate limiter would key on the
     proxy's IP — trivially defeated by a single attacker.
@@ -91,7 +91,7 @@ def test_default_workers_capped_at_8(monkeypatch):
 
 def test_default_workers_minimum_2(monkeypatch):
     """
-    A 1-vCPU box (Render Free, t2.micro) should still get >= 2 workers
+    A 1-vCPU box (e.g. a t3.micro EC2 instance) should still get >= 2 workers
     so a single bcrypt-stalled worker doesn't take the whole service down.
     """
     monkeypatch.delenv("WEB_CONCURRENCY", raising=False)
@@ -118,22 +118,6 @@ def test_dockerfile_invokes_gunicorn():
     assert "gunicorn_conf.py" in last_cmd, (
         "Dockerfile CMD must point at gunicorn_conf.py so worker count, "
         "timeouts, and proxy-header config aren't accidentally lost."
-    )
-
-
-def test_render_yaml_invokes_gunicorn():
-    """render.yaml startCommand must call gunicorn."""
-    render_yaml_path = os.path.join(
-        os.path.dirname(os.getcwd()), "render.yaml"
-    )
-    if not os.path.exists(render_yaml_path):
-        # Repo-root layout may differ in CI; skip rather than false-fail.
-        pytest.skip("render.yaml not found at repo root")
-    with open(render_yaml_path) as fh:
-        content = fh.read()
-    assert "gunicorn -c gunicorn_conf.py" in content, (
-        "render.yaml startCommand must use the shared gunicorn config so "
-        "prod doesn't drift from local docker-compose."
     )
 
 

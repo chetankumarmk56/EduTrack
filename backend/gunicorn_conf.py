@@ -25,7 +25,7 @@ Per-worker in-process state to keep in mind:
 Worker count formula:
   WEB_CONCURRENCY override → respect it.
   Otherwise: max(2, min(2*cpus + 1, 8)). Cap at 8 because each worker
-  holds ~150MB of bcrypt/asyncpg buffers; on a 1 GB Render box we
+  holds ~150MB of bcrypt/asyncpg buffers; on a 1 GB box we
   don't want to thrash.
 """
 from __future__ import annotations

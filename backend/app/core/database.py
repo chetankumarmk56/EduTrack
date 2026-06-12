@@ -16,7 +16,8 @@ elif _ASYNC_URL.startswith("postgresql://"):
     _ASYNC_URL = _ASYNC_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 
 # 2. asyncpg does NOT accept ?sslmode= — strip it and use connect_args instead
-# asyncpg accepts the string "require" (not an ssl.SSLContext) for Neon compatibility
+# asyncpg accepts the string "require" (not an ssl.SSLContext); this keeps
+# managed-Postgres URLs that ship ?sslmode=require (e.g. AWS RDS) working.
 _ssl_required = "sslmode=require" in _ASYNC_URL or "sslmode=prefer" in _ASYNC_URL
 for _param in ("?sslmode=require", "&sslmode=require", "?sslmode=prefer", "&sslmode=prefer",
                "?sslmode=disable", "&sslmode=disable", "?sslmode=allow", "&sslmode=allow"):

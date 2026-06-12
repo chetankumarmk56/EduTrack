@@ -61,14 +61,8 @@ export default defineConfig({
           if (id.includes('node_modules/recharts')) {
             return 'recharts';
           }
-          if (id.includes('node_modules/leaflet') || id.includes('node_modules/react-leaflet')) {
-            return 'leaflet';
-          }
           if (id.includes('node_modules/framer-motion')) {
             return 'framer-motion';
-          }
-          if (id.includes('node_modules/lodash-es') || id.includes('node_modules/date-fns')) {
-            return 'utils';
           }
         },
         // Optimize chunk names

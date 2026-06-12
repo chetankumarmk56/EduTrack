@@ -1,8 +1,19 @@
-# ArkenEdu — AWS Deployment Guide
+# ArkenEdu — AWS Deployment Guide (EC2 + RDS)
 
-End-to-end guide to move the backend off **Render** and the database off **Neon** to **AWS**, with **auto-scaling**, **load balancing**, **managed Redis**, and **production-grade observability**. The Vercel frontend stays as-is — only its `VITE_API_BASE_URL` will change to point at the new ALB / domain.
+End-to-end runbook for the production stack: the backend Docker Compose stack
+(**FastAPI + worker + Redis**) on a single **EC2** box, talking to **RDS
+PostgreSQL**, with **S3** for uploads, fronted by **host nginx** terminating
+TLS (Let's Encrypt / certbot). This is what actually serves
+`api.arkenedu.com` + `www.arkenedu.com` today.
 
-> **Audience**: someone with an AWS account, billing enabled, and the AWS CLI installed. No prior ECS experience required — every step has the exact command or console action.
+> **Audience**: someone with an AWS account, billing enabled, a registered
+> domain, and basic SSH/Linux comfort. Every step has the exact command.
+
+> **Why EC2 + Docker Compose (not Fargate/EKS)?** One box runs the whole stack
+> with `docker compose up`, costs a fraction of Fargate+ALB, and is trivial to
+> SSH into and debug. It does NOT auto-scale or self-heal a dead instance — for
+> a single-school SaaS that's an acceptable trade. If you outgrow one box,
+> §13 sketches the path to an ALB + Auto Scaling Group.
 
 ---
 
@@ -10,260 +21,175 @@ End-to-end guide to move the backend off **Render** and the database off **Neon*
 
 ```
                 ┌────────────────────────────────────────────────┐
-                │  Vercel (frontend, unchanged)                  │
-                │  https://your-app.vercel.app                   │
+                │  Browser (admin/parent/teacher) + Expo mobile  │
                 └─────────────────────┬──────────────────────────┘
                                       │  HTTPS
                                       ▼
                          ┌────────────────────────┐
-                         │  Route 53 (DNS)        │
-                         │  api.yourdomain.com    │
-                         └───────────┬────────────┘
-                                     ▼
-                         ┌────────────────────────┐
-                         │  ACM Cert (TLS)        │
-                         └───────────┬────────────┘
-                                     ▼
-                  ┌──────────────────────────────────────┐
-                  │  Application Load Balancer (ALB)     │
-                  │  — health checks /health             │
-                  │  — sticky sessions OFF (stateless)   │
-                  └──────────────────┬───────────────────┘
-                                     ▼
-       ┌─────────────────────────────────────────────────────────┐
-       │            ECS Fargate Cluster   (Private Subnets)      │
-       │                                                         │
-       │  ┌──────────────────────────┐  ┌────────────────────┐   │
-       │  │ Service: edutrack-web    │  │ Service:           │   │
-       │  │ (FastAPI / gunicorn)     │  │  edutrack-worker   │   │
-       │  │ Min 2, Max 20 tasks      │  │ Exactly 1 task     │   │
-       │  │ Auto-scales on CPU+req   │  │ (cron locks)       │   │
-       │  └──────────────┬───────────┘  └─────────┬──────────┘   │
-       └─────────────────┼─────────────────────────┼──────────────┘
-                         │                         │
-              ┌──────────▼─────────┐    ┌──────────▼─────────┐
-              │  ElastiCache       │    │  RDS PostgreSQL    │
-              │  Redis 7 (cluster) │    │  Multi-AZ + read   │
-              │  for rate-limit +  │    │  replica + auto    │
-              │  pub/sub           │    │  storage scaling   │
-              └────────────────────┘    └────────────────────┘
-
-              ┌────────────────────┐    ┌────────────────────┐
-              │  S3 (uploads)      │    │  Secrets Manager   │
-              │  AWS_S3_BUCKET     │    │  DB / Redis / keys │
-              └────────────────────┘    └────────────────────┘
-
-              ┌────────────────────┐    ┌────────────────────┐
-              │  ECR (Docker imgs) │    │  CloudWatch Logs   │
-              └────────────────────┘    └────────────────────┘
-
-              ┌────────────────────────────────────────────┐
-              │  EventBridge Scheduler                     │
-              │  Wed 03:30 UTC → invoke fee-reminder URL   │
-              └────────────────────────────────────────────┘
+                         │  DNS (Route 53 / your  │
+                         │  registrar)            │
+                         │  api.arkenedu.com ─┐   │
+                         │  www.arkenedu.com ─┤   │
+                         └────────────────────┼───┘
+                                              ▼  → EC2 Elastic IP
+       ┌───────────────────────────────────────────────────────────┐
+       │  EC2 (Ubuntu)                                              │
+       │                                                           │
+       │  host nginx (:80/:443, TLS via certbot)                   │
+       │    • www.arkenedu.com → static SPA (frontend/dist)        │
+       │    • api.arkenedu.com → 127.0.0.1:8000                    │
+       │                       │                                   │
+       │                       ▼                                   │
+       │  Docker Compose (docker-compose.prod.yml)                 │
+       │    ┌──────────────┐  ┌──────────────┐  ┌──────────────┐   │
+       │    │ backend      │  │ worker       │  │ redis        │   │
+       │    │ gunicorn     │  │ fee-reminder │  │ rate-limit + │   │
+       │    │ :8000 (loop) │  │ scheduler    │  │ pub/sub      │   │
+       │    └──────┬───────┘  └──────┬───────┘  └──────────────┘   │
+       └───────────┼─────────────────┼───────────────────────────┘
+                   │                 │
+        ┌──────────▼─────────┐   ┌───▼──────────────┐
+        │  RDS PostgreSQL    │   │  S3 (uploads)    │
+        │  (private subnet)  │   │  presigned URLs  │
+        └────────────────────┘   └──────────────────┘
 ```
 
-### Why ECS Fargate (not EC2, not Lambda, not EKS)
-
-| Option | Verdict |
-|--------|---------|
-| **Fargate** ✅ | No server patching, sub-minute auto-scaling, charged per second, perfect for a Gunicorn FastAPI app. |
-| EC2 ASG | Cheaper at very high scale but you own AMI patching. Not worth it for a school SaaS. |
-| Lambda | Cold starts (~1–3s) ruin login UX; persistent Redis pub/sub won't survive. |
-| EKS | Overkill — adds a control-plane bill ($73/mo) and a steep learning curve. |
-
-### Why managed RDS + ElastiCache (not self-hosted)
-
-You already pay Neon to manage Postgres; RDS does the same with Multi-AZ failover, automated backups (PITR), and storage auto-scaling. ElastiCache replaces "Render Redis / Upstash" — required for multi-replica rate-limiting and websocket pub/sub (see [backend/gunicorn_conf.py](backend/gunicorn_conf.py)).
+- **Redis** runs as a local container (ephemeral by design). Swap `REDIS_URL`
+  for an **ElastiCache** endpoint later if you want managed Redis — see §12.
+- **The DB is RDS**, not a container. `DATABASE_URL` lives only in
+  `backend/.env` on the box.
 
 ---
 
-## 1. Costs (us-east-1, 2026 pricing — verify before you commit)
+## 1. Costs (ap-south-1, approximate — verify before you commit)
 
 | Service | Size | Monthly |
 |---------|------|---------|
-| ECS Fargate web (2 × 0.5 vCPU, 1 GB) | baseline | ~$25 |
-| ECS Fargate worker (1 × 0.25 vCPU, 0.5 GB) | always-on | ~$6 |
-| ALB | 1 instance | ~$18 + traffic |
-| RDS Postgres `db.t4g.micro` Multi-AZ | 20 GB gp3 | ~$30 |
-| ElastiCache Redis `cache.t4g.micro` | single node | ~$12 |
-| S3 + CloudWatch + data transfer | low | ~$5 |
-| **Baseline total** |   | **~$95–110 /mo** |
+| EC2 `t3.small` (2 vCPU, 2 GB) On-Demand | always-on | ~$15 |
+| EBS gp3 root volume | 30 GiB | ~$3 |
+| RDS Postgres `db.t4g.micro` (Single-AZ) | 20 GB gp3 | ~$15 |
+| RDS Multi-AZ (optional, doubles DB cost) | +failover | +~$15 |
+| Elastic IP (while attached) | 1 | free |
+| S3 + data transfer | low | ~$3 |
+| **Baseline total (Single-AZ)** |   | **~$36 /mo** |
 
-Scaling to 8 web tasks during peak hours adds ~$30/mo. Add ~$15/mo to make Redis Multi-AZ.
+`t3.small` is the smallest box that comfortably runs gunicorn (2 workers) +
+worker + redis. A `t3.micro` (1 GB) works for a demo but will swap under load.
 
-> **Free Tier**: brand-new AWS accounts get 12 months of `db.t4g.micro` + 750 hr/mo Fargate-free is **not** a thing — Fargate is not free-tier eligible. Budget at least $50 even if everything else is free.
+> **Free Tier**: a brand-new account gets 12 months of `t3.micro`/`t2.micro`
+> (750 hr/mo) + `db.t4g.micro` (750 hr/mo) + 20 GB RDS storage. You can run the
+> whole thing near-free for the first year if you stay on micro instances.
 
 ---
 
 ## 2. Prerequisites
 
 ```bash
-# 1. AWS CLI v2 — verify
-aws --version  # aws-cli/2.x...
+# AWS CLI v2
+aws --version           # aws-cli/2.x
 
-# 2. Configure credentials (use an IAM user with AdministratorAccess for setup;
-#    create a least-privilege role afterward).
+# Configure credentials (an IAM user with the needed perms; AdministratorAccess
+# is fine for first setup — tighten later).
 aws configure
-#   AWS Access Key ID:     <paste>
-#   AWS Secret Access Key: <paste>
-#   Default region:        us-east-1   (or ap-south-1 for India)
-#   Default output:        json
+#   Default region: ap-south-1   (Mumbai — India-first product, UPI/INR/IST)
 
-# 3. Docker (needed to build & push the backend image)
-docker --version
-
-# 4. (Optional but recommended) Terraform or AWS Copilot.
-#    This guide uses raw CLI + console so you understand each piece.
-```
-
-Pick a region close to your users. For an India-first product (UPI / INR, Asia/Kolkata schedulers), use **`ap-south-1` (Mumbai)**. The commands below use `us-east-1` — replace as needed.
-
-```bash
 export AWS_REGION=ap-south-1
 export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-echo "Using account $AWS_ACCOUNT_ID in $AWS_REGION"
+echo "Account $AWS_ACCOUNT_ID in $AWS_REGION"
 ```
+
+You also need a registered domain (e.g. `arkenedu.com`) you can point at an
+Elastic IP.
 
 ---
 
-## 3. Networking — VPC with public + private subnets
+## 3. Networking — VPC + Security Groups
 
-You need a VPC where the ALB sits in **public** subnets and the Fargate tasks / RDS / Redis sit in **private** subnets. The default VPC is fine for a quick start but uses public subnets only — for production, create a dedicated VPC.
-
-**Fastest path** — use the VPC console wizard:
-
-1. Console → **VPC** → **Create VPC** → choose **"VPC and more"**.
-2. Name tag: `edutrack-vpc`.
-3. IPv4 CIDR: `10.0.0.0/16`.
-4. Availability Zones: **2** (required for RDS Multi-AZ + ALB).
-5. Public subnets: **2**. Private subnets: **2**.
-6. NAT gateways: **In 1 AZ** (saves ~$32/mo vs one-per-AZ; acceptable for a small SaaS).
-7. VPC endpoints: **None** (you can add an S3 gateway endpoint later for free egress).
-8. Click **Create VPC**. Takes ~2 min.
-
-Note the IDs from the resource map — you'll need them:
-```bash
-export VPC_ID=vpc-xxxxxxxx
-export PUBLIC_SUBNET_A=subnet-xxxxxxxx
-export PUBLIC_SUBNET_B=subnet-xxxxxxxx
-export PRIVATE_SUBNET_A=subnet-xxxxxxxx
-export PRIVATE_SUBNET_B=subnet-xxxxxxxx
-```
-
-### Security Groups
-
-Create four SGs (Console → VPC → Security Groups):
+The default VPC is fine for a single-box deploy. You need two security groups:
 
 | SG name | Inbound | Purpose |
 |---------|---------|---------|
-| `edutrack-alb-sg` | 80, 443 from `0.0.0.0/0` | Public HTTPS terminator |
-| `edutrack-app-sg` | 8000 from `edutrack-alb-sg` only | Fargate tasks |
-| `edutrack-db-sg` | 5432 from `edutrack-app-sg` only | RDS Postgres |
-| `edutrack-redis-sg` | 6379 from `edutrack-app-sg` only | ElastiCache |
+| `edutrack-ec2-sg` | 22 from **your IP only**, 80 + 443 from `0.0.0.0/0` | the EC2 box |
+| `edutrack-db-sg`  | 5432 from `edutrack-ec2-sg` **only** | RDS Postgres |
 
-> **Rule of thumb**: never expose RDS or Redis to `0.0.0.0/0`. Even with a strong password, you'll get scraped within hours.
+```bash
+export VPC_ID=$(aws ec2 describe-vpcs --filters Name=isDefault,Values=true \
+  --query 'Vpcs[0].VpcId' --output text)
+
+# EC2 SG
+aws ec2 create-security-group --group-name edutrack-ec2-sg \
+  --description "ArkenEdu EC2" --vpc-id $VPC_ID
+export EC2_SG=$(aws ec2 describe-security-groups --filters Name=group-name,Values=edutrack-ec2-sg \
+  --query 'SecurityGroups[0].GroupId' --output text)
+
+MYIP=$(curl -s https://checkip.amazonaws.com)
+aws ec2 authorize-security-group-ingress --group-id $EC2_SG --protocol tcp --port 22  --cidr ${MYIP}/32
+aws ec2 authorize-security-group-ingress --group-id $EC2_SG --protocol tcp --port 80  --cidr 0.0.0.0/0
+aws ec2 authorize-security-group-ingress --group-id $EC2_SG --protocol tcp --port 443 --cidr 0.0.0.0/0
+
+# DB SG — only the EC2 SG may reach Postgres
+aws ec2 create-security-group --group-name edutrack-db-sg \
+  --description "ArkenEdu RDS" --vpc-id $VPC_ID
+export DB_SG=$(aws ec2 describe-security-groups --filters Name=group-name,Values=edutrack-db-sg \
+  --query 'SecurityGroups[0].GroupId' --output text)
+aws ec2 authorize-security-group-ingress --group-id $DB_SG \
+  --protocol tcp --port 5432 --source-group $EC2_SG
+```
+
+> **Never** open 5432 or 22 to `0.0.0.0/0`. RDS gets scraped within hours; SSH
+> from anywhere invites brute-force.
 
 ---
 
-## 4. RDS — PostgreSQL (replaces Neon)
+## 4. RDS — PostgreSQL
 
 Console → **RDS** → **Create database** → **Standard create**.
 
 | Setting | Value |
 |---------|-------|
 | Engine | PostgreSQL 15.x |
-| Templates | **Production** (gets you Multi-AZ + monitoring defaults) |
+| Templates | **Production** (or **Free tier** for the first year) |
 | DB identifier | `edutrack-db` |
 | Master username | `edutrack_admin` |
-| Master password | Generate 32 chars; save to a password manager *now* |
-| Instance class | `db.t4g.micro` (burstable, ARM) — bump to `db.t4g.small` if you cross 100 concurrent users |
-| Storage | gp3, 20 GiB, **enable storage autoscaling** with max 100 GiB |
-| Multi-AZ | **Yes** (failover in ~60s; doubles cost but is the whole point of leaving Neon free) |
-| VPC | `edutrack-vpc` |
-| Subnet group | Auto-create using the **private** subnets |
+| Master password | Generate 32 chars (use only `[A-Za-z0-9_-]` to avoid URL-encoding); save to a password manager **now** |
+| Instance class | `db.t4g.micro` (bump to `db.t4g.small` past ~100 concurrent users) |
+| Storage | gp3, 20 GiB, **enable storage autoscaling** (max 100 GiB) |
+| Multi-AZ | Optional — Yes for ~60s failover (doubles DB cost) |
+| VPC | default (same VPC as the EC2 box) |
 | Public access | **No** |
-| VPC SG | `edutrack-db-sg` |
+| VPC security group | `edutrack-db-sg` |
 | Initial DB name | `edutrack` |
-| Backup retention | 7 days |
-| Encryption | Enabled (default KMS key) |
+| Backup retention | 7 days (enables PITR) |
+| Encryption | Enabled |
 | Deletion protection | **Enable** |
 
-Click **Create database**. Takes 10–15 min.
-
-### Build the DATABASE_URL
+Takes 10–15 min. Then build the connection string:
 
 ```bash
-# After RDS is "Available", grab the endpoint:
 export DB_HOST=$(aws rds describe-db-instances --db-instance-identifier edutrack-db \
   --query 'DBInstances[0].Endpoint.Address' --output text)
 
-export DATABASE_URL="postgresql://edutrack_admin:<URL-ENCODED-PASSWORD>@$DB_HOST:5432/edutrack"
+# This goes into backend/.env on the EC2 box (NOT into the repo):
+#   DATABASE_URL=postgresql://edutrack_admin:<PASSWORD>@<DB_HOST>:5432/edutrack
 ```
 
-> **URL-encode the password** if it contains `@`, `:`, `/`, `#`, `?`, or `%` — these break the connection string. Easiest: generate a password that uses only `[A-Za-z0-9_-]`.
+> The app's async engine strips `?sslmode=` and applies TLS via `connect_args`,
+> so a plain `postgresql://…` URL works against RDS — see
+> [backend/app/core/database.py](backend/app/core/database.py).
 
-### Migrate data from Neon → RDS
-
-```bash
-# 1. From your laptop, dump Neon:
-pg_dump "$NEON_DATABASE_URL" \
-  --no-owner --no-acl --format=custom --file=neon-dump.bin
-
-# 2. Restore into RDS. Run this from an EC2 jump box in the same VPC (or
-#    temporarily allow 5432 from your IP on edutrack-db-sg — REMOVE AFTER).
-pg_restore --dbname="$DATABASE_URL" --no-owner --no-acl --clean --if-exists neon-dump.bin
-
-# 3. Verify row counts match the Neon side.
-psql "$DATABASE_URL" -c "SELECT relname, n_live_tup FROM pg_stat_user_tables ORDER BY relname;"
-```
-
-> **DO NOT decommission Neon until** at least 48 h after AWS is serving 100% of prod traffic with no errors.
+> **⚠ Rotate any DB password that has ever been committed.** An earlier version
+> of `docker-compose.yml` contained a hard-coded RDS URL. If that password is
+> still in use, change the RDS master password (Console → RDS → Modify) and
+> update `backend/.env` on the box. The credential remains in git history.
 
 ---
 
-## 5. ElastiCache — Redis (replaces Render/Upstash Redis)
-
-Console → **ElastiCache** → **Redis OSS caches** → **Create**.
-
-| Setting | Value |
-|---------|-------|
-| Deployment | **Design your own cache** → Cluster mode **disabled** (the app uses a single Redis URL) |
-| Engine version | Redis 7.x |
-| Name | `edutrack-redis` |
-| Node type | `cache.t4g.micro` |
-| Replicas | 1 (for failover) — set to 0 if budget is tight |
-| Multi-AZ | Enabled (only with ≥1 replica) |
-| Subnet group | New, using **private** subnets |
-| Security group | `edutrack-redis-sg` |
-| Encryption in transit | Enabled |
-| Encryption at rest | Enabled |
-| AUTH token | Generate a strong token, save it |
-
-Click **Create**. Takes ~10 min.
-
-After it's available:
-
-```bash
-export REDIS_HOST=$(aws elasticache describe-replication-groups \
-  --replication-group-id edutrack-redis \
-  --query 'ReplicationGroups[0].NodeGroups[0].PrimaryEndpoint.Address' --output text)
-
-# With encryption-in-transit + AUTH:
-export REDIS_URL="rediss://default:<AUTH-TOKEN>@$REDIS_HOST:6379/0"
-```
-
-> The `rediss://` (two s's) scheme tells the Python `redis` client to use TLS. The app code already supports this — see [backend/app/core/config.py](backend/app/core/config.py).
-
----
-
-## 6. S3 — File uploads bucket
+## 5. S3 — uploads bucket
 
 ```bash
 export BUCKET=edutrack-uploads-$AWS_ACCOUNT_ID
 
-aws s3api create-bucket --bucket "$BUCKET" \
-  --region "$AWS_REGION" \
+aws s3api create-bucket --bucket "$BUCKET" --region "$AWS_REGION" \
   --create-bucket-configuration LocationConstraint="$AWS_REGION"
 
 # Block all public access (presigned URLs still work)
@@ -271,16 +197,15 @@ aws s3api put-public-access-block --bucket "$BUCKET" \
   --public-access-block-configuration \
   BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
 
-# Lifecycle: delete incomplete multipart uploads after 7 days (save $)
+# Abort stale multipart uploads after 7 days (saves $)
 aws s3api put-bucket-lifecycle-configuration --bucket "$BUCKET" \
-  --lifecycle-configuration '{
-    "Rules":[{"ID":"AbortIncompleteMPU","Status":"Enabled","Filter":{},
-              "AbortIncompleteMultipartUpload":{"DaysAfterInitiation":7}}]}'
+  --lifecycle-configuration '{"Rules":[{"ID":"AbortIncompleteMPU","Status":"Enabled",
+    "Filter":{},"AbortIncompleteMultipartUpload":{"DaysAfterInitiation":7}}]}'
 
-# CORS — Vercel frontend uploads directly via presigned PUT
+# CORS — the web SPA uploads directly via presigned PUT
 aws s3api put-bucket-cors --bucket "$BUCKET" --cors-configuration '{
   "CORSRules":[{
-    "AllowedOrigins":["https://your-app.vercel.app"],
+    "AllowedOrigins":["https://www.arkenedu.com"],
     "AllowedMethods":["GET","PUT","POST"],
     "AllowedHeaders":["*"],
     "ExposeHeaders":["ETag"],
@@ -289,509 +214,381 @@ aws s3api put-bucket-cors --bucket "$BUCKET" --cors-configuration '{
 }'
 ```
 
----
-
-## 7. Secrets Manager — store every secret
-
-Never bake secrets into the Docker image or task definition's `environment` block. Use Secrets Manager and reference them in the task definition (encrypted, rotatable, audit-logged).
-
-```bash
-# One secret per value (cleaner IAM scoping):
-aws secretsmanager create-secret --name edutrack/DATABASE_URL --secret-string "$DATABASE_URL"
-aws secretsmanager create-secret --name edutrack/REDIS_URL    --secret-string "$REDIS_URL"
-aws secretsmanager create-secret --name edutrack/SECRET_KEY   --secret-string "$(python3 -c 'import secrets;print(secrets.token_urlsafe(48))')"
-aws secretsmanager create-secret --name edutrack/GOOGLE_API_KEY --secret-string "xxx"
-aws secretsmanager create-secret --name edutrack/TWILIO_ACCOUNT_SID --secret-string "ACxxx"
-aws secretsmanager create-secret --name edutrack/TWILIO_AUTH_TOKEN --secret-string "xxx"
-aws secretsmanager create-secret --name edutrack/TWILIO_FROM_NUMBER --secret-string "+91xxx"
-aws secretsmanager create-secret --name edutrack/CRON_SECRET --secret-string "$(python3 -c 'import secrets;print(secrets.token_urlsafe(32))')"
-aws secretsmanager create-secret --name edutrack/EXPO_ACCESS_TOKEN --secret-string "xxx"
-```
-
-Grab their ARNs:
-```bash
-aws secretsmanager list-secrets --query 'SecretList[?starts_with(Name, `edutrack/`)].[Name,ARN]' --output table
-```
+Create an IAM user (or instance-profile role) with access to just this bucket
+and put its keys in `backend/.env` as `AWS_ACCESS_KEY_ID` /
+`AWS_SECRET_ACCESS_KEY` (plus `AWS_S3_BUCKET`, `AWS_S3_REGION`). The cleanest
+option is an **EC2 instance role** with an S3 policy scoped to the bucket — then
+you can omit the static keys and boto3 uses the role automatically.
 
 ---
 
-## 8. ECR — push the Docker image
+## 6. EC2 — launch the box
+
+Launch an instance (Console → EC2 → Launch instance):
+
+| Setting | Value |
+|---------|-------|
+| AMI | Ubuntu Server 24.04 LTS (x86_64) |
+| Instance type | `t3.small` |
+| Key pair | create/select one — you'll SSH with it |
+| Network | default VPC, **auto-assign public IP = Enable** |
+| Security group | `edutrack-ec2-sg` |
+| Storage | 30 GiB gp3 |
+
+Allocate and associate an **Elastic IP** so the address survives stop/start:
 
 ```bash
-# 8.1. Create repo
-aws ecr create-repository --repository-name edutrack-backend \
-  --image-scanning-configuration scanOnPush=true
+aws ec2 allocate-address --domain vpc
+# associate it to the instance in the console (EC2 → Elastic IPs → Associate)
+```
 
-export ECR_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/edutrack-backend
+SSH in and install Docker + Compose plugin + nginx + certbot:
 
-# 8.2. Authenticate Docker against ECR
-aws ecr get-login-password --region "$AWS_REGION" \
-  | docker login --username AWS --password-stdin \
-    $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+```bash
+ssh -i your-key.pem ubuntu@<ELASTIC_IP>
 
-# 8.3. Build (use linux/amd64 — Fargate is x86_64 by default; for ARM Fargate
-#       use --platform=linux/arm64 and set the task CPU architecture to ARM64)
-cd backend
-docker build --platform=linux/amd64 -t edutrack-backend:v1 .
+sudo apt-get update && sudo apt-get upgrade -y
 
-# 8.4. Tag & push
-docker tag edutrack-backend:v1 $ECR_URI:v1
-docker tag edutrack-backend:v1 $ECR_URI:latest
-docker push $ECR_URI:v1
-docker push $ECR_URI:latest
+# Docker Engine + Compose plugin
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker ubuntu     # log out/in so `docker` works without sudo
+
+# nginx + certbot for TLS
+sudo apt-get install -y nginx
+sudo snap install --classic certbot
+sudo ln -sf /snap/bin/certbot /usr/bin/certbot
 ```
 
 ---
 
-## 9. IAM roles for ECS
+## 7. Clone the repo + configure secrets
 
-You need **two** roles per Fargate task:
-
-| Role | What it does |
-|------|--------------|
-| **Task execution role** | Lets ECS pull the image from ECR, fetch secrets from Secrets Manager, write logs to CloudWatch. |
-| **Task role** | What the *running app* can do (S3 access, Bedrock if you use it, etc.). |
-
-### 9.1. Task execution role
 ```bash
-cat > /tmp/ecs-trust.json <<'EOF'
-{ "Version":"2012-10-17","Statement":[{
-  "Effect":"Allow","Principal":{"Service":"ecs-tasks.amazonaws.com"},
-  "Action":"sts:AssumeRole" }]}
-EOF
+cd /home/ubuntu
+git clone https://github.com/<your-org>/SCHOOL.git
+cd SCHOOL
 
-aws iam create-role --role-name edutrack-ecs-exec --assume-role-policy-document file:///tmp/ecs-trust.json
-aws iam attach-role-policy --role-name edutrack-ecs-exec \
-  --policy-arn arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
-
-# Allow it to read the Secrets Manager entries we created
-cat > /tmp/secrets-read.json <<EOF
-{ "Version":"2012-10-17","Statement":[{
-  "Effect":"Allow",
-  "Action":["secretsmanager:GetSecretValue"],
-  "Resource":"arn:aws:secretsmanager:$AWS_REGION:$AWS_ACCOUNT_ID:secret:edutrack/*" }]}
-EOF
-aws iam put-role-policy --role-name edutrack-ecs-exec \
-  --policy-name edutrack-secrets-read --policy-document file:///tmp/secrets-read.json
+cp backend/.env.example backend/.env
+nano backend/.env
 ```
 
-### 9.2. Task role (app permissions)
-```bash
-aws iam create-role --role-name edutrack-app --assume-role-policy-document file:///tmp/ecs-trust.json
+Set at minimum (see the full table in §16):
 
-cat > /tmp/app-perms.json <<EOF
-{ "Version":"2012-10-17","Statement":[
-  { "Effect":"Allow",
-    "Action":["s3:GetObject","s3:PutObject","s3:DeleteObject","s3:ListBucket"],
-    "Resource":[
-      "arn:aws:s3:::$BUCKET",
-      "arn:aws:s3:::$BUCKET/*" ]}
-]}
-EOF
-aws iam put-role-policy --role-name edutrack-app \
-  --policy-name edutrack-app-perms --policy-document file:///tmp/app-perms.json
+```ini
+ENVIRONMENT=prod
+DATABASE_URL=postgresql://edutrack_admin:<PASSWORD>@<DB_HOST>:5432/edutrack
+SECRET_KEY=<python -c 'import secrets; print(secrets.token_urlsafe(48))'>
+FRONTEND_URL=https://www.arkenedu.com
+COOKIE_DOMAIN=.arkenedu.com
+COOKIE_SAMESITE=lax            # www + api are same-site subdomains
+AWS_S3_BUCKET=edutrack-uploads-<ACCOUNT_ID>
+AWS_S3_REGION=ap-south-1
+AWS_ACCESS_KEY_ID=...          # omit if using an EC2 instance role
+AWS_SECRET_ACCESS_KEY=...
+# REDIS_URL is set by docker-compose.prod.yml to the redis container; only
+# override here if you point at ElastiCache.
 ```
 
-> With the task role granting S3 access, you can **remove** `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` from the env — boto3 will use the task role automatically. Cleaner & more secure than static keys.
+> `backend/.env` is gitignored — it lives only on the box and is never pushed.
 
 ---
 
-## 10. CloudWatch log group
+## 8. Bring up the stack
 
 ```bash
-aws logs create-log-group --log-group-name /ecs/edutrack
-aws logs put-retention-policy --log-group-name /ecs/edutrack --retention-in-days 30
+cd /home/ubuntu/SCHOOL
+
+# Build images
+docker compose -f docker-compose.prod.yml build
+
+# Apply DB migrations (one-off, against RDS)
+docker compose -f docker-compose.prod.yml run --rm backend alembic upgrade head
+
+# (first deploy only) seed the superadmin. Demo data is skipped when
+# ENVIRONMENT=prod unless SEED_DEMO_DATA=true.
+docker compose -f docker-compose.prod.yml run --rm backend python seed.py
+
+# Start backend + worker + redis
+docker compose -f docker-compose.prod.yml up -d
+
+# Verify the API is up on loopback
+curl -s http://127.0.0.1:8000/health      # → {"status":"ok",...}
+docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml logs -f backend
 ```
+
+The API binds to `127.0.0.1:8000` only — it is not reachable from the internet
+until nginx proxies it (next step).
 
 ---
 
-## 11. ECS Cluster + Task Definitions
+## 9. nginx reverse proxy + TLS
 
-```bash
-# 11.1. Cluster
-aws ecs create-cluster --cluster-name edutrack \
-  --capacity-providers FARGATE FARGATE_SPOT \
-  --default-capacity-provider-strategy capacityProvider=FARGATE,weight=1
-```
+Create `/etc/nginx/sites-available/arkenedu` on the box:
 
-### 11.2. Web task definition
+```nginx
+# --- API: api.arkenedu.com → backend container on 127.0.0.1:8000 ---
+server {
+    listen 80;
+    server_name api.arkenedu.com;
 
-Save as `/tmp/edutrack-web-taskdef.json` (replace ARNs as needed):
-
-```json
-{
-  "family": "edutrack-web",
-  "networkMode": "awsvpc",
-  "requiresCompatibilities": ["FARGATE"],
-  "cpu": "512",
-  "memory": "1024",
-  "executionRoleArn": "arn:aws:iam::ACCOUNT:role/edutrack-ecs-exec",
-  "taskRoleArn":      "arn:aws:iam::ACCOUNT:role/edutrack-app",
-  "containerDefinitions": [{
-    "name": "web",
-    "image": "ACCOUNT.dkr.ecr.REGION.amazonaws.com/edutrack-backend:latest",
-    "essential": true,
-    "portMappings": [{"containerPort": 8000, "protocol": "tcp"}],
-    "command": ["sh","-c","alembic upgrade head && gunicorn -c gunicorn_conf.py app.main:app"],
-    "environment": [
-      {"name":"ENVIRONMENT","value":"prod"},
-      {"name":"PORT","value":"8000"},
-      {"name":"WEB_CONCURRENCY","value":"4"},
-      {"name":"FEE_REMINDER_SCHEDULER_ENABLED","value":"false"},
-      {"name":"FRONTEND_URL","value":"https://your-app.vercel.app"},
-      {"name":"ADDITIONAL_CORS_ORIGINS","value":""},
-      {"name":"COOKIE_SECURE","value":"true"},
-      {"name":"COOKIE_DOMAIN",".yourdomain.com"},
-      {"name":"AWS_S3_BUCKET","value":"edutrack-uploads-ACCOUNT"},
-      {"name":"AWS_S3_REGION","value":"REGION"},
-      {"name":"LOG_JSON","value":"true"}
-    ],
-    "secrets": [
-      {"name":"DATABASE_URL",            "valueFrom":"arn:aws:secretsmanager:REGION:ACCOUNT:secret:edutrack/DATABASE_URL"},
-      {"name":"REDIS_URL",               "valueFrom":"arn:aws:secretsmanager:REGION:ACCOUNT:secret:edutrack/REDIS_URL"},
-      {"name":"SECRET_KEY",              "valueFrom":"arn:aws:secretsmanager:REGION:ACCOUNT:secret:edutrack/SECRET_KEY"},
-      {"name":"GOOGLE_API_KEY",          "valueFrom":"arn:aws:secretsmanager:REGION:ACCOUNT:secret:edutrack/GOOGLE_API_KEY"},
-      {"name":"TWILIO_ACCOUNT_SID",      "valueFrom":"arn:aws:secretsmanager:REGION:ACCOUNT:secret:edutrack/TWILIO_ACCOUNT_SID"},
-      {"name":"TWILIO_AUTH_TOKEN",       "valueFrom":"arn:aws:secretsmanager:REGION:ACCOUNT:secret:edutrack/TWILIO_AUTH_TOKEN"},
-      {"name":"TWILIO_FROM_NUMBER",      "valueFrom":"arn:aws:secretsmanager:REGION:ACCOUNT:secret:edutrack/TWILIO_FROM_NUMBER"},
-      {"name":"CRON_SECRET",             "valueFrom":"arn:aws:secretsmanager:REGION:ACCOUNT:secret:edutrack/CRON_SECRET"},
-      {"name":"EXPO_ACCESS_TOKEN",       "valueFrom":"arn:aws:secretsmanager:REGION:ACCOUNT:secret:edutrack/EXPO_ACCESS_TOKEN"}
-    ],
-    "logConfiguration": {
-      "logDriver": "awslogs",
-      "options": {
-        "awslogs-group": "/ecs/edutrack",
-        "awslogs-region": "REGION",
-        "awslogs-stream-prefix": "web"
-      }
-    },
-    "healthCheck": {
-      "command": ["CMD-SHELL","curl -f http://localhost:8000/health || exit 1"],
-      "interval": 15, "timeout": 5, "retries": 3, "startPeriod": 30
+    # AI generation endpoints are long-running (Lesson Plan can take minutes).
+    # Give them generous read timeouts so nginx doesn't 504 before the backend
+    # responds. Every other path keeps the tighter default below.
+    location ~ ^/api/(lesson-plan/generate|question-bank/generate-s3)$ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_connect_timeout 30s;
+        proxy_send_timeout    300s;
+        proxy_read_timeout    300s;
     }
-  }]
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_connect_timeout 30s;
+        proxy_send_timeout    75s;
+        proxy_read_timeout    75s;
+
+        # WebSocket support (transport tracking)
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+
+    client_max_body_size 25m;   # match the app's upload ceiling
+}
+
+# --- Web SPA: www.arkenedu.com → static Vite build ---
+server {
+    listen 80;
+    server_name www.arkenedu.com arkenedu.com;
+
+    root /home/ubuntu/SCHOOL/frontend/dist;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;   # SPA history fallback
+    }
 }
 ```
 
-```bash
-# Replace placeholders before registering
-sed -i.bak "s/ACCOUNT/$AWS_ACCOUNT_ID/g; s/REGION/$AWS_REGION/g" /tmp/edutrack-web-taskdef.json
-aws ecs register-task-definition --cli-input-json file:///tmp/edutrack-web-taskdef.json
-```
+> `deployment/nginx/nginx.conf` in the repo is the same proxy logic written for
+> a multi-replica/load-balanced layout (ports 8001–8003). The single-box config
+> above is what you actually install at `/etc/nginx/sites-available/`.
 
-### 11.3. Worker task definition
-
-Same as the web definition with these differences:
-- `"family": "edutrack-worker"`
-- `"cpu":"256"`, `"memory":"512"`
-- `"portMappings"`: **omit**
-- `"command": ["python","worker.py"]`
-- `"healthCheck"`: **omit** (no HTTP server)
-- Env: set `FEE_REMINDER_SCHEDULER_ENABLED=true`
-- `"awslogs-stream-prefix": "worker"`
-
----
-
-## 12. Application Load Balancer + Target Group
+Enable it and obtain certs:
 
 ```bash
-# 12.1. ACM cert for api.yourdomain.com — must be in the same region as the ALB.
-#       (Console → ACM → Request → DNS validation; takes ~5 min after you
-#        add the CNAME to Route 53.)
-export CERT_ARN=arn:aws:acm:$AWS_REGION:$AWS_ACCOUNT_ID:certificate/xxxxx
+sudo ln -s /etc/nginx/sites-available/arkenedu /etc/nginx/sites-enabled/arkenedu
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t && sudo systemctl reload nginx
 
-# 12.2. ALB
-aws elbv2 create-load-balancer \
-  --name edutrack-alb \
-  --type application \
-  --scheme internet-facing \
-  --security-groups <edutrack-alb-sg-id> \
-  --subnets $PUBLIC_SUBNET_A $PUBLIC_SUBNET_B
-
-export ALB_ARN=$(aws elbv2 describe-load-balancers --names edutrack-alb \
-  --query 'LoadBalancers[0].LoadBalancerArn' --output text)
-export ALB_DNS=$(aws elbv2 describe-load-balancers --names edutrack-alb \
-  --query 'LoadBalancers[0].DNSName' --output text)
-
-# 12.3. Target group (the web tasks register here)
-aws elbv2 create-target-group \
-  --name edutrack-web-tg \
-  --protocol HTTP --port 8000 \
-  --vpc-id $VPC_ID \
-  --target-type ip \
-  --health-check-path /health \
-  --health-check-interval-seconds 15 \
-  --healthy-threshold-count 2 \
-  --unhealthy-threshold-count 3 \
-  --matcher HttpCode=200
-
-export TG_ARN=$(aws elbv2 describe-target-groups --names edutrack-web-tg \
-  --query 'TargetGroups[0].TargetGroupArn' --output text)
-
-# 12.4. HTTPS listener (terminates TLS at the ALB)
-aws elbv2 create-listener \
-  --load-balancer-arn $ALB_ARN \
-  --protocol HTTPS --port 443 \
-  --ssl-policy ELBSecurityPolicy-TLS13-1-2-2021-06 \
-  --certificates CertificateArn=$CERT_ARN \
-  --default-actions Type=forward,TargetGroupArn=$TG_ARN
-
-# 12.5. HTTP → HTTPS redirect
-aws elbv2 create-listener \
-  --load-balancer-arn $ALB_ARN \
-  --protocol HTTP --port 80 \
-  --default-actions 'Type=redirect,RedirectConfig={Protocol=HTTPS,Port=443,StatusCode=HTTP_301}'
+# certbot edits the server blocks to add 443 + HTTP→HTTPS redirect, then
+# auto-renews via a systemd timer.
+sudo certbot --nginx -d api.arkenedu.com -d www.arkenedu.com -d arkenedu.com
 ```
 
 ---
 
-## 13. ECS Service — web (with auto-scaling)
+## 10. DNS
 
-```bash
-aws ecs create-service \
-  --cluster edutrack \
-  --service-name edutrack-web \
-  --task-definition edutrack-web \
-  --desired-count 2 \
-  --launch-type FARGATE \
-  --platform-version LATEST \
-  --network-configuration "awsvpcConfiguration={subnets=[$PRIVATE_SUBNET_A,$PRIVATE_SUBNET_B],securityGroups=[<edutrack-app-sg-id>],assignPublicIp=DISABLED}" \
-  --load-balancers "targetGroupArn=$TG_ARN,containerName=web,containerPort=8000" \
-  --health-check-grace-period-seconds 60 \
-  --deployment-configuration "deploymentCircuitBreaker={enable=true,rollback=true},maximumPercent=200,minimumHealthyPercent=100"
+Point the records at the Elastic IP (Route 53, or your registrar's DNS):
+
+```
+api.arkenedu.com   A   →   <ELASTIC_IP>
+www.arkenedu.com   A   →   <ELASTIC_IP>
+arkenedu.com       A   →   <ELASTIC_IP>
 ```
 
-### Auto-scaling policy
+Wait for propagation, then certbot (§9) can validate. Confirm:
 
 ```bash
-# Register the service as a scalable target
-aws application-autoscaling register-scalable-target \
-  --service-namespace ecs \
-  --resource-id service/edutrack/edutrack-web \
-  --scalable-dimension ecs:service:DesiredCount \
-  --min-capacity 2 --max-capacity 20
-
-# Target-tracking on CPU utilization
-aws application-autoscaling put-scaling-policy \
-  --service-namespace ecs \
-  --resource-id service/edutrack/edutrack-web \
-  --scalable-dimension ecs:service:DesiredCount \
-  --policy-name cpu-scale \
-  --policy-type TargetTrackingScaling \
-  --target-tracking-scaling-policy-configuration '{
-    "TargetValue":60.0,
-    "PredefinedMetricSpecification":{"PredefinedMetricType":"ECSServiceAverageCPUUtilization"},
-    "ScaleOutCooldown":60,
-    "ScaleInCooldown":120
-  }'
-
-# AND on request count per target (catches spikes before CPU saturates)
-aws application-autoscaling put-scaling-policy \
-  --service-namespace ecs \
-  --resource-id service/edutrack/edutrack-web \
-  --scalable-dimension ecs:service:DesiredCount \
-  --policy-name rps-scale \
-  --policy-type TargetTrackingScaling \
-  --target-tracking-scaling-policy-configuration "{
-    \"TargetValue\":100.0,
-    \"PredefinedMetricSpecification\":{
-      \"PredefinedMetricType\":\"ALBRequestCountPerTarget\",
-      \"ResourceLabel\":\"$(aws elbv2 describe-load-balancers --names edutrack-alb --query 'LoadBalancers[0].LoadBalancerArn' --output text | awk -F'/' '{print $2\"/\"$3\"/\"$4}')/$(aws elbv2 describe-target-groups --names edutrack-web-tg --query 'TargetGroups[0].TargetGroupArn' --output text | awk -F'/' '{print $2\"/\"$3\"/\"$4}')\"
-    },
-    \"ScaleOutCooldown\":60,
-    \"ScaleInCooldown\":120
-  }"
+curl -s https://api.arkenedu.com/health        # → {"status":"ok","environment":"prod"}
 ```
-
-> Scales out aggressively (60s cooldown) and scales in slowly (120s) — avoids flapping when traffic is bursty.
-
-### Worker service (no scaling)
-
-```bash
-aws ecs create-service \
-  --cluster edutrack \
-  --service-name edutrack-worker \
-  --task-definition edutrack-worker \
-  --desired-count 1 \
-  --launch-type FARGATE \
-  --network-configuration "awsvpcConfiguration={subnets=[$PRIVATE_SUBNET_A,$PRIVATE_SUBNET_B],securityGroups=[<edutrack-app-sg-id>],assignPublicIp=DISABLED}"
-```
-
-> **Do not auto-scale the worker.** The fee-reminder scheduler relies on per-process cron locks; two replicas would fight over the same Wednesday dispatch. Render's setup already keeps it at one — same rule here.
 
 ---
 
-## 14. DNS — point your domain at the ALB
+## 11. Frontend (web SPA)
 
-In Route 53 (or wherever your DNS lives):
-```
-api.yourdomain.com   ALIAS / CNAME   →   edutrack-alb-xxxxx.elb.amazonaws.com
-```
-
-If your domain is in Route 53, use an **A-record alias** (free, faster than CNAME) targeting the ALB.
-
-Update Vercel:
-```
-VITE_API_BASE_URL=https://api.yourdomain.com
-```
-Redeploy the frontend.
-
----
-
-## 15. EventBridge — replace the Render cron
-
-Render's `edutrack-fee-reminder-cron` becomes an EventBridge Scheduler entry:
+The SPA is a static Vite build. Build it on the box (or in CI and copy `dist/`):
 
 ```bash
-# Stash the CRON_SECRET value (you'll inject it in the target's auth header)
-CRON_SECRET=$(aws secretsmanager get-secret-value --secret-id edutrack/CRON_SECRET --query SecretString --output text)
-
-aws scheduler create-schedule \
-  --name edutrack-fee-reminder \
-  --schedule-expression "cron(30 3 ? * WED *)" \
-  --schedule-expression-timezone "UTC" \
-  --flexible-time-window "Mode=OFF" \
-  --target "{
-    \"Arn\":\"arn:aws:scheduler:::http-invoke\",
-    \"RoleArn\":\"<scheduler-role-arn>\",
-    \"HttpParameters\":{
-      \"HeaderParameters\":{\"X-Cron-Secret\":\"$CRON_SECRET\",\"Content-Type\":\"application/json\"}
-    },
-    \"Input\":\"{}\",
-    \"HttpMethod\":\"POST\",
-    \"Url\":\"https://api.yourdomain.com/api/finance/fee-reminders/dispatch\"
-  }"
+cd /home/ubuntu/SCHOOL/frontend
+cp .env .env.local 2>/dev/null || true
+# Ensure the prod API base is set before building:
+#   VITE_API_BASE_URL=https://api.arkenedu.com/api
+npm ci
+npm run build           # outputs frontend/dist (served by nginx, §9)
 ```
 
-(Easier alternative: just leave the worker-driven scheduler on. The HTTP cron exists for platforms that *don't* support a background container. You have Fargate — the worker covers it.)
+Rebuild + `dist/` refresh on every frontend change. (If you'd rather keep the
+SPA on a static host/CDN like Vercel or CloudFront+S3, drop the `www` server
+block from nginx and point the `www` DNS record there instead — the backend is
+unaffected as long as `FRONTEND_URL` / CORS match.)
 
 ---
 
-## 16. Observability
+## 12. Redis — local container vs ElastiCache
 
-### CloudWatch dashboards
-Create a dashboard with these widgets:
-- ALB → `RequestCount`, `TargetResponseTime`, `HTTPCode_Target_5XX_Count`
-- ECS service → `CPUUtilization`, `MemoryUtilization`, `RunningTaskCount`
-- RDS → `CPUUtilization`, `DatabaseConnections`, `FreeableMemory`, `ReadLatency`, `WriteLatency`
-- ElastiCache → `CPUUtilization`, `CurrConnections`, `Evictions`
+The default `docker-compose.prod.yml` runs Redis as a sibling container, which
+is fine for a single box. To use **ElastiCache** instead (managed, survives an
+instance rebuild):
 
-### CloudWatch Alarms (the must-haves)
-```bash
-# 5xx alarm
-aws cloudwatch put-metric-alarm \
-  --alarm-name edutrack-5xx-burst \
-  --metric-name HTTPCode_Target_5XX_Count --namespace AWS/ApplicationELB \
-  --statistic Sum --period 60 --evaluation-periods 2 --threshold 10 \
-  --comparison-operator GreaterThanThreshold \
-  --dimensions Name=LoadBalancer,Value=app/edutrack-alb/xxxx \
-  --alarm-actions arn:aws:sns:REGION:ACCOUNT:edutrack-alerts
-
-# RDS CPU > 80 for 10 min
-aws cloudwatch put-metric-alarm \
-  --alarm-name edutrack-rds-cpu \
-  --metric-name CPUUtilization --namespace AWS/RDS \
-  --statistic Average --period 300 --evaluation-periods 2 --threshold 80 \
-  --comparison-operator GreaterThanThreshold \
-  --dimensions Name=DBInstanceIdentifier,Value=edutrack-db \
-  --alarm-actions arn:aws:sns:REGION:ACCOUNT:edutrack-alerts
-```
-
-### Sentry (already wired)
-
-Set `SENTRY_DSN` in Secrets Manager → the app picks it up automatically (see [backend/app/core/config.py](backend/app/core/config.py)).
+1. Create a `cache.t4g.micro` Redis (cluster mode disabled) in the same VPC,
+   SG allowing 6379 from `edutrack-ec2-sg`.
+2. Set `REDIS_URL=rediss://default:<AUTH-TOKEN>@<endpoint>:6379/0` in
+   `backend/.env` (the `rediss://` scheme enables TLS).
+3. Remove the `redis` service + `depends_on` from `docker-compose.prod.yml`.
 
 ---
 
-## 17. Deployment workflow (going forward)
+## 13. CI/CD — automated deploy on push to main
+
+[`.github/workflows/deploy-prod.yml`](.github/workflows/deploy-prod.yml) runs a
+security scan, then SSHes into the box, pulls `main`, rebuilds, runs
+`alembic upgrade head`, and `docker compose up -d`, then health-checks the
+public URL.
+
+Add these **GitHub Actions secrets** (repo → Settings → Secrets → Actions):
+
+| Secret | Value |
+|--------|-------|
+| `EC2_SSH_HOST` | Elastic IP or `api.arkenedu.com` |
+| `EC2_SSH_USER` | `ubuntu` |
+| `EC2_SSH_KEY` | the **private** key (PEM) authorized on the box |
+| `EC2_APP_DIR` | (optional) repo path; defaults to `/home/ubuntu/SCHOOL` |
+| `BACKEND_BASE_URL` | (optional) defaults to `https://api.arkenedu.com` |
+
+To deploy by hand instead, the four commands are:
 
 ```bash
-# 1. Build new image
-cd backend
-docker build --platform=linux/amd64 -t edutrack-backend:$(git rev-parse --short HEAD) .
-
-# 2. Tag & push
-docker tag edutrack-backend:$(git rev-parse --short HEAD) $ECR_URI:$(git rev-parse --short HEAD)
-docker tag edutrack-backend:$(git rev-parse --short HEAD) $ECR_URI:latest
-docker push $ECR_URI:$(git rev-parse --short HEAD)
-docker push $ECR_URI:latest
-
-# 3. Force a new deployment (ECS rolling update — circuit breaker auto-rollbacks on failure)
-aws ecs update-service --cluster edutrack --service edutrack-web    --force-new-deployment
-aws ecs update-service --cluster edutrack --service edutrack-worker --force-new-deployment
+cd /home/ubuntu/SCHOOL
+git pull --ff-only origin main
+docker compose -f docker-compose.prod.yml build
+docker compose -f docker-compose.prod.yml run --rm backend alembic upgrade head
+docker compose -f docker-compose.prod.yml up -d
 ```
 
-You can wire this into a **GitHub Action** later — `aws-actions/configure-aws-credentials` + the four commands above. Keep that for after the manual flow is working end-to-end.
+> **Scaling beyond one box (later):** bake the image in ECR, put an ALB in front
+> with a `/health` target group, and run the stack on 2+ instances behind an
+> Auto Scaling Group. Keep the **worker at exactly one replica** regardless —
+> the fee-reminder scheduler uses per-process cron locks and two workers would
+> double-dispatch.
 
 ---
 
-## 18. Post-cutover checklist
+## 14. The fee-reminder scheduler
 
-- [ ] Hit `https://api.yourdomain.com/health` → 200
-- [ ] Hit `https://api.yourdomain.com/docs` → Swagger UI loads
-- [ ] Frontend on Vercel can log in, fetch a dashboard, upload a file
-- [ ] Mobile app (Expo) can log in (CORS + push tokens still flowing)
-- [ ] CloudWatch logs show structured JSON, no `ERROR` entries on idle
-- [ ] Parent UPI submission end-to-end: parent submits a UTR, admin sees the row in Manual Payments, approves, and the entry shows up in the Finance ledger + summary cards
-- [ ] Trigger fee-reminder dispatch manually: `curl -X POST -H "X-Cron-Secret: $CRON_SECRET" https://api.yourdomain.com/api/finance/fee-reminders/dispatch`
-- [ ] Force-stop one web task → ECS replaces it within 60s, no client errors
-- [ ] Pause for 48h → traffic stable, no errors, then **delete** Render + Neon
+The `worker` container owns the in-process scheduler
+(`FEE_REMINDER_SCHEDULER_ENABLED=true`); the `backend` (web) service keeps it
+off. It only fires for institutions whose admin opted into WEEKLY/MONTHLY
+reminders — admin click-to-send is the primary flow.
 
----
-
-## 19. Tearing down Render + Neon (only after 48h of clean prod on AWS)
+If you ever run more than one box, run the worker on exactly one of them. To
+trigger a dispatch manually (e.g. from a systemd timer or external cron):
 
 ```bash
-# Render — Dashboard → each service → Settings → Delete Service
-# Neon  — Console → Project → Settings → Delete Project (irreversible)
+curl -X POST -H "X-Cron-Secret: $CRON_SECRET" \
+  https://api.arkenedu.com/api/finance/fee-reminders/dispatch
 ```
-
-Update local `.env` files / CI secrets:
-- Remove `RENDER_*`
-- Replace `NEON_DATABASE_URL` with the AWS RDS URL (for local connection if needed; you usually want a separate dev DB)
 
 ---
 
-## 20. Common pitfalls
+## 15. Observability
+
+- **Logs**: `docker compose -f docker-compose.prod.yml logs -f backend`.
+  Prod logs are structured JSON (`LOG_JSON=true` auto-on when `ENVIRONMENT=prod`);
+  every line carries `request_id`. Ship to CloudWatch with the CloudWatch agent
+  if you want central retention/alarms.
+- **Sentry**: set `SENTRY_DSN` in `backend/.env` → errors + releases tracked
+  automatically (the SDK is imported lazily, so it's a no-op when unset).
+- **RDS / EC2 metrics**: CloudWatch already collects CPU, connections, freeable
+  memory, disk. Add alarms on RDS CPU > 80% and EC2 StatusCheckFailed.
+
+---
+
+## 16. Reference — production env vars (`backend/.env` on the box)
+
+| Variable | Required | Notes |
+|----------|----------|-------|
+| `ENVIRONMENT` | ✅ | `prod` — enables HSTS, secure cookies, strict S3 check |
+| `DATABASE_URL` | ✅ | RDS: `postgresql://user:pass@<rds-endpoint>:5432/edutrack` |
+| `SECRET_KEY` | ✅ | 32+ chars, `secrets.token_urlsafe(48)` |
+| `FRONTEND_URL` | ✅ | `https://www.arkenedu.com` (CORS + email links) |
+| `ADDITIONAL_CORS_ORIGINS` |   | extra browser origins, comma-sep (see below) |
+| `COOKIE_DOMAIN` | ✅ | `.arkenedu.com` (leading dot) |
+| `COOKIE_SAMESITE` | ✅ | `lax` (www + api are same-site subdomains) |
+| `AWS_S3_BUCKET` + `AWS_S3_REGION` | ✅ | startup hard-fails without these in prod |
+| `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` |   | omit when using an EC2 instance role |
+| `REDIS_URL` |   | set by compose to the redis container; override for ElastiCache |
+| `CRON_SECRET` |   | for an external cron hitting the dispatch endpoint |
+| `GOOGLE_API_KEY` / `OPENAI_API_KEY` |   | AI lesson plan / question bank |
+| `TWILIO_*` |   | outbound voice calls; silent no-op when unset |
+| `EXPO_ACCESS_TOKEN` |   | only with Enhanced Push Security |
+| `SENTRY_DSN` |   | error tracking |
+
+### Testing the mobile app in a browser (Expo Web) against this backend
+
+Native iOS/Android builds are **not** subject to CORS, so `api.arkenedu.com`
+works on a real device with no server change. But the **Expo *web* preview**
+(`http://localhost:8081` / `:19006` in a browser) is a cross-origin caller, and
+a `prod` backend rejects localhost origins by default ("Disallowed CORS
+origin"). To allow it, add those origins on the box and restart:
+
+```bash
+# in backend/.env on the EC2 box:
+ADDITIONAL_CORS_ORIGINS=http://localhost:8081,http://localhost:19006
+
+docker compose -f docker-compose.prod.yml up -d backend   # recreate to pick up env
+```
+
+Verify the preflight now passes:
+
+```bash
+curl -i -X OPTIONS https://api.arkenedu.com/api/directory/parents/login \
+  -H "Origin: http://localhost:8081" \
+  -H "Access-Control-Request-Method: POST"
+# → 200 with an `access-control-allow-origin: http://localhost:8081` header
+```
+
+---
+
+## 17. Post-deploy checklist
+
+- [ ] `https://api.arkenedu.com/health` → 200 `{"status":"ok","environment":"prod"}`
+- [ ] Web SPA at `https://www.arkenedu.com` loads and can log in
+- [ ] Mobile app (real device) logs in; push tokens register
+- [ ] Upload a file → lands in S3, opens via presigned URL
+- [ ] Parent UPI flow end-to-end: submit UTR → admin verifies → ledger updates
+- [ ] `docker compose -f docker-compose.prod.yml logs backend` shows JSON, no idle ERRORs
+- [ ] RDS automated backups enabled; deletion protection on
+- [ ] certbot renewal timer active: `sudo systemctl list-timers | grep certbot`
+- [ ] Any previously committed DB password rotated (see §4)
+
+---
+
+## 18. Common pitfalls
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| ECS task keeps restarting, "essential container exited" | Missing env var (e.g. SECRET_KEY) | Check task definition's `secrets:` block has every required key |
-| Tasks healthy in ECS but ALB 503s | Target group health check on `/` (returns 404) | Set health check path to `/health` |
-| `connection refused` to RDS | App SG isn't allowed on RDS SG | Ensure `edutrack-db-sg` allows 5432 *from* `edutrack-app-sg` |
-| `redis.exceptions.AuthenticationError` | Missing AUTH token in URL | Use full `rediss://default:TOKEN@host:6379/0` form |
-| Image pull rate-limited from Docker Hub | Building `python:3.12-slim` over a bad network | Use ECR's pull-through cache or pin to a digest |
-| Worker dispatches reminders twice a week | More than one worker task running | `desiredCount=1`, never auto-scale the worker |
-| 502 during deploy | `minimumHealthyPercent=100` not honored / image too slow to boot | Increase `health-check-grace-period-seconds` to 90s |
-| Frontend can't talk to API (CORS) | Forgot to add Vercel URL to `FRONTEND_URL` / `ADDITIONAL_CORS_ORIGINS` | Update task def env, redeploy |
-| Rate limiter behaves per-replica (i.e. ineffective) | `REDIS_URL` not set or unreachable | Confirm secret resolves; tail logs for `slowapi` warnings |
+| `502 Bad Gateway` from nginx | backend container down or not on 8000 | `docker compose -f docker-compose.prod.yml ps`; check logs |
+| API `/health` 200 on box but site won't load | DNS not pointing at the Elastic IP, or certbot not run | verify A records; re-run `certbot --nginx` |
+| `connection refused` to RDS | EC2 SG not allowed on the DB SG | `edutrack-db-sg` must allow 5432 *from* `edutrack-ec2-sg` |
+| Startup aborts: "AWS S3 is not configured" | missing S3 env in prod | set `AWS_S3_BUCKET` + `AWS_S3_REGION` (+ keys or instance role) |
+| "logged in then 401" on web | wrong cookie policy across www/api | `COOKIE_SAMESITE=lax`, `COOKIE_DOMAIN=.arkenedu.com` |
+| Expo **web** preview blocked by CORS | localhost origin not allowed on prod | add to `ADDITIONAL_CORS_ORIGINS` (see §16) — native apps are unaffected |
+| Lesson Plan 504 | nginx default 60s read timeout | the AI `location` block raises it to 300s (§9) |
+| Fee reminders sent twice | more than one worker container | keep `worker` at one replica |
+| Disk fills up over time | old Docker image layers | the deploy runs `docker image prune -f`; add a cron `docker system prune -f` |
 
 ---
 
-## 21. Reference — full env var list
-
-| Variable | Source | Notes |
-|----------|--------|-------|
-| `ENVIRONMENT` | task def | `prod` |
-| `PORT` | task def | `8000` |
-| `WEB_CONCURRENCY` | task def | `4` on 0.5 vCPU / 1 GB |
-| `DATABASE_URL` | Secrets Manager | RDS endpoint |
-| `REDIS_URL` | Secrets Manager | `rediss://default:TOKEN@host:6379/0` |
-| `SECRET_KEY` | Secrets Manager | 32+ chars, `secrets.token_urlsafe(48)` |
-| `FRONTEND_URL` | task def | `https://your-app.vercel.app` |
-| `ADDITIONAL_CORS_ORIGINS` | task def | comma-sep, optional |
-| `COOKIE_SECURE` | task def | `true` |
-| `COOKIE_DOMAIN` | task def | `.yourdomain.com` |
-| `AWS_S3_BUCKET` | task def | `edutrack-uploads-…` |
-| `AWS_S3_REGION` | task def | same as region |
-| `FEE_REMINDER_SCHEDULER_ENABLED` | task def | `false` on web, `true` on worker |
-| `CRON_SECRET` | Secrets Manager | if you use EventBridge HTTP cron |
-| `TWILIO_*` | Secrets Manager | optional |
-| `GOOGLE_API_KEY` | Secrets Manager | optional, Question Bank AI |
-| `EXPO_ACCESS_TOKEN` | Secrets Manager | push security |
-| `SENTRY_DSN` | Secrets Manager | error tracking |
-| `LOG_JSON` | task def | `true` |
-
----
-
-**Done.** Steps 2–13 take ~3 hours the first time, ~30 min once you've scripted it. After that, the workflow is the four commands in **§17**.
+**Done.** First-time provisioning (RDS + EC2 + nginx + certbot) takes ~1–2 hours.
+After that, deploys are the four commands in §13 — or just push to `main`.

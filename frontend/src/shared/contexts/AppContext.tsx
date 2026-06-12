@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useMemo, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef, type ReactNode } from 'react';
 import { directoryApi } from '@/features/directory/api';
 import { marksApi } from '@/features/marks/api';
 import { attendanceApi } from '@/features/attendance/api';
@@ -78,66 +78,48 @@ interface AppContextType {
   // Parent fees
   parentFees: ParentFeeItem[];
   refreshParentFees: () => Promise<void>;
-  getParentFees: () => Promise<ParentFeeItem[]>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+// localStorage cache reader for useState initializers. A single corrupt
+// entry (interrupted write, manual edit, quota race) must degrade to the
+// fallback — these run synchronously at mount, before any error boundary
+// could catch a JSON.parse throw.
+function readCache<T>(key: string, fallback: T): T {
+  try {
+    const saved = localStorage.getItem(key);
+    return saved ? (JSON.parse(saved) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const { authState, user } = useAuth();
 
-  const [students, setStudents] = useState<Student[]>(() => {
-    const saved = localStorage.getItem('edu_cache_students');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [teachers, setTeachers] = useState<Teacher[]>(() => {
-    const saved = localStorage.getItem('edu_cache_teachers');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [grades, setGrades] = useState<Grade[]>(() => {
-    const saved = localStorage.getItem('edu_cache_grades');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [sections, setSections] = useState<Section[]>(() => {
-    const saved = localStorage.getItem('edu_cache_sections');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [subjects, setSubjects] = useState<Subject[]>(() => {
-    const saved = localStorage.getItem('edu_cache_subjects');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [schoolClasses, setSchoolClasses] = useState<SchoolClass[]>(() => {
-    const saved = localStorage.getItem('edu_cache_school_classes');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [events, setEvents] = useState<Event[]>(() => {
-    const saved = localStorage.getItem('edu_cache_events');
-    return saved ? JSON.parse(saved) : [];
-  });
-const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
+  const [students, setStudents] = useState<Student[]>(() => readCache('edu_cache_students', []));
+  const [teachers, setTeachers] = useState<Teacher[]>(() => readCache('edu_cache_teachers', []));
+  const [grades, setGrades] = useState<Grade[]>(() => readCache('edu_cache_grades', []));
+  const [sections, setSections] = useState<Section[]>(() => readCache('edu_cache_sections', []));
+  const [subjects, setSubjects] = useState<Subject[]>(() => readCache('edu_cache_subjects', []));
+  const [schoolClasses, setSchoolClasses] = useState<SchoolClass[]>(() => readCache('edu_cache_school_classes', []));
+  const [events, setEvents] = useState<Event[]>(() => readCache('edu_cache_events', []));
+  const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
   const [isAcademicLoading, setIsAcademicLoading] = useState(false);
   const [isEventsLoading, setIsEventsLoading] = useState(false);
 
   const [classMarks, setClassMarks] = useState<Record<string, Mark[]>>({});
 
-  const [studentProfile, setStudentProfile] = useState<Student | null>(() => {
-    const saved = localStorage.getItem('edu_cache_student_profile');
-    return saved ? JSON.parse(saved) : null;
-  });
-  const [studentMarks, setStudentMarks] = useState<Mark[]>(() => {
-    const saved = localStorage.getItem('edu_cache_student_marks');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [studentAttendance, setStudentAttendance] = useState<Attendance[]>(() => {
-    const saved = localStorage.getItem('edu_cache_student_attendance');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [studentProfile, setStudentProfile] = useState<Student | null>(() => readCache('edu_cache_student_profile', null));
+  const [studentMarks, setStudentMarks] = useState<Mark[]>(() => readCache('edu_cache_student_marks', []));
+  const [studentAttendance, setStudentAttendance] = useState<Attendance[]>(() => readCache('edu_cache_student_attendance', []));
 
   const [aiAnalysis, setAiAnalysis] = useState<AiAnalysisResult | null>(null);
   const [teacherStats, setTeacherStats] = useState<TeacherStats | null>(null);
   const [subjectSummaries, setSubjectSummaries] = useState<Record<string, SubjectSummary>>({});
 
-  const fetchTeacherStats = async () => {
+  const fetchTeacherStats = useCallback(async () => {
     try {
       const { statisticsApi } = await import('@/shared/api/statisticsApi');
       const data = await statisticsApi.getTeacherStats();
@@ -145,7 +127,7 @@ const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
     } catch (err) {
       console.error("Error fetching teacher stats:", err);
     }
-  };
+  }, []);
 
   const [institutionId, setInstitutionId] = useState<number>(() => {
     const saved = localStorage.getItem('edu_institution_id');
@@ -307,7 +289,10 @@ const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
       setIsDirectoryLoading(false);
       setIsAcademicLoading(false);
     }
-  }, [refreshEvents]);
+    // user?.role drives the isStaffRole persistence gate above; without it
+    // in the deps this closure kept the first render's user (null) forever
+    // and staff directory caches were never persisted.
+  }, [refreshEvents, user?.role]);
 
   const refreshStudents = useCallback(async (
     filters: { schoolClassId?: number | null; search?: string; isActive?: boolean } = {},
@@ -350,34 +335,51 @@ const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
     }
   }, []);
 
-  const [currentlyFetchingMarks, setCurrentlyFetchingMarks] = useState<string | null>(null);
+  // In-flight requests keyed by cacheKey. A ref (not state) because the
+  // guard must be visible to concurrent callers within the same render
+  // cycle — state updates land too late, and the old state-based guard
+  // also starved the second caller with an empty array instead of data.
+  const inflightMarksRef = useRef(new Map<string, Promise<Mark[]>>());
 
-  const fetchClassMarks = async (subject: string, schoolClassId?: number, examId?: number): Promise<Mark[]> => {
+  const fetchClassMarks = useCallback(async (subject: string, schoolClassId?: number, examId?: number): Promise<Mark[]> => {
     const cacheKey = `${subject}_${schoolClassId || 'all'}_${examId || 'all'}`;
+    const inflight = inflightMarksRef.current.get(cacheKey);
 
+    // Stale-while-revalidate: serve the cached marks immediately and
+    // refresh them in the background (unless a refresh is already running).
     if (classMarks[cacheKey]) {
-      marksApi.getClassMarks(subject, schoolClassId, examId).then((data: Mark[]) => {
-        setClassMarks(prev => ({ ...prev, [cacheKey]: data }));
-      });
+      if (!inflight) {
+        const refresh = marksApi.getClassMarks(subject, schoolClassId, examId)
+          .then((data: Mark[]) => {
+            setClassMarks(prev => ({ ...prev, [cacheKey]: data }));
+            return data;
+          })
+          .finally(() => { inflightMarksRef.current.delete(cacheKey); });
+        inflightMarksRef.current.set(cacheKey, refresh);
+        refresh.catch(() => { /* background refresh; cached data stays */ });
+      }
       return classMarks[cacheKey];
     }
 
-    if (currentlyFetchingMarks === cacheKey) return [];
+    if (inflight) return inflight;
 
-    setCurrentlyFetchingMarks(cacheKey);
-    try {
-      const data: Mark[] = await marksApi.getClassMarks(subject, schoolClassId, examId);
-      setClassMarks(prev => ({ ...prev, [cacheKey]: data }));
-      return data;
-    } catch (err) {
-      console.error("Error fetching class marks:", err);
-      return [];
-    } finally {
-      setCurrentlyFetchingMarks(null);
-    }
-  };
+    const request = (async () => {
+      try {
+        const data: Mark[] = await marksApi.getClassMarks(subject, schoolClassId, examId);
+        setClassMarks(prev => ({ ...prev, [cacheKey]: data }));
+        return data;
+      } catch (err) {
+        console.error("Error fetching class marks:", err);
+        return [];
+      } finally {
+        inflightMarksRef.current.delete(cacheKey);
+      }
+    })();
+    inflightMarksRef.current.set(cacheKey, request);
+    return request;
+  }, [classMarks]);
 
-  const fetchSubjectSummary = async (subject: string, schoolClassId: number): Promise<SubjectSummary | null> => {
+  const fetchSubjectSummary = useCallback(async (subject: string, schoolClassId: number): Promise<SubjectSummary | null> => {
     const key = `${subject}_${schoolClassId}`;
     if (subjectSummaries[key]) return subjectSummaries[key];
 
@@ -389,7 +391,7 @@ const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
       console.error("Error fetching subject summary:", err);
       return null;
     }
-  };
+  }, [subjectSummaries]);
 
   const teacherSubject = useMemo(() => {
     if (user?.role !== 'teacher') return 'General';
@@ -423,14 +425,7 @@ const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
     }
   }, [authState]);
 
-  const getParentFees = async (): Promise<ParentFeeItem[]> => {
-    if (parentFees.length === 0) {
-      await refreshParentFees();
-    }
-    return parentFees;
-  };
-
-  const fetchStudentData = async (sid: number) => {
+  const fetchStudentData = useCallback(async (sid: number) => {
     try {
       // Events are loaded once into the shared `events` slice by
       // refreshEvents (called from refreshDirectory on auth) and consumed
@@ -448,50 +443,63 @@ const [isDirectoryLoading, setIsDirectoryLoading] = useState(false);
     } catch (err) {
       console.error("Error fetching student data:", err);
     }
-  };
+  }, []);
+
+  // Memoized for the same reason as AuthContext: AppProvider re-renders
+  // whenever AuthProvider does (every navigation); without this, each of
+  // those re-renders pushed a fresh object to every useApp consumer.
+  const contextValue = useMemo<AppContextType>(() => ({
+    students,
+    classDirectory: students,
+    teachers,
+    teacherDirectory: teachers,
+    grades,
+    sections,
+    subjects,
+    schoolClasses,
+    refreshDirectory,
+    refreshStudents,
+    refreshTeachers,
+    isDirectoryLoading,
+    isAcademicLoading,
+    isEventsLoading,
+    studentProfile,
+    studentMarks,
+    studentAttendance,
+    events,
+    fetchStudentData,
+    classMarks,
+    fetchClassMarks,
+    teacherSubject,
+    aiAnalysis,
+    setAiAnalysis,
+    teacherStats,
+    fetchTeacherStats,
+    institutionId,
+    setInstitutionId,
+    institutionName,
+    setInstitutionName,
+    institutionLogoUrl,
+    setInstitutionLogoUrl,
+    activeAssignmentId,
+    setActiveAssignmentId,
+    fetchSubjectSummary,
+    subjectSummaries,
+    parentFees,
+    refreshParentFees,
+  }), [
+    students, teachers, grades, sections, subjects, schoolClasses,
+    refreshDirectory, refreshStudents, refreshTeachers,
+    isDirectoryLoading, isAcademicLoading, isEventsLoading,
+    studentProfile, studentMarks, studentAttendance, events,
+    fetchStudentData, classMarks, fetchClassMarks, teacherSubject,
+    aiAnalysis, teacherStats, fetchTeacherStats,
+    institutionId, institutionName, institutionLogoUrl, activeAssignmentId,
+    fetchSubjectSummary, subjectSummaries, parentFees, refreshParentFees,
+  ]);
 
   return (
-    <AppContext.Provider value={{
-      students,
-      classDirectory: students,
-      teachers,
-      teacherDirectory: teachers,
-      grades,
-      sections,
-      subjects,
-      schoolClasses,
-      refreshDirectory,
-      refreshStudents,
-      refreshTeachers,
-      isDirectoryLoading,
-      isAcademicLoading,
-      isEventsLoading,
-      studentProfile,
-      studentMarks,
-      studentAttendance,
-      events,
-      fetchStudentData,
-      classMarks,
-      fetchClassMarks,
-      teacherSubject,
-      aiAnalysis,
-      setAiAnalysis,
-      teacherStats,
-      fetchTeacherStats,
-      institutionId,
-      setInstitutionId,
-      institutionName,
-      setInstitutionName,
-      institutionLogoUrl,
-      setInstitutionLogoUrl,
-      activeAssignmentId,
-      setActiveAssignmentId,
-      fetchSubjectSummary,
-      subjectSummaries,
-      parentFees,
-      refreshParentFees,
-      getParentFees,
-    }}>
+    <AppContext.Provider value={contextValue}>
       {children}
     </AppContext.Provider>
   );

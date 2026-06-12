@@ -7,6 +7,7 @@ import {
   BarChart3, ClipboardList, Inbox, Sparkles,
 } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
+import { localDateStr } from '@/shared/lib/format';
 import { getErrorMessage } from '@/shared/lib/errorHandler';
 import { teacherAttendanceApi, type TeacherAttendanceRecord, type TeacherLeaveRecord, type AttendanceSummary } from '@/features/teacher-attendance/api';
 import { useApp } from '@/shared/contexts/AppContext';
@@ -37,13 +38,6 @@ const LEAVE_STATUS_META: Record<string, StatusMeta> = {
 
 const ATTENDANCE_STATUSES = ['PRESENT', 'ABSENT', 'HALF_DAY', 'ON_LEAVE'];
 const LEAVE_STATUSES = ['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'];
-
-function localDateStr(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
 
 function firstDayOfMonth(): string {
   const d = new Date();

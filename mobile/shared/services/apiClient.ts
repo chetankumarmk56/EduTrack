@@ -17,9 +17,9 @@ function broadcastAuthExpired() {
 }
 
 // ─── Tunables ─────────────────────────────────────────────────────────────────
-// Render.com free-tier services spin down after 15 min of inactivity and need
-// ~30–60s to wake up. The default 15s timeout was firing before the server
-// could respond on first hit. 45s covers a normal cold start with headroom.
+// Generous timeout so a slow first request — TLS handshake, a brief nginx /
+// gunicorn warm-up right after a redeploy, or a flaky mobile network — isn't
+// cut off before the server can respond. 45s leaves comfortable headroom.
 const REQUEST_TIMEOUT_MS = 45_000;
 // Retries apply ONLY to network-level failures (no response, ECONNABORTED).
 // HTTP 4xx/5xx are never retried — those are real responses with intent.
@@ -160,7 +160,7 @@ apiClient.interceptors.response.use(
     const config = (error?.config || {}) as RetryableConfig;
     const data: any = error?.response?.data;
 
-    // ── Auto-retry transient network failures (cold-start friendly) ─────────
+    // ── Auto-retry transient network failures (network-blip friendly) ──────
     // We retry GETs and idempotent HEAD/OPTIONS by default. Login POSTs are
     // also retried: re-submitting the same credentials produces the same result
     // with no side effects, so a cold-start timeout shouldn't surface as a
@@ -179,7 +179,7 @@ apiClient.interceptors.response.use(
       const delay = RETRY_BACKOFF_MS[retryCount] ?? 3_500;
       console.warn(
         `[API RETRY ${config.__retryCount}/${MAX_NETWORK_RETRIES}] ${method.toUpperCase()} ${config.url} ` +
-        `— no response (likely backend cold-start). Retrying in ${delay}ms…`,
+        `— no response (transient network error). Retrying in ${delay}ms…`,
       );
       await sleep(delay);
       // Hand the same config back to axios; the request interceptor will
@@ -254,12 +254,12 @@ apiClient.interceptors.response.use(
     // ── Build a user-friendly error message ─────────────────────────────────
     let message = 'Something went wrong';
     if (transient) {
-      // Survived all the retries — the server is genuinely unreachable, or
-      // the free-tier dyno is still spinning up. Cold starts can take 30–60s.
+      // Survived all the retries — the server is genuinely unreachable from
+      // here (no network / DNS failure / the API host is down or blocking
+      // this origin via CORS).
       message =
-        'Server is taking too long to respond. This often happens on the ' +
-        'first request after a period of inactivity — please wait a moment ' +
-        'and try again.';
+        "Couldn't reach the server. Check your internet connection and " +
+        'try again in a moment.';
     } else if (typeof data?.detail === 'string') {
       message = data.detail;
     } else if (data?.detail?.message) {
