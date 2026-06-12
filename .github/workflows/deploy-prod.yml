@@ -3,16 +3,19 @@ name: Deploy (production)
 # Production deploy pipeline. Stages run in order:
 #   security scan -> deploy to EC2 (Docker Compose) -> public health check
 #
-# Target: a single Ubuntu EC2 box running the prod Docker Compose stack
-# (docker-compose.prod.yml: backend + worker + redis) against AWS RDS
-# Postgres, fronted by host nginx (TLS via certbot). The deploy SSHes in,
-# pulls main, rebuilds the image, runs `alembic upgrade head`, and restarts.
+# Target: a single Ubuntu EC2 box running the backend Docker Compose stack
+# (backend + worker + redis) against AWS RDS, fronted by host nginx (TLS via
+# certbot). The deploy SSHes in and does a CODE-ONLY update: it checks out just
+# the `backend/` source from main, rebuilds the image, runs `alembic upgrade
+# head`, and restarts — using the box's OWN compose file. It deliberately does
+# NOT touch docker-compose.yml or backend/.env, which are maintained by hand on
+# the server.
 #
 # Required GitHub Actions secrets:
 #   EC2_SSH_HOST     - public IP or DNS of the EC2 box (e.g. api.arkenedu.com)
 #   EC2_SSH_USER     - SSH user (e.g. ubuntu)
 #   EC2_SSH_KEY      - private key (PEM) authorized on the box
-#   EC2_APP_DIR      - (optional) repo path on the box; defaults to /home/ubuntu/SCHOOL
+#   EC2_APP_DIR      - (optional) repo path on the box; defaults to /home/ubuntu/edutrack/EduTrack
 #   BACKEND_BASE_URL - (optional) for the health check; defaults to https://api.arkenedu.com
 #
 # Never hardcode secrets in YAML — only reference them via ${{ secrets.* }}.
@@ -68,7 +71,7 @@ jobs:
             echo "EC2_SSH_HOST not configured; skipping deploy." >&2
           fi
 
-      - name: SSH in, pull, migrate, and restart
+      - name: SSH in, update code, migrate, restart
         if: steps.check.outputs.configured == 'true'
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -78,21 +81,21 @@ jobs:
           script_stop: true
           script: |
             set -euo pipefail
-            cd "${{ secrets.EC2_APP_DIR || '/home/ubuntu/SCHOOL' }}"
+            cd "${{ secrets.EC2_APP_DIR || '/home/ubuntu/edutrack/EduTrack' }}"
 
-            # Pull the latest main. backend/.env is gitignored, so the
-            # server's secrets (RDS DATABASE_URL, SECRET_KEY, S3, …) survive.
+            # CODE-ONLY deploy: update just the backend source from main.
+            # docker-compose.yml and backend/.env (gitignored) are managed by
+            # hand on the box and are deliberately left untouched, so the
+            # server's RDS/compose config is never overwritten by a deploy.
             git fetch origin main
-            git checkout main
-            git pull --ff-only origin main
+            git checkout origin/main -- backend
 
-            # Build the new image, then apply DB migrations with that image
-            # BEFORE swapping the running containers, so the schema is ready.
-            docker compose -f docker-compose.prod.yml build
-            docker compose -f docker-compose.prod.yml run --rm backend alembic upgrade head
-
-            # Roll the stack and reclaim disk from the old image layers.
-            docker compose -f docker-compose.prod.yml up -d
+            # Rebuild the image with the new code, apply any pending migrations
+            # against the live DB, then restart — all via the box's OWN compose
+            # file (already wired to RDS). Redis keeps running.
+            docker compose build backend worker
+            docker compose run --rm backend alembic upgrade head
+            docker compose up -d backend worker
             docker image prune -f
 
   health-check:
