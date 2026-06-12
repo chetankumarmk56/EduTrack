@@ -54,8 +54,22 @@ jobs:
     needs: security
     environment: production
     steps:
+      # The `secrets` context is NOT allowed in step `if:` conditions, so we
+      # surface it through an output here and gate the deploy on that instead.
+      - name: Check deploy secrets are configured
+        id: check
+        env:
+          EC2_SSH_HOST: ${{ secrets.EC2_SSH_HOST }}
+        run: |
+          if [ -n "$EC2_SSH_HOST" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "EC2_SSH_HOST not configured; skipping deploy." >&2
+          fi
+
       - name: SSH in, pull, migrate, and restart
-        if: ${{ secrets.EC2_SSH_HOST != '' }}
+        if: steps.check.outputs.configured == 'true'
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_SSH_HOST }}
@@ -80,10 +94,6 @@ jobs:
             # Roll the stack and reclaim disk from the old image layers.
             docker compose -f docker-compose.prod.yml up -d
             docker image prune -f
-
-      - name: Skip notice
-        if: ${{ secrets.EC2_SSH_HOST == '' }}
-        run: echo "EC2_SSH_HOST not configured; skipping deploy." >&2
 
   health-check:
     name: Post-deploy health check
