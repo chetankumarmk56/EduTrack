@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Input } from '@/shared/components/ui/Input';
 import { Button } from '@/shared/components/ui/Button';
-import { DatePicker } from '@/shared/components/ui/DatePicker';
+import { DobPicker } from '@/shared/components/ui/DobPicker';
 import { Colors } from '@/shared/constants/Colors';
 
 interface StudentLoginFormProps {
@@ -32,11 +32,10 @@ export function StudentLoginForm({ fields, loading, onLogin }: StudentLoginFormP
         />
 
         <View>
-          <DatePicker
+          <DobPicker
             label="Student Date of Birth"
             value={fields.dob}
             onChange={fields.setDob}
-            placeholder="Select Date of Birth"
           />
           <Text style={styles.dobHint}>
             Used together with the guardian number to verify your identity.

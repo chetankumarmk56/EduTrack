@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   Modal,
   TextInput,
   KeyboardAvoidingView,
@@ -14,6 +13,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { toast } from '@/shared/components/ui/Toast';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { directoryService } from '../../services';
@@ -118,24 +118,24 @@ export default function TeacherProfile() {
 
   const handleChangePassword = async () => {
     if (!currentPw || !newPw || !confirmPw) {
-      Alert.alert('Missing fields', 'Please fill in all password fields.');
+      toast.error('Please fill in all password fields.');
       return;
     }
     if (newPw !== confirmPw) {
-      Alert.alert('Mismatch', 'New passwords do not match.');
+      toast.error('New passwords do not match.');
       return;
     }
     if (newPw.length < 6) {
-      Alert.alert('Too short', 'Password must be at least 6 characters.');
+      toast.error('Password must be at least 6 characters.');
       return;
     }
     try {
       setPwLoading(true);
       await authService.changePassword(currentPw, newPw);
       dismissPwModal();
-      Alert.alert('Success', 'Password updated successfully!');
+      toast.success('Password updated successfully!');
     } catch (e: any) {
-      Alert.alert('Error', e?.response?.data?.detail || 'Failed to change password.');
+      toast.error(e?.response?.data?.detail || 'Failed to change password.');
     } finally {
       setPwLoading(false);
     }

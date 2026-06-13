@@ -7,13 +7,13 @@ import {
   TouchableOpacity,
   Linking,
   RefreshControl,
-  Alert,
   TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { directoryService, type StudentProfile, type Teacher } from '../../services';
 import { Colors } from '@/shared/constants/Colors';
 import { LoadingScreen } from '@/shared/components/ui/Feedback';
+import { toast } from '@/shared/components/ui/Toast';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
@@ -98,14 +98,17 @@ export default function TeacherContacts() {
   const handleWhatsApp = (phone: string | null | undefined) => {
     if (!phone) return;
     const cleaned = phone.replace(/\D/g, '');
-    const url = `whatsapp://send?phone=${cleaned}`;
-    Linking.canOpenURL(url).then(supported => {
-      if (supported) {
-        Linking.openURL(url);
-      } else {
-        Alert.alert('Error', 'WhatsApp is not installed on this device.');
-      }
-    });
+    // No canOpenURL: on Android 11+ it returns false for any app not declared
+    // in <queries>, even when WhatsApp IS installed — that was the bogus
+    // "not installed". openURL can still LAUNCH WhatsApp without that
+    // declaration. Open the app scheme directly (jumps to the chat); if it's
+    // genuinely not installed the scheme rejects, so fall back to the wa.me
+    // https link (opens the app, or the browser/Play page otherwise).
+    Linking.openURL(`whatsapp://send?phone=${cleaned}`).catch(() =>
+      Linking.openURL(`https://wa.me/${cleaned}`).catch(() =>
+        toast.error('Could not open WhatsApp.'),
+      ),
+    );
   };
 
   // Derived: unique grades/sections in the teacher's assigned students.

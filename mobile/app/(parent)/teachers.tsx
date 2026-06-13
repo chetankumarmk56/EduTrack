@@ -7,13 +7,13 @@ import {
   RefreshControl,
   TouchableOpacity,
   Linking,
-  Alert,
   TextInput,
   LayoutAnimation,
   UIManager,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { toast } from '@/shared/components/ui/Toast';
 import Animated, { FadeInDown, FadeInUp, LinearTransition } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { directoryService, type Teacher } from '../../services';
@@ -135,16 +135,21 @@ export default function TeachersScreen() {
   };
 
   const handleCall = (phone: string) => {
-    Linking.openURL(`tel:${phone}`).catch(() => Alert.alert('Could not open dialer'));
+    Linking.openURL(`tel:${phone}`).catch(() => toast.error('Could not open dialer'));
   };
   const handleWhatsApp = (phone: string) => {
     const cleaned = phone.replace(/\D/g, '');
+    // Open WhatsApp directly (no canOpenURL — Android 11+ reports installed
+    // apps as unavailable unless declared in <queries>). Fall back to the
+    // wa.me https link if the app scheme can't be opened.
     Linking.openURL(`whatsapp://send?phone=${cleaned}`).catch(() =>
-      Alert.alert('WhatsApp not available', 'Install WhatsApp to start a chat.'),
+      Linking.openURL(`https://wa.me/${cleaned}`).catch(() =>
+        toast.error('Could not open WhatsApp.'),
+      ),
     );
   };
   const handleEmail = (email: string) => {
-    Linking.openURL(`mailto:${email}`).catch(() => Alert.alert('Could not open mail app'));
+    Linking.openURL(`mailto:${email}`).catch(() => toast.error('Could not open mail app'));
   };
 
   if (loading) return <LoadingScreen message="Loading faculty..." />;

@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   TextInput,
   RefreshControl,
   Modal,
@@ -14,6 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { announcementService, directoryService, type Announcement } from '../../services';
+import { toast } from '@/shared/components/ui/Toast';
 import { Colors } from '@/shared/constants/Colors';
 import { LoadingScreen, EmptyState } from '@/shared/components/ui/Feedback';
 import { Ionicons } from '@expo/vector-icons';
@@ -68,7 +68,7 @@ export default function TeacherAnnouncements() {
 
   const handleCreate = async () => {
     if (!title || !content) {
-      Alert.alert('Error', 'Please fill in title and content.');
+      toast.error('Please fill in title and content.');
       return;
     }
 
@@ -78,9 +78,9 @@ export default function TeacherAnnouncements() {
     const resolvedClassId =
       selectedClassId ?? (classes.length > 0 ? classes[0].id : null);
     if (resolvedClassId == null) {
-      Alert.alert(
-        'No class selected',
+      toast.info(
         "You're not assigned to any class yet, so we can't post an announcement. Ask the admin to assign you to a class first.",
+        'No class selected',
       );
       return;
     }
@@ -95,7 +95,7 @@ export default function TeacherAnnouncements() {
         type: 'CLASS',
       });
 
-      Alert.alert('Success', 'Announcement posted!');
+      toast.success('Announcement posted!');
       setIsModalVisible(false);
       setTitle('');
       setContent('');
@@ -109,7 +109,7 @@ export default function TeacherAnnouncements() {
           error.response.data.detail.map((e: any) => e.msg).join(', ')) ||
         error?.message ||
         'Failed to post announcement.';
-      Alert.alert('Could not post announcement', String(detail));
+      toast.error(String(detail), 'Could not post announcement');
     } finally {
       setSubmitting(false);
     }

@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { directoryService, attendanceService, type StudentProfile } from '../../services';
 import { localDateStr } from '@/shared/utils/formatters';
+import { toast } from '@/shared/components/ui/Toast';
 import { Colors } from '@/shared/constants/Colors';
 import { SectionHeader } from '@/shared/components/ui/Card';
 import { LoadingScreen } from '@/shared/components/ui/Feedback';
@@ -126,9 +127,9 @@ export default function TeacherAttendance() {
         records
       });
       
-      Alert.alert('Success', 'Attendance marked successfully!');
+      toast.success('Attendance marked successfully!');
     } catch (error) {
-      Alert.alert('Error', 'Failed to mark attendance.');
+      toast.error('Failed to mark attendance.');
     } finally {
       setSubmitting(false);
     }

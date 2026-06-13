@@ -11,9 +11,9 @@ import {
   Linking,
   TextInput,
   Platform,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { toast } from '@/shared/components/ui/Toast';
 import Animated, { FadeInDown, FadeInUp, LinearTransition } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { announcementService, type Announcement } from '../../services';
@@ -204,7 +204,7 @@ function DetailModal({ item, visible, onClose }: DetailProps) {
   const attachUI = attachType ? attachmentMeta(attachType) : null;
 
   const open = (url: string) =>
-    Linking.openURL(url).catch(() => Alert.alert('Could not open attachment'));
+    Linking.openURL(url).catch(() => toast.error('Could not open attachment'));
 
   return (
     <Modal

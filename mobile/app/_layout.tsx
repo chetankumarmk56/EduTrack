@@ -8,6 +8,7 @@ import { Text, TouchableOpacity, View, StyleSheet, ScrollView, Platform } from '
 import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from '@/features/auth/hooks/useAuth';
 import { Colors } from '@/shared/constants/Colors';
+import { ToastProvider } from '@/shared/components/ui/Toast';
 import {
   installForegroundHandler,
   subscribeToTokenRotation,
@@ -170,25 +171,27 @@ export default function RootLayout() {
   return (
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1, backgroundColor: Colors.background }}>
-        <AuthProvider>
-          <View style={{ flex: 1, backgroundColor: Colors.background }}>
-            <AuthGuard />
-            <NotificationDeepLinkHandler />
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                contentStyle: { backgroundColor: Colors.background },
-                animation: 'slide_from_right',
-              }}
-            >
-              <Stack.Screen name="index" options={{ headerShown: false }} />
-              <Stack.Screen name="login" options={{ headerShown: false, animation: 'fade' }} />
-              <Stack.Screen name="(parent)" options={{ headerShown: false }} />
-              <Stack.Screen name="(teacher)" options={{ headerShown: false }} />
-            </Stack>
-            <StatusBar style="light" backgroundColor={Colors.background} />
-          </View>
-        </AuthProvider>
+        <ToastProvider>
+          <AuthProvider>
+            <View style={{ flex: 1, backgroundColor: Colors.background }}>
+              <AuthGuard />
+              <NotificationDeepLinkHandler />
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  contentStyle: { backgroundColor: Colors.background },
+                  animation: 'slide_from_right',
+                }}
+              >
+                <Stack.Screen name="index" options={{ headerShown: false }} />
+                <Stack.Screen name="login" options={{ headerShown: false, animation: 'fade' }} />
+                <Stack.Screen name="(parent)" options={{ headerShown: false }} />
+                <Stack.Screen name="(teacher)" options={{ headerShown: false }} />
+              </Stack>
+              <StatusBar style="light" backgroundColor={Colors.background} />
+            </View>
+          </AuthProvider>
+        </ToastProvider>
       </GestureHandlerRootView>
     </ErrorBoundary>
   );

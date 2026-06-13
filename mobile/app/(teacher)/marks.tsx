@@ -18,6 +18,7 @@ import { directoryService, marksService, type StudentProfile } from '../../servi
 import { Colors } from '@/shared/constants/Colors';
 import { SectionHeader } from '@/shared/components/ui/Card';
 import { LoadingScreen, ErrorState } from '@/shared/components/ui/Feedback';
+import { toast } from '@/shared/components/ui/Toast';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
@@ -108,7 +109,7 @@ export default function TeacherMarks() {
       }
     } catch (err: any) {
       console.error('Failed to load students/exams:', err);
-      Alert.alert('Load Error', err?.message || 'Failed to load class data. Pull down to retry.');
+      toast.error(err?.message || 'Failed to load class data. Pull down to retry.', 'Load Error');
     }
   }, [assignments, selectedAssignmentIdx]);
 
@@ -160,7 +161,7 @@ export default function TeacherMarks() {
   const handleSubmit = async () => {
     const assignment = assignments[selectedAssignmentIdx];
     if (!assignment || !selectedExamId) {
-      Alert.alert('Error', 'Please select an assignment and an exam.');
+      toast.error('Please select an assignment and an exam.');
       return;
     }
 
@@ -172,10 +173,7 @@ export default function TeacherMarks() {
       if (raw === undefined || raw === '') continue;
       const score = parseFloat(raw);
       if (!Number.isFinite(score) || score < 0 || score > max) {
-        Alert.alert(
-          'Invalid score',
-          `${s.name}'s score must be between 0 and ${max}.`,
-        );
+        toast.error(`${s.name}'s score must be between 0 and ${max}.`, 'Invalid score');
         return;
       }
     }
@@ -191,7 +189,7 @@ export default function TeacherMarks() {
       }));
 
       await marksService.recordBatch(marks);
-      Alert.alert('Success', 'Marks recorded successfully!');
+      toast.success('Marks recorded successfully!');
       loadExistingMarks(selectedExamId);
     } catch (error: any) {
       const detail =
@@ -200,7 +198,7 @@ export default function TeacherMarks() {
           error.response.data.detail.map((e: any) => e.msg).join(', ')) ||
         error?.message ||
         'Failed to record marks.';
-      Alert.alert('Could not save marks', String(detail));
+      toast.error(String(detail), 'Could not save marks');
     } finally {
       setSubmitting(false);
     }
@@ -226,7 +224,7 @@ export default function TeacherMarks() {
     if (!examDialog) return;
     const name = dialogName.trim();
     if (!name) {
-      Alert.alert('Name required', 'Please enter a test name.');
+      toast.error('Please enter a test name.', 'Name required');
       return;
     }
     const assignment = assignments[selectedAssignmentIdx];
@@ -249,12 +247,13 @@ export default function TeacherMarks() {
           prev.map((e) => (e.id === examDialog.exam.id ? { ...e, ...updated } : e)),
         );
       }
+      toast.success(examDialog.kind === 'create' ? 'Test created' : 'Test updated');
       setExamDialog(null);
       setDialogName('');
     } catch (err: any) {
       const detail =
         err?.response?.data?.detail || err?.message || 'Failed to save test.';
-      Alert.alert('Could not save test', String(detail));
+      toast.error(String(detail), 'Could not save test');
     } finally {
       setDialogSaving(false);
     }
@@ -285,10 +284,11 @@ export default function TeacherMarks() {
                 }
                 return next;
               });
+              toast.success('Test deleted');
             } catch (err: any) {
               const detail =
                 err?.response?.data?.detail || err?.message || 'Failed to delete test.';
-              Alert.alert('Could not delete test', String(detail));
+              toast.error(String(detail), 'Could not delete test');
             }
           },
         },

@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/shared/constants/Colors';
 import { LoadingScreen } from '@/shared/components/ui/Feedback';
 import { teacherAttendanceService, type TeacherAttendanceRecord, type TeacherLeaveRecord } from '@/features/teacher-attendance/services/teacherAttendanceService';
+import { toast } from '@/shared/components/ui/Toast';
 
 type Tab = 'today' | 'history' | 'leave';
 
@@ -155,9 +156,9 @@ export default function MyAttendanceScreen() {
     try {
       const rec = await teacherAttendanceService.checkIn();
       setTodayRecord(rec);
-      Alert.alert('✓ Checked In', `Checked in at ${rec.check_in_time}`);
+      toast.success(`Checked in at ${rec.check_in_time}`);
     } catch (e: any) {
-      Alert.alert('Error', e?.response?.data?.detail || 'Check-in failed');
+      toast.error(e?.response?.data?.detail || 'Check-in failed');
     } finally {
       setActionLoading(false);
     }
@@ -168,9 +169,9 @@ export default function MyAttendanceScreen() {
     try {
       const rec = await teacherAttendanceService.checkOut();
       setTodayRecord(rec);
-      Alert.alert('✓ Checked Out', `Checked out at ${rec.check_out_time}`);
+      toast.success(`Checked out at ${rec.check_out_time}`);
     } catch (e: any) {
-      Alert.alert('Error', e?.response?.data?.detail || 'Check-out failed');
+      toast.error(e?.response?.data?.detail || 'Check-out failed');
     } finally {
       setActionLoading(false);
     }
@@ -183,6 +184,7 @@ export default function MyAttendanceScreen() {
     setLeaveError('');
     try {
       await teacherAttendanceService.applyLeave({ leave_type: leaveType, start_date: startDate, end_date: endDate, reason });
+      toast.success('Leave request submitted');
       setShowLeaveModal(false);
       setReason('');
       setLeaveType('CASUAL');
@@ -206,9 +208,10 @@ export default function MyAttendanceScreen() {
         onPress: async () => {
           try {
             await teacherAttendanceService.cancelLeave(id);
+            toast.success('Leave request cancelled');
             loadLeaves();
           } catch (e: any) {
-            Alert.alert('Error', e?.response?.data?.detail || 'Could not cancel leave');
+            toast.error(e?.response?.data?.detail || 'Could not cancel leave');
           }
         },
       },
